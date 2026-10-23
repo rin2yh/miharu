@@ -535,11 +535,6 @@ a {
   background: currentColor;
 }
 
-.official-status-detail {
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .service-freshness {
   display: flex;
   flex-direction: column;

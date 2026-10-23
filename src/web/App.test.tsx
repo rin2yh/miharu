@@ -57,16 +57,44 @@ describe("dashboard", () => {
     render(<App load={async () => firstPayload} />);
 
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
-    expect(screen.getAllByText("部分障害")).toHaveLength(2);
+    expect(screen.getByText("障害の重要度: 部分障害")).toBeInTheDocument();
     expect(screen.getByText("Messaging")).toBeInTheDocument();
-    expect(screen.getByText("公式全体状態: 状態不明")).toBeInTheDocument();
     const slackCard = screen.getByRole("heading", { name: "Slack" }).closest("article");
     expect(slackCard).not.toBeNull();
+    expect(within(slackCard!).getByText("状態不明")).toBeInTheDocument();
     expect(within(slackCard!).getByRole("link", { name: /公式ステータスページ/ })).toHaveAttribute(
       "href",
       "https://slack-status.com/",
     );
     expect(within(slackCard!).getByText("最終取得成功")).toBeInTheDocument();
+  });
+
+  it("keeps the official aggregate status separate from incident severity", async () => {
+    const officialOperationalPayload: DashboardPayload = {
+      ...firstPayload,
+      services: firstPayload.services.map((service) =>
+        service.id === "slack"
+          ? {
+              ...service,
+              status: "operational",
+              incidents: service.incidents.map((incident) => ({
+                ...incident,
+                severityStatus: "degraded_performance",
+              })),
+            }
+          : service,
+      ),
+    };
+    const { container } = render(<App load={async () => officialOperationalPayload} />);
+
+    const incidentTitle = await screen.findByText("Messaging delays for some users");
+    const slackCard = incidentTitle.closest("article");
+    expect(slackCard).not.toBeNull();
+    expect(within(slackCard!).getByText("正常")).toBeInTheDocument();
+    expect(within(slackCard!).getByText("障害の重要度: 性能低下")).toBeInTheDocument();
+    expect(
+      Array.from(container.querySelectorAll(".service-row h3"), (heading) => heading.textContent),
+    ).toEqual(["Slack", "GitHub"]);
   });
 
   it("keeps healthy rows compact and separates affected services from incidents", async () => {

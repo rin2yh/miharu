@@ -99,10 +99,8 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
       const leftActive = left.incidents.length > 0 ? 1 : 0;
       const rightActive = right.incidents.length > 0 ? 1 : 0;
       if (leftActive !== rightActive) return rightActive - leftActive;
-      const leftStatus = representativeStatus(left);
-      const rightStatus = representativeStatus(right);
-      const severityDifference = STATUS_RANK[rightStatus] - STATUS_RANK[leftStatus];
-      return severityDifference || left.name.localeCompare(right.name, "ja");
+      const priorityDifference = servicePriority(right) - servicePriority(left);
+      return priorityDifference || left.name.localeCompare(right.name, "ja");
     });
     return services;
   }, [payload]);
@@ -256,9 +254,8 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
 }
 
 function ServiceRow({ service }: { service: DashboardService }) {
-  const status = representativeStatus(service);
   const showDetails =
-    status !== "operational" ||
+    service.status !== "operational" ||
     service.hasFetchError ||
     service.isStale ||
     service.incidents.length > 0;
@@ -266,7 +263,9 @@ function ServiceRow({ service }: { service: DashboardService }) {
   const iconColor = icon ? `#${icon.hex}` : "currentColor";
 
   return (
-    <article className={`service-row status-${status}${showDetails ? "" : " service-row-clear"}`}>
+    <article
+      className={`service-row status-${service.status}${showDetails ? "" : " service-row-clear"}`}
+    >
       <div className="service-main">
         <div className="service-identity">
           <span className="service-icon" style={{ color: iconColor }} aria-hidden="true">
@@ -293,15 +292,10 @@ function ServiceRow({ service }: { service: DashboardService }) {
           </div>
         </div>
         <div className="service-status-block">
-          <span className={`status-pill status-pill-${status}`}>
+          <span className={`status-pill status-pill-${service.status}`}>
             <span className="status-pip" aria-hidden="true" />
-            {STATUS_LABELS[status]}
+            {STATUS_LABELS[service.status]}
           </span>
-          {service.status !== status && (
-            <span className="official-status-detail">
-              公式全体状態: {STATUS_LABELS[service.status]}
-            </span>
-          )}
         </div>
         {showDetails && (
           <div className="service-freshness">
@@ -348,7 +342,7 @@ function ServiceRow({ service }: { service: DashboardService }) {
                 </span>
                 {incident.severityStatus && (
                   <span className={`incident-impact impact-${incident.severityStatus}`}>
-                    {STATUS_LABELS[incident.severityStatus]}
+                    {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
                   </span>
                 )}
                 {incident.sourceImpact && incident.severityStatus && (
@@ -424,18 +418,19 @@ function EventRow({ event }: { event: DashboardEvent }) {
   );
 }
 
-function representativeStatus(service: DashboardService): NormalizedStatus {
-  return service.incidents.reduce((result, incident) => {
-    if (!incident.severityStatus) return result;
-    return STATUS_RANK[incident.severityStatus] > STATUS_RANK[result]
-      ? incident.severityStatus
-      : result;
-  }, service.status);
+function servicePriority(service: DashboardService): number {
+  return service.incidents.reduce(
+    (priority, incident) =>
+      incident.severityStatus ? Math.max(priority, STATUS_RANK[incident.severityStatus]) : priority,
+    STATUS_RANK[service.status],
+  );
 }
 
 function isAffectedService(service: DashboardService): boolean {
-  const status = representativeStatus(service);
-  return service.incidents.length > 0 || (status !== "operational" && status !== "unknown");
+  return (
+    service.incidents.length > 0 ||
+    (service.status !== "operational" && service.status !== "unknown")
+  );
 }
 
 function overviewTitle(
