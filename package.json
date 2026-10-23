@@ -2,8 +2,8 @@
   "name": "miharu",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
   "description": "外部サービスの公式ステータスを集約するダッシュボード",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
