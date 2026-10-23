@@ -17,6 +17,7 @@
     "lint": "oxlint . && oxfmt --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
+    "e2e": "playwright test",
     "typecheck": "pnpm cf-typegen && tsc --noEmit"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.0",
+    "@playwright/test": "^1.64.1",
     "@rolldown/plugin-babel": "^0.2.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "^16.3.0",

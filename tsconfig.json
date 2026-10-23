@@ -10,5 +10,12 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": [".cloudflare/types/index.d.ts", "src", "vite.config.mts", "vitest.config.ts"]
+  "include": [
+    ".cloudflare/types/index.d.ts",
+    "src",
+    "e2e",
+    "playwright.config.ts",
+    "vite.config.mts",
+    "vitest.config.ts"
+  ]
 }
