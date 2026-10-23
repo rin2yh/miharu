@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { siGithub, siNotion, type SimpleIcon } from "simple-icons";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import type {
   DashboardIncident,
   DashboardComponent,
@@ -305,10 +306,16 @@ function IncidentList({
                   </span>
                 )}
               </div>
-              {incident.body && (
-                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
-                  {incident.body}
+              {incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS ? (
+                <p className="mt-1.5 mb-0 max-w-3xl text-xs leading-relaxed text-muted">
+                  復旧状況を確認できていません。
                 </p>
+              ) : (
+                incident.body && (
+                  <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
+                    {incident.body}
+                  </p>
+                )
               )}
               {incident.components.length > 0 && (
                 <p

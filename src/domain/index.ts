@@ -17,6 +17,7 @@ export type IncidentState =
   | "unknown";
 export type IncidentKind = "incident" | "maintenance";
 export type IncidentEventKind = "opened" | "updated" | "resolved";
+export const INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS = "recheck_unavailable";
 
 export interface NormalizedComponent {
   id: string;
@@ -43,12 +44,18 @@ export interface NormalizedIncident {
   active: boolean;
 }
 
+export interface KnownIncident extends NormalizedIncident {
+  lastObservedAt: string;
+}
+
 export interface ProviderSnapshot {
   status: NormalizedStatus;
   sourceStatus: string;
   summary: string | null;
   components?: NormalizedComponent[];
   incidents: NormalizedIncident[];
+  /** False when omitted incidents must not be treated as resolved. */
+  incidentListComplete?: boolean;
 }
 
 export interface DashboardIncident {

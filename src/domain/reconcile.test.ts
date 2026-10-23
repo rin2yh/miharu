@@ -137,6 +137,51 @@ describe("incident reconciliation", () => {
     });
   });
 
+  it("does not resolve incidents omitted from an incomplete list", () => {
+    const existing = reconcileIncidents("chatgpt", [], [incident()], observedAt).changedIncidents;
+    const result = reconcileIncidents("chatgpt", existing, [], "2026-10-23T05:10:00.000Z", false);
+
+    expect(result.changedIncidents).toEqual([]);
+    expect(result.events).toEqual([]);
+  });
+
+  it("does not add historical events for resolved incidents first seen in an incomplete list", () => {
+    const result = reconcileIncidents(
+      "chatgpt",
+      [],
+      [incident({ state: "resolved", sourceStatus: "resolved", active: false })],
+      observedAt,
+      false,
+    );
+
+    expect(result.changedIncidents).toMatchObject([{ active: false, revision: 1 }]);
+    expect(result.events).toEqual([]);
+  });
+
+  it("records an explicit resolution found in an incomplete list", () => {
+    const existing = reconcileIncidents("chatgpt", [], [incident()], observedAt).changedIncidents;
+    const recovered = incident({
+      state: "resolved",
+      sourceStatus: "resolved",
+      active: false,
+      officialUpdatedAt: "2026-10-23T05:15:00.000Z",
+      body: "The issue has been resolved.",
+    });
+    const result = reconcileIncidents(
+      "chatgpt",
+      existing,
+      [recovered],
+      "2026-10-23T05:16:00.000Z",
+      false,
+    );
+
+    expect(result.changedIncidents[0]).toMatchObject({ active: false, sourceStatus: "resolved" });
+    expect(result.events[0]).toMatchObject({
+      eventKind: "resolved",
+      officialEventAt: "2026-10-23T05:15:00.000Z",
+    });
+  });
+
   it("tracks a reopened incident as a new revision", () => {
     const resolved = reconcileIncidents(
       "github",

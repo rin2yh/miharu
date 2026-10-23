@@ -48,6 +48,8 @@ export function reconcileIncidents(
   previous: IncidentRecord[],
   incoming: NormalizedIncident[],
   detectedAt: string,
+  // Some public APIs expose only a bounded recent list.
+  incidentListComplete = true,
 ): ReconcileResult {
   const previousById = new Map(previous.map((incident) => [incident.id, incident]));
   const incomingIds = new Set<string>();
@@ -60,6 +62,12 @@ export function reconcileIncidents(
     const fingerprint = incidentFingerprint(snapshot);
 
     if (!old) {
+      if (!snapshot.active && !incidentListComplete) {
+        changedIncidents.push(
+          makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint, detectedAt),
+        );
+        continue;
+      }
       let record = makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint);
       changedIncidents.push(record);
       events.push(makeEvent(record, "opened", 1, snapshot.officialCreatedAt));
@@ -107,6 +115,7 @@ export function reconcileIncidents(
 
   for (const old of previous) {
     if (!old.active || incomingIds.has(old.id)) continue;
+    if (!incidentListComplete) continue;
     const snapshot: NormalizedIncident = {
       ...old,
       active: false,

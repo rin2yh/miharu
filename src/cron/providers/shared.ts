@@ -57,6 +57,38 @@ export async function fetchJson(
   }
 }
 
+export async function fetchText(
+  url: string,
+  signal: AbortSignal,
+  fetcher: FetchLike = fetch,
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetcher(url, {
+      signal,
+      headers: {
+        accept: "application/rss+xml, application/xml, text/xml",
+        "user-agent": "saas-status-dashboard/0.1",
+      },
+    });
+  } catch {
+    if (signal.aborted) throw new ProviderError("timeout", "Status source request timed out");
+    throw new ProviderError("network_error", "Status source request failed");
+  }
+
+  if (!response.ok) {
+    throw new ProviderError(
+      "upstream_http_error",
+      `Status source returned HTTP ${response.status}`,
+    );
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!/(?:rss\+xml|application\/xml|text\/xml)/i.test(contentType)) {
+    throw new ProviderError("invalid_response", "Status source did not return an XML feed");
+  }
+  return readLimitedText(response);
+}
+
 async function readLimitedText(response: Response): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";

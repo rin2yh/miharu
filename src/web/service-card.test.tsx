@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import { App } from "./app";
 import {
   basePayload,
@@ -76,6 +77,26 @@ describe("service card incidents", () => {
         .getAllByRole("time")
         .map((time) => time.getAttribute("datetime")),
     ).toEqual(["2026-10-23T04:55:00.000Z", "2026-10-23T04:50:00.000Z"]);
+  });
+
+  it("explains why an incident with an unknown recovery state remains visible", async () => {
+    const unknownIncident = incident({
+      id: "unknown-chatgpt-incident",
+      title: "Earlier ChatGPT issue",
+      body: null,
+      state: "unknown",
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      severityStatus: null,
+    });
+    render(<App load={async () => payload([service({ incidents: [unknownIncident] })])} />);
+
+    const incidentItem = await screen.findByRole("listitem", {
+      name: unknownIncident.title,
+    });
+    expect(within(incidentItem).getByText("状態不明")).toBeVisible();
+    fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
+
+    expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
   });
 });
 

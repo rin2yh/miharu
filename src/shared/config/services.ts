@@ -11,6 +11,12 @@ export type ServiceConfig = {
       scheduledMaintenances?: boolean;
       componentGroupId?: string;
     }
+  | {
+      provider: "openai-chatgpt";
+      summaryUrl: string;
+      incidentsUrl: string;
+      components: Array<{ id: string; name: string }>;
+    }
   | { provider: "slack"; currentUrl: string }
 );
 
@@ -49,6 +55,38 @@ export const SERVICES: ServiceConfig[] = [
     componentGroupId: "1km35smx8p41",
     statusPageUrl: "https://www.cloudflarestatus.com/",
     allowedLinkHosts: ["www.cloudflarestatus.com", "cloudflarestatus.com"],
+  },
+  {
+    id: "claude",
+    name: "Claude",
+    provider: "statuspage",
+    summaryUrl: "https://status.claude.com/api/v2/summary.json",
+    statusPageUrl: "https://status.claude.com/",
+    allowedLinkHosts: ["status.claude.com"],
+  },
+  {
+    id: "chatgpt",
+    name: "ChatGPT",
+    provider: "openai-chatgpt",
+    summaryUrl: "https://status.openai.com/api/v2/summary.json",
+    incidentsUrl: "https://status.openai.com/api/v2/incidents.json",
+    statusPageUrl: "https://status.openai.com/",
+    allowedLinkHosts: ["status.openai.com"],
+    // OpenAI's public component response omits group metadata. These IDs are
+    // the components shown under the official page's "ChatGPT" section.
+    components: [
+      { id: "01JMXBNJXGV1T5GT2M9XA83XNG", name: "Conversations" },
+      { id: "01JMXBNJXG1S2D9V65P1ZZTD94", name: "Login" },
+      { id: "01KX45G1SH21AX5DT93D4HMF0P", name: "ChatGPT Work" },
+      { id: "01KMKFAMWKQ81YWSE1Z18R6VHR", name: "Codex in ChatGPT Desktop" },
+      { id: "01JNKS9D9S72PMP1938PVFFQN4", name: "Compliance API" },
+      { id: "01JMXBNJXGKKP51D4DEJ2HZJ8Q", name: "Search" },
+      { id: "01JMXBNJXG1YMQPPCPCQX3MPA2", name: "File uploads" },
+      { id: "01JMXBNJXGGT5SR5DB9J7GYY48", name: "Voice mode" },
+      { id: "01JSFK5QX36ZRW0TW0ZV0ZYFXQ", name: "GPTs" },
+      { id: "01JQ7EKW990MSPSWVXC7VPV2ZJ", name: "Image Generation" },
+      { id: "01JSYVYQSWMJ9QG35XHP08BHA7", name: "Deep Research" },
+    ],
   },
 ];
 
