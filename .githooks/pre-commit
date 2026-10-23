@@ -4,3 +4,6 @@ set -eu
 
 printf '%s\n' 'Running TypeScript checks before commit...'
 pnpm typecheck
+
+printf '%s\n' 'Running unit tests before commit...'
+pnpm test
