@@ -231,6 +231,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
 }
 
 function ServiceCard({ service }: { service: DashboardService }) {
+  const [showHealthyComponents, setShowHealthyComponents] = useState(false);
   const icon = serviceIcons[service.id];
   const iconColor = icon ? `#${icon.hex}` : "currentColor";
   const { assigned, unassigned } = assignIncidents(service);
@@ -244,6 +245,9 @@ function ServiceCard({ service }: { service: DashboardService }) {
       left.id.localeCompare(right.id)
     );
   });
+  const abnormalComponents = components.filter((component) => isAbnormal(component.status));
+  const healthyComponents = components.filter((component) => !isAbnormal(component.status));
+  const healthyComponentsId = `healthy-components-${service.id}`;
 
   return (
     <li className={`service-card status-${service.status}`} id={`service-details-${service.id}`}>
@@ -302,18 +306,49 @@ function ServiceCard({ service }: { service: DashboardService }) {
       {components.length > 0 ? (
         <section className="component-section" aria-label={`${service.name}のコンポーネント`}>
           <h3>コンポーネント</h3>
-          <ul className="component-accordion-list">
-            {components.map((component) => {
-              const incidents = assigned.get(component.id) ?? [];
-              return (
-                <ComponentAccordion
-                  key={component.id}
-                  component={component}
-                  incidents={incidents}
-                />
-              );
-            })}
-          </ul>
+          <div className="component-listing">
+            {abnormalComponents.length > 0 && (
+              <ul className="component-item-list">
+                {abnormalComponents.map((component) => (
+                  <ComponentItem
+                    key={component.id}
+                    component={component}
+                    incidents={assigned.get(component.id) ?? []}
+                    expandable
+                  />
+                ))}
+              </ul>
+            )}
+            {healthyComponents.length > 0 && (
+              <>
+                <button
+                  className="component-toggle"
+                  type="button"
+                  aria-expanded={showHealthyComponents}
+                  aria-controls={healthyComponentsId}
+                  onClick={() => setShowHealthyComponents((visible) => !visible)}
+                >
+                  {showHealthyComponents
+                    ? "正常なコンポーネントを非表示"
+                    : `正常なコンポーネント ${healthyComponents.length}件を表示`}
+                </button>
+                <ul
+                  className="component-item-list"
+                  id={healthyComponentsId}
+                  hidden={!showHealthyComponents}
+                >
+                  {healthyComponents.map((component) => (
+                    <ComponentItem
+                      key={component.id}
+                      component={component}
+                      incidents={assigned.get(component.id) ?? []}
+                      expandable={false}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
         </section>
       ) : (
         <p className="component-unavailable">
@@ -353,36 +388,42 @@ function ServiceCard({ service }: { service: DashboardService }) {
   );
 }
 
-function ComponentAccordion({
+function ComponentItem({
   component,
   incidents,
+  expandable,
 }: {
   component: DashboardComponent;
   incidents: DashboardIncident[];
+  expandable: boolean;
 }) {
+  const heading = (
+    <>
+      <span className="component-summary-name">{component.name}</span>
+      <span className={`status-pill status-pill-${component.status}`}>
+        <span className="status-pip" aria-hidden="true" />
+        {STATUS_LABELS[component.status]}
+      </span>
+      {incidents.length > 0 && (
+        <span className="component-incident-count">関連情報 {incidents.length}件</span>
+      )}
+    </>
+  );
+  const showDisclosure = expandable && incidents.length > 0;
+
   return (
-    <li className={`component-accordion status-${component.status}`}>
-      <details open={isAbnormal(component.status)}>
-        <summary>
-          <span className="component-summary-name">{component.name}</span>
-          <span className={`status-pill status-pill-${component.status}`}>
-            <span className="status-pip" aria-hidden="true" />
-            {STATUS_LABELS[component.status]}
-          </span>
-          {incidents.length > 0 && (
-            <span className="component-incident-count">障害情報 {incidents.length}件</span>
-          )}
-        </summary>
-        {incidents.length > 0 ? (
+    <li className={`component-item status-${component.status}`}>
+      {showDisclosure ? (
+        <details open={isAbnormal(component.status)}>
+          <summary className="component-row-heading">{heading}</summary>
           <IncidentList incidents={incidents} />
-        ) : (
-          <p className="component-detail-empty">
-            {isAbnormal(component.status)
-              ? "このコンポーネントに関連するインシデントはありません。"
-              : "関連する障害情報はありません。"}
-          </p>
-        )}
-      </details>
+        </details>
+      ) : (
+        <>
+          <div className="component-row-heading">{heading}</div>
+          {incidents.length > 0 && <IncidentList incidents={incidents} />}
+        </>
+      )}
     </li>
   );
 }
@@ -408,16 +449,7 @@ function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
               <span className="incident-source-impact">公式重要度: {incident.sourceImpact}</span>
             )}
           </div>
-          <h4>
-            {incident.url ? (
-              <a href={incident.url} target="_blank" rel="noreferrer noopener">
-                {incident.title}
-                <ExternalIcon />
-              </a>
-            ) : (
-              incident.title
-            )}
-          </h4>
+          <h4>{incident.title}</h4>
           {incident.body && <p className="incident-body">{incident.body}</p>}
           {incident.components.length > 0 && (
             <div className="component-list" aria-label="公式の影響対象">
@@ -444,6 +476,17 @@ function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
               </span>
             )}
           </div>
+          {incident.url && (
+            <a
+              className="incident-official-link"
+              href={incident.url}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              公式情報を見る
+              <ExternalIcon />
+            </a>
+          )}
         </li>
       ))}
     </ul>
@@ -457,8 +500,12 @@ function assignIncidents(service: DashboardService): {
   const assigned = new Map<string, DashboardIncident[]>();
   const knownComponents = new Map(service.components.map((component) => [component.id, component]));
   const unassigned: DashboardIncident[] = [];
+  const seenIncidentIds = new Set<string>();
 
   for (const incident of service.incidents) {
+    if (seenIncidentIds.has(incident.id)) continue;
+    seenIncidentIds.add(incident.id);
+
     const matchedIds = incident.componentIds.filter((id) => knownComponents.has(id));
     const matchedComponents =
       matchedIds.length > 0
@@ -468,11 +515,11 @@ function assignIncidents(service: DashboardService): {
       unassigned.push(incident);
       continue;
     }
-    for (const component of matchedComponents) {
-      const list = assigned.get(component.id) ?? [];
-      list.push(incident);
-      assigned.set(component.id, list);
-    }
+    const component =
+      matchedComponents.find((candidate) => isAbnormal(candidate.status)) ?? matchedComponents[0]!;
+    const list = assigned.get(component.id) ?? [];
+    list.push(incident);
+    assigned.set(component.id, list);
   }
 
   return { assigned, unassigned };
@@ -496,9 +543,7 @@ function incidentStateLabel(state: DashboardIncident["state"]): string {
 }
 
 function isAbnormal(status: NormalizedStatus): boolean {
-  return ["degraded_performance", "partial_outage", "major_outage", "under_maintenance"].includes(
-    status,
-  );
+  return status !== "operational";
 }
 
 function EventRow({ event }: { event: DashboardEvent }) {
