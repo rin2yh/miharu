@@ -20,14 +20,6 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
-## Preview 環境
-
-ブランチごとの Worker Previews を利用しています。Preview 用 D1 のマイグレーションは以下で実行できます。
-
-```sh
-pnpm db:migrate:preview
-```
-
 ## ライセンス
 
 [MIT License](LICENSE)を適用しています。
