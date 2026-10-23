@@ -340,11 +340,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
         )}
         {payload && filteredServices.length === 0 && (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
-            {activeServiceIds.size === 0
-              ? "表示するサービスがありません。「表示サービスを選択」から選んでください。"
-              : query.trim()
-                ? `「${query}」に一致するサービスはありません。`
-                : "選択したサービスの情報はありません。"}
+            条件に一致するサービスはありません。
           </div>
         )}
         {payload && filteredServices.length > 0 && (
@@ -372,11 +368,9 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           </ol>
         ) : (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
-            {activeServiceIds.size === 0
-              ? "選択されたサービスの最近の更新はありません。"
-              : query.trim()
-                ? "検索条件に一致する最近の更新はありません。"
-                : "最近の障害・メンテナンスの更新はありません。"}
+            {query.trim()
+              ? "検索条件に一致する最近の更新はありません。"
+              : "最近の障害・メンテナンスの更新はありません。"}
           </div>
         )}
       </section>

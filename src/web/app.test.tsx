@@ -239,7 +239,7 @@ describe("dashboard", () => {
     window.history.replaceState(null, "", "/?services=missing,unknown");
     render(<App load={async () => basePayload} />);
 
-    expect(await screen.findByText(/表示するサービスがありません/)).toBeInTheDocument();
+    expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "この条件で表示" })).toBeDisabled();
     expect(
@@ -260,7 +260,7 @@ describe("dashboard", () => {
     window.history.replaceState(null, "", "/?services=github");
     render(<App load={async () => payload([service({ id: "slack", name: "Slack" })])} />);
 
-    expect(await screen.findByText("選択したサービスの情報はありません。")).toBeInTheDocument();
+    expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
     expect(screen.queryByText("「」に一致するサービスはありません。")).not.toBeInTheDocument();
   });
 
