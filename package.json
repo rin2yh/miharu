@@ -11,6 +11,8 @@
     "cf-typegen": "cf workers types",
     "db:migrate:local": "cf d1 migrations apply ec29a528-708c-4ce3-8a35-f9416dacf499 --dir db/migrations --local --persist-to .cloudflare/state",
     "db:migrate:remote": "cf d1 migrations apply ec29a528-708c-4ce3-8a35-f9416dacf499 --dir db/migrations",
+    "db:migrate:preview": "cf d1 migrations apply fe57c26a-0fac-40f1-b083-7167cd2c19f4 --dir db/migrations",
+    "preview:deploy": "cf previews deploy",
     "lint": "oxlint . && oxfmt --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
