@@ -287,6 +287,16 @@ describe("Statuspage provider", () => {
           components: [{ id: cloudflareRegionalComponentId, name: "Accra, Ghana - (ACC)" }],
         },
         {
+          id: "incident-with-many-regional-components",
+          name: "Workers degradation with many regional components",
+          status: "investigating",
+          impact: "major",
+          component_ids: [
+            ...Array.from({ length: 201 }, (_, index) => `regional-component-${index}`),
+            cloudflareWorkersId,
+          ],
+        },
+        {
           id: "unassigned-incident",
           name: "Unassigned incident",
           status: "investigating",
@@ -305,6 +315,7 @@ describe("Statuspage provider", () => {
       "3ts1mfzs0khz",
       "d1-incident",
       "regional-components-workers-incident",
+      "incident-with-many-regional-components",
     ]);
     expect(snapshot.incidents[0]).toMatchObject({
       componentIds: [cloudflareNetworkId],
@@ -319,6 +330,10 @@ describe("Statuspage provider", () => {
       components: ["D1"],
     });
     expect(snapshot.incidents[3]).toMatchObject({
+      componentIds: [cloudflareWorkersId],
+      components: ["Workers"],
+    });
+    expect(snapshot.incidents[4]).toMatchObject({
       componentIds: [cloudflareWorkersId],
       components: ["Workers"],
     });

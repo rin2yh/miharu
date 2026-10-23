@@ -120,11 +120,10 @@ function parseStatuspageIncident(
         .map((component) => boundedText(asRecord(component)?.code, 200))
         .filter((id): id is string => id !== null)
     : [];
-  const sourceIncidentIds = componentIdFilter ? [...ids, ...directIds, ...latestAffectedIds] : ids;
+  const sourceIncidentIds = componentIdFilter
+    ? [...ids, ...directIds, ...latestAffectedIds].filter((id) => componentIdFilter.has(id))
+    : ids;
   const incidentIds = uniqueNames(sourceIncidentIds, COMPONENTS_PER_SERVICE_LIMIT);
-  const visibleIncidentIds = componentIdFilter
-    ? incidentIds.filter((id) => componentIdFilter.has(id))
-    : incidentIds;
   const names = (componentIdFilter && ids.length === 0 ? directIds : ids).map((id) =>
     componentNames.get(id),
   );
@@ -159,7 +158,7 @@ function parseStatuspageIncident(
         .filter((name): name is string => Boolean(name))
     : [];
   const components = uniqueNames([...names, ...affected, ...directComponents]);
-  const componentIds = uniqueNames(visibleIncidentIds, COMPONENTS_PER_SERVICE_LIMIT);
+  const componentIds = incidentIds;
   const rawId = boundedText(row.id, 200);
   const rawUrl = row.url ?? row.shortlink ?? row.short_link;
   const url = safeIncidentUrl(rawUrl, service);
