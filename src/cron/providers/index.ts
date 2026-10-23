@@ -1,9 +1,9 @@
 import type { ProviderSnapshot } from "../../domain";
 import type { ServiceConfig } from "../../shared/config/services";
+import type { ProviderContext } from "../provider-context";
 import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
-import type { ProviderContext } from "./shared";
 
 export async function fetchServiceSnapshot(
   service: ServiceConfig,

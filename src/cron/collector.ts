@@ -1,7 +1,8 @@
 import { COLLECTION_TIMEOUT_MS, type ServiceConfig } from "../shared/config/services";
 import type { ProviderSnapshot } from "../domain";
 import { fetchServiceSnapshot } from "./providers";
-import { ProviderError, type ProviderContext } from "./providers/shared";
+import type { ProviderContext } from "./provider-context";
+import { ProviderError } from "./providers/shared";
 import type { CollectionStore } from "../shared/store";
 
 export type SnapshotFetcher = (

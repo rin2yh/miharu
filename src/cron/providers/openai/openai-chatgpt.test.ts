@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../../domain";
 import { SERVICES } from "../../../shared/config/services";
 import { fetchOpenAIChatGPTSnapshot } from "./chatgpt";
-import type { FetchLike, ProviderContext } from "../shared";
+import type { ProviderContext } from "../../provider-context";
+import type { FetchLike } from "../shared";
 
 const abortSignal = new AbortController().signal;
 const chatgpt = SERVICES.find((service) => service.provider === "openai-chatgpt");

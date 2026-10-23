@@ -1,11 +1,6 @@
 import type { ProviderSnapshot } from "../../../domain";
-import {
-  asRecord,
-  fetchJson,
-  ProviderError,
-  type FetchLike,
-  type ProviderContext,
-} from "../shared";
+import { asRecord, fetchJson, ProviderError, type FetchLike } from "../shared";
+import type { ProviderContext } from "../../provider-context";
 import { parseChatGPTComponents, type OpenAIChatGPTService } from "./chatgpt-components";
 import { parseOpenAIChatGPTIncidents } from "./chatgpt-incidents";
 
