@@ -1,9 +1,32 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { SERVICES, type ServiceConfig } from "../../shared/config/services";
 import { fetchStatuspageSnapshot } from "./statuspage";
-import { getService, jsonFetcher } from "./provider-test-utils";
+import type { FetchLike } from "./shared";
 
 const abortSignal = new AbortController().signal;
+
+function getService<P extends ServiceConfig["provider"]>(
+  id: string,
+  provider: P,
+): Extract<ServiceConfig, { provider: P }> {
+  const service = SERVICES.find((candidate) => candidate.id === id);
+
+  if (!service || service.provider !== provider) {
+    throw new Error(`Missing ${provider} service: ${id}`);
+  }
+
+  return service as Extract<ServiceConfig, { provider: P }>;
+}
+
+function jsonFetcher(payload: unknown, contentType = "application/json"): FetchLike {
+  return (async () =>
+    new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "content-type": contentType },
+    })) as FetchLike;
+}
+
 const cloudflare = getService("cloudflare", "statuspage");
 
 type CloudflareSummaryFixture = {
