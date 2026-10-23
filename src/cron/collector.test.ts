@@ -161,7 +161,7 @@ describe("status collection", () => {
 
   it("isolates failures across services", async () => {
     const persistence = store();
-    const failedServiceIds = new Set([service.id]);
+    const failedServiceIds = new Set<string>([service.id]);
     const result = await collectAll(
       SERVICES,
       "2026-10-23T05:00:00.000Z",

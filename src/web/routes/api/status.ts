@@ -111,7 +111,9 @@ export function buildDashboardPayload(
     } satisfies DashboardPayload["services"][number];
   });
 
-  const serviceNames = new Map(SERVICES.map((service) => [service.id, service.name]));
+  const serviceNames = new Map<string, string>(
+    SERVICES.map((service) => [service.id, service.name]),
+  );
   const recentEvents: DashboardEvent[] = rows.eventRows
     .filter((row) => serviceNames.has(row.serviceId))
     .slice(0, INCIDENT_HISTORY_DISPLAY_LIMIT)

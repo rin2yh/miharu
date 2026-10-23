@@ -1,20 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot } from "../../domain";
-import { SERVICES, type ServiceConfig } from "../../shared/config/services";
+import { SERVICES } from "../../shared/config/services";
 import type { ProviderContext } from "../provider-context";
 import { fetchServiceSnapshot } from "./index";
 
 const signal = new AbortController().signal;
 
-function getService<P extends ServiceConfig["provider"]>(
-  id: string,
-  provider: P,
-): Extract<ServiceConfig, { provider: P }> {
-  const service = SERVICES.find((candidate) => candidate.id === id);
-  if (!service || service.provider !== provider) {
-    throw new Error(`Missing ${provider} service: ${id}`);
-  }
-  return service as Extract<ServiceConfig, { provider: P }>;
+type ConfiguredService = (typeof SERVICES)[number];
+
+function getService<Id extends ConfiguredService["id"]>(
+  id: Id,
+): Extract<ConfiguredService, { id: Id }> {
+  const service = SERVICES.find(
+    (candidate): candidate is Extract<ConfiguredService, { id: Id }> => candidate.id === id,
+  );
+  if (!service) throw new Error(`Missing service: ${id}`);
+  return service;
 }
 
 function providerContext(payload: unknown) {
@@ -31,7 +32,7 @@ function providerContext(payload: unknown) {
 
 describe("provider dispatch", () => {
   it("dispatches Slack through its configured endpoint", async () => {
-    const service = getService("slack", "slack");
+    const service = getService("slack");
     const { context, fetcher, getActiveIncidents } = providerContext({
       status: "ok",
       active_incidents: [],
@@ -45,7 +46,7 @@ describe("provider dispatch", () => {
   });
 
   it("dispatches Statuspage through its configured endpoint", async () => {
-    const service = getService("notion", "statuspage");
+    const service = getService("notion");
     const { context, fetcher, getActiveIncidents } = providerContext({
       status: { indicator: "none" },
       components: [],
@@ -60,7 +61,7 @@ describe("provider dispatch", () => {
   });
 
   it("dispatches ChatGPT and lets its provider load active incidents", async () => {
-    const service = getService("chatgpt", "openai-chatgpt");
+    const service = getService("chatgpt");
     const { context, fetcher, getActiveIncidents } = providerContext({
       status: { indicator: "none" },
       components: service.components.map(({ id, name }) => ({ id, name, status: "operational" })),
