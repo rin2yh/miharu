@@ -93,51 +93,60 @@ const statusPayload: DashboardPayload = {
 };
 
 test("サービス名で障害サービスを検索し、障害詳細と最近の更新を確認できる", async ({ page }) => {
-  await page.route("**/api/status", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(statusPayload),
-    }),
-  );
+  const githubServiceLink = () =>
+    page.getByRole("link", {
+      name: "GitHubの公式ステータスページを新しいタブで開く",
+    });
+  const githubCard = () => page.getByRole("listitem").filter({ has: githubServiceLink() });
 
-  await page.goto("/");
-
-  const search = page.getByRole("searchbox", { name: "サービスを検索" });
-  await expect(search).toBeVisible();
-  await search.fill("GitHub");
-
-  await expect(page.getByText("1サービス", { exact: true })).toBeVisible();
-  const githubLink = page.getByRole("link", {
-    name: "GitHubの公式ステータスページを新しいタブで開く",
+  await test.step("障害データをAPIに設定する", async () => {
+    await page.route("**/api/status", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(statusPayload),
+      }),
+    );
   });
-  await expect(githubLink).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Slackの公式ステータスページを新しいタブで開く" }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("link", { name: "Notionの公式ステータスページを新しいタブで開く" }),
-  ).toHaveCount(0);
 
-  const githubCard = page.getByRole("listitem").filter({ has: githubLink });
-  await expect(githubCard.getByText("部分障害", { exact: true })).toHaveCount(2);
-  await expect(githubCard.getByText("Actionsで一部のジョブ開始が遅延しています。")).toBeVisible();
-  await expect(githubCard.getByRole("heading", { name: incidentTitle })).toBeVisible();
-  await expect(
-    githubCard.getByText(
-      "We are investigating delayed job starts for some GitHub Actions workflows.",
-    ),
-  ).toBeVisible();
-  await expect(githubCard.getByRole("link", { name: "公式情報を見る" })).toHaveAttribute(
-    "href",
-    incidentUrl,
-  );
+  await test.step("サービス名で検索する", async () => {
+    await page.goto("/");
 
-  const recentUpdates = page.getByRole("region", { name: "最近の更新" });
-  const updateLink = recentUpdates.getByRole("link", { name: incidentTitle });
-  await expect(updateLink).toBeVisible();
-  const updateRow = recentUpdates.getByRole("listitem");
-  await expect(updateRow).toContainText("GitHub");
-  await expect(updateRow).toContainText("障害更新");
-  await expect(updateLink).toHaveAttribute("href", incidentUrl);
+    const search = page.getByRole("searchbox", { name: "サービスを検索" });
+    await expect(search).toBeVisible();
+    await search.fill("GitHub");
+
+    await expect(page.getByText("1サービス", { exact: true })).toBeVisible();
+    await expect(githubServiceLink()).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Slackの公式ステータスページを新しいタブで開く" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Notionの公式ステータスページを新しいタブで開く" }),
+    ).toHaveCount(0);
+  });
+
+  await test.step("障害の詳細と公式リンクを確認する", async () => {
+    const card = githubCard();
+    await expect(card.getByText("部分障害", { exact: true })).toHaveCount(2);
+    await expect(card.getByText("Actionsで一部のジョブ開始が遅延しています。")).toBeVisible();
+    await expect(card.getByRole("heading", { name: incidentTitle })).toBeVisible();
+    await expect(
+      card.getByText("We are investigating delayed job starts for some GitHub Actions workflows."),
+    ).toBeVisible();
+    await expect(card.getByRole("link", { name: "公式情報を見る" })).toHaveAttribute(
+      "href",
+      incidentUrl,
+    );
+  });
+
+  await test.step("最近の更新に障害が掲載されていることを確認する", async () => {
+    const recentUpdates = page.getByRole("region", { name: "最近の更新" });
+    const updateLink = recentUpdates.getByRole("link", { name: incidentTitle });
+    await expect(updateLink).toBeVisible();
+    const updateRow = recentUpdates.getByRole("listitem");
+    await expect(updateRow).toContainText("GitHub");
+    await expect(updateRow).toContainText("障害更新");
+    await expect(updateLink).toHaveAttribute("href", incidentUrl);
+  });
 });
