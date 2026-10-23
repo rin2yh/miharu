@@ -265,6 +265,21 @@ describe("Statuspage provider", () => {
           ],
         },
         {
+          id: "regional-components-workers-incident",
+          name: "Workers degraded during a regional network issue",
+          status: "investigating",
+          impact: "major",
+          component_ids: [cloudflareRegionalComponentId],
+          components: [{ id: cloudflareRegionalComponentId, name: "Accra, Ghana - (ACC)" }],
+          incident_updates: [
+            {
+              affected_components: [
+                { code: cloudflareWorkersId, name: "Cloudflare Sites and Services - Workers" },
+              ],
+            },
+          ],
+        },
+        {
           id: "regional-incident",
           name: "Connectivity issues in Accra",
           status: "investigating",
@@ -289,6 +304,7 @@ describe("Statuspage provider", () => {
       "sufgcbe8rrwt",
       "3ts1mfzs0khz",
       "d1-incident",
+      "regional-components-workers-incident",
     ]);
     expect(snapshot.incidents[0]).toMatchObject({
       componentIds: [cloudflareNetworkId],
@@ -301,6 +317,10 @@ describe("Statuspage provider", () => {
     expect(snapshot.incidents[2]).toMatchObject({
       componentIds: [cloudflareD1Id],
       components: ["D1"],
+    });
+    expect(snapshot.incidents[3]).toMatchObject({
+      componentIds: [cloudflareWorkersId],
+      components: ["Workers"],
     });
   });
 

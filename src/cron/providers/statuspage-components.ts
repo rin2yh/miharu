@@ -44,6 +44,7 @@ function selectStatuspageComponents(components: unknown[], groupId?: string): un
     );
   });
 
+  // An incomplete success would make store synchronization delete omitted components.
   if (selected.length === 0 || selected.length !== memberIds.length) {
     throw new ProviderError(
       "invalid_payload",

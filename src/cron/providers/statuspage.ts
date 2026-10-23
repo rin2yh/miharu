@@ -120,14 +120,8 @@ function parseStatuspageIncident(
         .map((component) => boundedText(asRecord(component)?.code, 200))
         .filter((id): id is string => id !== null)
     : [];
-  const incidentIds = uniqueNames(
-    componentIdFilter
-      ? ids.length > 0 || directIds.length > 0
-        ? [...ids, ...directIds]
-        : latestAffectedIds
-      : ids,
-    COMPONENTS_PER_SERVICE_LIMIT,
-  );
+  const sourceIncidentIds = componentIdFilter ? [...ids, ...directIds, ...latestAffectedIds] : ids;
+  const incidentIds = uniqueNames(sourceIncidentIds, COMPONENTS_PER_SERVICE_LIMIT);
   const visibleIncidentIds = componentIdFilter
     ? incidentIds.filter((id) => componentIdFilter.has(id))
     : incidentIds;
