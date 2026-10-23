@@ -42,8 +42,9 @@
           }
         ],
         "react/rules-of-hooks": "error",
+        "react/hooks": "error",
         "react/exhaustive-deps": "error",
-        "react/exhaustive-effect-dependencies": "warn",
+        "react/exhaustive-effect-dependencies": "error",
         "react/error-boundaries": "error",
         "react/globals": "error",
         "react/immutability": "error",
@@ -54,8 +55,10 @@
         "react/set-state-in-effect": "error",
         "react/set-state-in-render": "error",
         "react/static-components": "error",
-        "react/unsupported-syntax": "warn",
-        "react/use-memo": "error"
+        "react/unsupported-syntax": "error",
+        "react/use-memo": "error",
+        "react/void-use-memo": "error",
+        "react/rule-suppression": "error"
       }
     }
   ],
