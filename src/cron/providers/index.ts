@@ -11,47 +11,27 @@ type ProviderImplementation<Kind extends ProviderKind> = (
   service: ProviderService<Kind>,
   context: ProviderContext,
 ) => Promise<ProviderSnapshot>;
-type ProviderRegistration<Kind extends ProviderKind> = {
-  provider: Kind;
-  run: (service: ServiceConfig, context: ProviderContext) => Promise<ProviderSnapshot>;
-};
-type ProviderRegistrationMap = {
-  [Kind in ProviderKind]: ProviderRegistration<Kind>;
+type ProviderImplementations = {
+  [Kind in ProviderKind]: ProviderImplementation<Kind>;
 };
 
-function hasProvider<Kind extends ProviderKind>(
-  service: ServiceConfig,
-  kind: Kind,
-): service is ProviderService<Kind> {
-  return service.provider === kind;
-}
+const providerImplementations: ProviderImplementations = {
+  slack: fetchSlackSnapshot,
+  statuspage: fetchStatuspageSnapshot,
+  "openai-chatgpt": fetchOpenAIChatGPTSnapshot,
+};
 
-function registerProvider<Kind extends ProviderKind>(
+function runProvider<Kind extends ProviderKind>(
   kind: Kind,
-  implementation: ProviderImplementation<Kind>,
-): ProviderRegistration<Kind> {
-  return {
-    provider: kind,
-    run(service, context) {
-      if (!hasProvider(service, kind)) {
-        throw new Error(
-          `Provider registration mismatch: expected ${kind}, received ${service.provider}`,
-        );
-      }
-      return implementation(service, context);
-    },
-  };
+  service: ProviderService<Kind>,
+  context: ProviderContext,
+): Promise<ProviderSnapshot> {
+  return providerImplementations[kind](service, context);
 }
-
-const providerImplementations = {
-  slack: registerProvider("slack", fetchSlackSnapshot),
-  statuspage: registerProvider("statuspage", fetchStatuspageSnapshot),
-  "openai-chatgpt": registerProvider("openai-chatgpt", fetchOpenAIChatGPTSnapshot),
-} satisfies ProviderRegistrationMap;
 
 export function fetchServiceSnapshot(
   service: ServiceConfig,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  return providerImplementations[service.provider].run(service, context);
+  return runProvider(service.provider, service, context);
 }
