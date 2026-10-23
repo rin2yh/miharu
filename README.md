@@ -20,7 +20,6 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
-
 ## Preview 環境
 
 Cloudflare Workers Builds の Worker Previews を利用して、ブランチごとに独立した URL を発行します。Preview は専用の共有 D1 `miharu-status-preview` を使用し、本番 D1 は使用しません。
