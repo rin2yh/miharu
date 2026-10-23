@@ -123,16 +123,17 @@ WebとCronは共通設定・D1ストアを利用します。ドメイン層はWo
 
 ## デプロイとD1スキーマ変更
 
-Workers Buildsは`main`へのpushでアプリをデプロイします。Workerの設定は[`cloudflare.config.ts`](cloudflare.config.ts)で管理します。ローカルから手動でデプロイするときは`pnpm build`の後に`pnpm deploy`を実行してください。
+Workers Buildsは`main`へのpushで本番へデプロイし、Pull Requestごとにプレビューを作成します。Workerの設定は[`cloudflare.config.ts`](cloudflare.config.ts)で管理します。プレビューは専用D1を使い、Cron Triggerは登録しません。本番D1および定期収集処理から分離しています。ローカルから手動でデプロイするときは、ビルド後に対象D1のmigrationを適用してからdeployします。
 
-D1のスキーマを変更する場合は既存のmigration SQLを編集せず、`db/migrations/`に新しい連番SQLを追加します。まずローカルで確認し、本番D1へ適用してからアプリをデプロイします。
+D1のスキーマを変更する場合は既存のmigration SQLを編集せず、`db/migrations/`に新しい連番SQLを追加します。まずローカルで確認してください。Workers Buildsは本番デプロイ前に本番D1へ、プレビューのデプロイ前にプレビューD1へ未適用のmigrationを適用します。適用済みmigrationは再実行されません。
 
 ```sh
 pnpm db:migrate:local
-pnpm db:migrate:remote
+pnpm build && pnpm db:migrate:remote && pnpm deploy
+pnpm db:migrate:preview && pnpm preview:deploy
 ```
 
-通常のアプリ更新ではmigrationは不要です。スキーマ変更は旧Workerでも動くように段階的に行い、列の追加とアプリ側の切り替えを分け、不要な列の削除は後続のmigrationにしてください。
+通常のアプリ更新でmigrationがなければ、Workers Buildsのmigration適用は何も変更しません。スキーマ変更は旧Workerでも動くように段階的に行い、列の追加とアプリ側の切り替えを分け、不要な列の削除は後続のmigrationにしてください。
 
 ## ライセンス
 
