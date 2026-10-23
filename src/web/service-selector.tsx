@@ -2,29 +2,35 @@ import { useState } from "react";
 import { SERVICES } from "../shared/config/services";
 
 type ServiceSelectorProps = {
+  locationSearch: string;
   selectedServiceIds: string[];
   shareUrl: string;
   onApply: (serviceIds: string[]) => void;
 };
 
 type DraftSelection = {
-  appliedServiceIds: string[];
+  locationSearch: string;
   serviceIds: string[];
 };
 
-export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: ServiceSelectorProps) {
+export function ServiceSelector({
+  locationSearch,
+  selectedServiceIds,
+  shareUrl,
+  onApply,
+}: ServiceSelectorProps) {
   const [draftSelection, setDraftSelection] = useState<DraftSelection>(() => ({
-    appliedServiceIds: selectedServiceIds,
+    locationSearch,
     serviceIds: selectedServiceIds,
   }));
+  if (draftSelection.locationSearch !== locationSearch) {
+    setDraftSelection({ locationSearch, serviceIds: selectedServiceIds });
+  }
   const [copyResult, setCopyResult] = useState<{
     shareUrl: string;
     status: "copied" | "error";
   } | null>(null);
-  const draftServiceIds =
-    draftSelection.appliedServiceIds === selectedServiceIds
-      ? draftSelection.serviceIds
-      : selectedServiceIds;
+  const draftServiceIds = draftSelection.serviceIds;
   const copyStatus = copyResult?.shareUrl === shareUrl ? copyResult.status : "idle";
 
   const allDraftServicesSelected = draftServiceIds.length === SERVICES.length;
@@ -35,7 +41,7 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
     draftServiceIds.some((serviceId) => !appliedServiceIds.has(serviceId));
 
   const updateDraftSelection = (serviceIds: string[]) => {
-    setDraftSelection({ appliedServiceIds: selectedServiceIds, serviceIds });
+    setDraftSelection({ locationSearch, serviceIds });
   };
 
   const toggleDraftService = (serviceId: string, checked: boolean) => {
