@@ -47,7 +47,7 @@ export function ServiceSelector({ selectedServiceIds, onApply }: ServiceSelector
         </span>
       </summary>
       <div className="border-t border-line px-4 py-3 dark:border-line">
-        <fieldset className="m-0 grid max-w-2xl grid-cols-1 gap-x-6 gap-y-1 border-0 p-0 sm:grid-cols-2 lg:grid-cols-3">
+        <fieldset className="m-0 grid max-w-2xl grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-x-6 gap-y-1 border-0 p-0">
           <legend className="sr-only">表示するサービス</legend>
           <label className="col-span-full flex min-h-7 items-center gap-2 text-sm font-medium text-ink">
             <input
