@@ -1,5 +1,10 @@
 import { expect, test } from "./fixtures/test";
 
+function gridColumnCount(template: string): number {
+  const repeatedColumns = template.match(/^repeat\((\d+),/);
+  return repeatedColumns ? Number(repeatedColumns[1]) : template.split(/\s+/).length;
+}
+
 test("サービス名で障害サービスを検索し、障害詳細と最近の更新を確認できる", async ({
   dashboardStatus,
   statusDashboard,
@@ -81,5 +86,59 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(
       "dark",
     );
+  });
+});
+
+test("表示サービス選択は3列で収まり、狭い画面でも条件を適用できる", async ({
+  dashboardStatus,
+  page,
+  statusDashboard,
+}) => {
+  await test.step("デスクトップでは選択肢を最大幅の3列で表示する", async () => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await statusDashboard.goto();
+    await statusDashboard.openServiceSelector();
+    await expect(
+      statusDashboard.serviceCount(dashboardStatus.payload.services.length),
+    ).toBeVisible();
+
+    const choices = statusDashboard.serviceChoices();
+    await expect(choices).toBeVisible();
+    const layout = await choices.evaluate((element) => ({
+      template: getComputedStyle(element).gridTemplateColumns,
+      width: element.getBoundingClientRect().width,
+    }));
+    expect(gridColumnCount(layout.template)).toBe(3);
+    expect(layout.width).toBeLessThanOrEqual(672);
+    await expect(page.getByLabel("現在の表示条件を共有")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "URLをコピー" })).toHaveCount(0);
+  });
+
+  await test.step("320px幅では1列になり、選択した条件をURLへ適用できる", async () => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await statusDashboard.goto();
+    await statusDashboard.openServiceSelector();
+
+    const choices = statusDashboard.serviceChoices();
+    const template = await choices.evaluate(
+      (element) => getComputedStyle(element).gridTemplateColumns,
+    );
+    const columns = gridColumnCount(template);
+    expect(columns).toBe(1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+
+    await statusDashboard.serviceSelectorCheckbox("すべて選択").uncheck();
+    await statusDashboard.serviceSelectorCheckbox("Slack").check();
+    await statusDashboard.applyServiceSelectionButton().click();
+
+    await expect(page).toHaveURL(/\?services=slack$/);
+    await expect(statusDashboard.serviceCount(1)).toBeVisible();
+    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
+    await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });
 });

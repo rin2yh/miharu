@@ -11,6 +11,22 @@ export class StatusDashboardPage {
     await this.page.getByRole("searchbox", { name: "サービスを検索" }).fill(name);
   }
 
+  async openServiceSelector() {
+    await this.page.getByText("表示サービスを選択", { exact: true }).click();
+  }
+
+  serviceChoices(): Locator {
+    return this.page.getByRole("group", { name: "表示するサービス" });
+  }
+
+  serviceSelectorCheckbox(name: string): Locator {
+    return this.page.getByRole("checkbox", { name });
+  }
+
+  applyServiceSelectionButton(): Locator {
+    return this.page.getByRole("button", { name: "この条件で表示" });
+  }
+
   serviceCount(count: number): Locator {
     return this.page.getByText(`${count}サービス`, { exact: true });
   }
