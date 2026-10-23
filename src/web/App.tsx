@@ -263,8 +263,14 @@ function ServiceCard({ service }: { service: DashboardService }) {
         </span>
         <div className="service-card-title">
           <h2>
-            <a href={service.statusPageUrl} target="_blank" rel="noreferrer noopener">
+            <a
+              href={service.statusPageUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              aria-label={`${service.name}の公式ステータスページを新しいタブで開く`}
+            >
               {service.name}
+              <ExternalIcon />
             </a>
           </h2>
           <span className={`status-pill status-pill-${service.status}`}>
@@ -272,7 +278,6 @@ function ServiceCard({ service }: { service: DashboardService }) {
             {STATUS_LABELS[service.status]}
           </span>
         </div>
-        <span className="service-source-label">公式サービス全体</span>
       </header>
 
       {service.status !== "operational" && service.summary && (
