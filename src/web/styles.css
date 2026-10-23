@@ -387,14 +387,14 @@ a {
   align-items: baseline;
   gap: 7px;
   margin-top: 10px;
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--quiet);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
 .freshness-label {
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--quiet);
+  font-size: 9px;
 }
 
 .incident-list {
@@ -848,10 +848,10 @@ a {
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex: 1;
   flex-wrap: wrap;
-  gap: 7px 12px;
+  gap: 7px 10px;
 }
 
 .service-card-title h2 {
@@ -863,20 +863,17 @@ a {
 }
 
 .service-card-title h2 a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
   color: var(--ink);
   text-decoration: none;
   text-underline-offset: 3px;
 }
 
-.service-card-title h2 a:hover {
+.service-card-title h2 a:hover,
+.service-card-title h2 a:focus-visible {
   text-decoration: underline;
-}
-
-.service-source-label {
-  display: block;
-  margin: 4px 0 0 50px;
-  color: var(--quiet);
-  font-size: 10px;
 }
 
 .service-summary {
@@ -1032,9 +1029,6 @@ a {
   }
   .service-card-title .status-pill {
     font-size: 11px;
-  }
-  .service-source-label {
-    margin-left: 43px;
   }
   .component-accordion details > summary {
     gap: 6px;

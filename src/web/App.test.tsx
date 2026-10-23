@@ -5,6 +5,8 @@ import type { DashboardPayload, DashboardService } from "../domain";
 import { App } from "./App";
 
 const lastSuccessAt = "2026-10-23T05:00:00.000Z";
+const slackLinkName = "Slackの公式ステータスページを新しいタブで開く";
+const githubLinkName = "GitHubの公式ステータスページを新しいタブで開く";
 
 function service(overrides: Partial<DashboardService> = {}): DashboardService {
   return {
@@ -68,12 +70,16 @@ describe("dashboard", () => {
     render(<App load={async () => basePayload} />);
 
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Slack" })).toHaveAttribute(
-      "href",
-      "https://slack-status.com/",
-    );
-    const slackCard = screen.getByRole("link", { name: "Slack" }).closest("li");
+    const slackLink = screen.getByRole("link", { name: slackLinkName });
+    expect(slackLink).toHaveAttribute("href", "https://slack-status.com/");
+    expect(slackLink).toHaveAttribute("target", "_blank");
+    const slackCard = slackLink.closest("li");
     expect(slackCard).not.toBeNull();
+    expect(within(slackCard!).getAllByRole("link", { name: /公式ステータスページ/ })).toHaveLength(
+      1,
+    );
+    expect(within(slackCard!).queryByRole("link", { name: "公式" })).not.toBeInTheDocument();
+    expect(slackLink.closest(".service-card-title")?.querySelector(".status-pill")).not.toBeNull();
     expect(within(slackCard!).getByText("正常")).toBeInTheDocument();
     expect(
       within(slackCard!).getByText("独立したコンポーネント状態は公式APIから提供されていません。"),
@@ -134,10 +140,10 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([github])} />);
 
-    const card = (await screen.findByRole("link", { name: "GitHub" })).closest("li");
+    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
     expect(card).not.toBeNull();
     expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain("正常");
-    const componentRows = [...card!.querySelectorAll(".component-accordion")];
+    const componentRows = [...card!.querySelectorAll<HTMLElement>(".component-accordion")];
     expect(
       componentRows.map((row) => row.querySelector(".component-summary-name")?.textContent),
     ).toEqual(["Issues", "Actions", "Web", "Packages"]);
@@ -176,10 +182,12 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([affected])} />);
 
-    const card = (await screen.findByRole("link", { name: "GitHub" })).closest("li");
+    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
     expect(card).not.toBeNull();
     expect(within(card!).getAllByText("全面障害")).toHaveLength(2);
-    expect(within(card!).getByText("公式サービス全体")).toBeInTheDocument();
+    expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain(
+      "全面障害",
+    );
     expect(within(card!).getByText("Actions")).toBeInTheDocument();
   });
 
@@ -223,19 +231,19 @@ describe("dashboard", () => {
     await waitFor(() =>
       expect(screen.queryByText("Messaging is recovering")).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("link", { name: "Slack" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: slackLinkName })).toBeInTheDocument();
   });
 
   it("filters services by name and clears the query", async () => {
     render(<App load={async () => basePayload} />);
-    await screen.findByRole("link", { name: "GitHub" });
+    await screen.findByRole("link", { name: githubLinkName });
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
       target: { value: "slack" },
     });
-    expect(screen.getByRole("link", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "GitHub" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: slackLinkName })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
-    expect(screen.getByRole("link", { name: "GitHub" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: githubLinkName })).toBeInTheDocument();
   });
 
   it("loads on entry and polls once per minute", async () => {
