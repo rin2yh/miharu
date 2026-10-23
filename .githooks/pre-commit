@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -eu
+
+printf '%s\n' 'Running TypeScript checks before commit...'
+pnpm typecheck

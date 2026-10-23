@@ -5,6 +5,7 @@
   "description": "外部サービスの公式ステータスを集約するダッシュボード",
   "type": "module",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "dev": "cf dev",
     "build": "pnpm typecheck && cf build",
     "deploy": "cf deploy --prebuilt",

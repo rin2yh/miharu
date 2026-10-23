@@ -112,12 +112,6 @@ a {
   height: 8px;
 }
 
-.header-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .service-overview-heading {
   display: flex;
   align-items: baseline;
@@ -382,21 +376,6 @@ a {
   background: currentColor;
 }
 
-.service-freshness {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-top: 10px;
-  color: var(--quiet);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.freshness-label {
-  color: var(--quiet);
-  font-size: 9px;
-}
-
 .incident-list {
   display: grid;
   gap: 11px;
@@ -455,11 +434,6 @@ a {
   background: var(--unknown-bg);
   color: var(--unknown);
 }
-.incident-source-impact {
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .incident-item h4 {
   margin: 0;
   color: var(--ink);
@@ -469,29 +443,40 @@ a {
   overflow-wrap: anywhere;
 }
 
-.incident-item h4 a,
 .event-copy p a {
   text-decoration-color: #b8c5bd;
   text-underline-offset: 3px;
 }
-.incident-item h4 a:hover,
 .event-copy p a:hover {
-  color: #266747;
+  color: var(--healthy);
 }
-.incident-item h4 .external-icon {
-  display: inline-block;
-  margin-left: 5px;
-  vertical-align: -1px;
+.incident-official-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--healthy);
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration-color: #b8c5bd;
+  text-underline-offset: 3px;
+}
+.incident-official-link:hover {
+  text-decoration: underline;
 }
 
 .incident-body {
+  display: -webkit-box;
   max-width: 780px;
   margin: 6px 0 0;
   color: #596960;
   font-size: 12px;
   line-height: 1.7;
+  overflow: hidden;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .component-list {
@@ -633,19 +618,6 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.page-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 7px 16px;
-  margin-top: 26px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  color: var(--quiet);
-  font-size: 10px;
-}
-
 @media (max-width: 760px) {
   .page-shell {
     width: min(100% - 32px, 620px);
@@ -653,10 +625,6 @@ a {
   }
   .site-header {
     margin-bottom: 19px;
-  }
-  .header-note {
-    max-width: 130px;
-    text-align: right;
   }
   .service-overview-controls {
     justify-content: flex-start;
@@ -675,9 +643,6 @@ a {
   }
   .incident-list {
     margin-top: 14px;
-  }
-  .page-footer {
-    justify-content: flex-start;
   }
 }
 
@@ -896,35 +861,42 @@ a {
   font-weight: 650;
 }
 
-.component-accordion-list {
+.component-listing {
+  border-top: 1px solid var(--line);
+}
+
+.component-item-list {
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--line);
   list-style: none;
 }
 
-.component-accordion {
+.component-item-list[hidden] {
+  display: none;
+}
+
+.component-item {
   border-bottom: 1px solid var(--line);
 }
 
-.component-accordion details > summary {
+.component-toggle {
   display: flex;
+  width: 100%;
   min-height: 43px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 7px 10px;
+  gap: 10px;
   padding: 7px 2px;
-  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--healthy);
   cursor: pointer;
-  font-size: 12px;
-  list-style: none;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
 }
 
-.component-accordion details > summary::marker {
-  content: "";
-}
-
-.component-accordion details > summary::before {
+.component-toggle::before {
   width: 12px;
   flex: 0 0 12px;
   color: var(--quiet);
@@ -935,7 +907,47 @@ a {
   transition: transform 120ms ease;
 }
 
-.component-accordion details[open] > summary::before {
+.component-toggle[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+
+.component-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.component-row-heading {
+  display: flex;
+  min-height: 43px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  padding: 7px 2px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.component-item details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.component-item details > summary::marker {
+  content: "";
+}
+
+.component-item details > summary::before {
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--quiet);
+  content: "›";
+  font-size: 17px;
+  line-height: 1;
+  text-align: center;
+  transition: transform 120ms ease;
+}
+
+.component-item details[open] > summary::before {
   transform: rotate(90deg);
 }
 
@@ -945,7 +957,7 @@ a {
   overflow-wrap: anywhere;
 }
 
-.component-accordion .status-pill {
+.component-item .status-pill {
   min-height: 23px;
   padding: 3px 7px;
   font-size: 10px;
@@ -957,17 +969,9 @@ a {
   font-size: 10px;
 }
 
-.component-detail-empty {
-  margin: 0 0 10px 18px;
-  color: var(--quiet);
-  font-size: 11px;
-}
-
-.component-unavailable,
-.service-all-clear {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 11px;
+.component-item > .incident-list,
+.component-item details > .incident-list {
+  margin: 0 0 12px 24px;
 }
 
 .service-direct-incidents {
@@ -1030,7 +1034,7 @@ a {
   .service-card-title .status-pill {
     font-size: 11px;
   }
-  .component-accordion details > summary {
+  .component-item details > summary {
     gap: 6px;
   }
   .component-incident-count {
