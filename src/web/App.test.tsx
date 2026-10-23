@@ -143,7 +143,7 @@ describe("dashboard", () => {
     const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
     expect(card).not.toBeNull();
     expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain("正常");
-    const componentRows = [...card!.querySelectorAll(".component-accordion")];
+    const componentRows = [...card!.querySelectorAll<HTMLElement>(".component-accordion")];
     expect(
       componentRows.map((row) => row.querySelector(".component-summary-name")?.textContent),
     ).toEqual(["Issues", "Actions", "Web", "Packages"]);
