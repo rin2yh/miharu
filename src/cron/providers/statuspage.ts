@@ -10,6 +10,7 @@ import {
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
 } from "../../shared/config/services";
+import type { ProviderContext } from "../provider-context";
 import {
   asRecord,
   boundedText,
@@ -23,7 +24,6 @@ import {
   statusText,
   statusFromImpact,
   uniqueNames,
-  type FetchLike,
 } from "./shared";
 
 type StatusPageService = Extract<ServiceConfig, { provider: "statuspage" }>;
@@ -92,9 +92,9 @@ function parseStatuspageComponent(value: unknown): NormalizedComponent {
 
 export async function fetchStatuspageSnapshot(
   service: StatusPageService,
-  signal: AbortSignal,
-  fetcher: FetchLike = fetch,
+  context: ProviderContext,
 ): Promise<ProviderSnapshot> {
+  const { signal, fetcher } = context;
   const data = asRecord(await fetchJson(service.summaryUrl, signal, fetcher));
   const status = asRecord(data?.status);
   const components = data?.components;

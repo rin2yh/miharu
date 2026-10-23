@@ -7,9 +7,18 @@ import { collectAll, collectService, type SnapshotFetcher } from "./collector";
 
 const service = SERVICES[0];
 if (!service) throw new Error("Service config is empty");
+const slackService = SERVICES.find((item) => item.provider === "slack");
+const statuspageService = SERVICES.find((item) => item.provider === "statuspage");
 const chatgptService = SERVICES.find((item) => item.provider === "openai-chatgpt");
-if (!chatgptService || chatgptService.provider !== "openai-chatgpt") {
-  throw new Error("ChatGPT service config is missing");
+if (
+  !slackService ||
+  slackService.provider !== "slack" ||
+  !statuspageService ||
+  statuspageService.provider !== "statuspage" ||
+  !chatgptService ||
+  chatgptService.provider !== "openai-chatgpt"
+) {
+  throw new Error("A provider service config is missing");
 }
 
 const snapshot: ProviderSnapshot = {
@@ -87,8 +96,8 @@ describe("status collection", () => {
     const persistence = store({
       getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => [knownIncident]),
     });
-    const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, _signal, knownIncidents) => {
-      expect(knownIncidents).toEqual([knownIncident]);
+    const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, context) => {
+      await expect(context.getActiveIncidents()).resolves.toEqual([knownIncident]);
       return snapshot;
     });
 
@@ -103,6 +112,31 @@ describe("status collection", () => {
     expect(persistence.getActiveIncidents).toHaveBeenCalledWith(chatgptService.id);
   });
 
+  it("does not load active incidents for Slack or Statuspage providers", async () => {
+    const persistence = store();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const sourceUrl = String(input);
+      const payload =
+        sourceUrl === slackService.currentUrl
+          ? { status: "ok", active_incidents: [] }
+          : { status: { indicator: "none" }, components: [], incidents: [] };
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    try {
+      await collectAll([slackService, statuspageService], "2026-10-23T05:00:00.000Z", persistence);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(persistence.saveSuccess).toHaveBeenCalledTimes(2);
+    expect(persistence.getActiveIncidents).not.toHaveBeenCalled();
+  });
+
   it("uses the service timeout and labels an abort as a timeout", async () => {
     const shortTimeout = { ...service, timeoutMs: 5 };
     const persistence = store();
@@ -110,9 +144,11 @@ describe("status collection", () => {
       shortTimeout,
       "2026-10-23T05:00:00.000Z",
       persistence,
-      (_service, signal) =>
+      (_service, context) =>
         new Promise((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          context.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
         }),
     );
     expect(result).toBe("failed");
@@ -125,7 +161,7 @@ describe("status collection", () => {
 
   it("isolates failures across services", async () => {
     const persistence = store();
-    const failedServiceIds = new Set([service.id]);
+    const failedServiceIds = new Set<string>([service.id]);
     const result = await collectAll(
       SERVICES,
       "2026-10-23T05:00:00.000Z",

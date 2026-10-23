@@ -1,18 +1,29 @@
-import type { KnownIncident, ProviderSnapshot } from "../../domain";
+import type { ProviderSnapshot } from "../../domain";
 import type { ServiceConfig } from "../../shared/config/services";
+import type { ProviderContext } from "../provider-context";
 import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
-import type { FetchLike } from "./shared";
 
-export async function fetchServiceSnapshot(
-  service: ServiceConfig,
-  signal: AbortSignal,
-  knownActiveIncidents: KnownIncident[] = [],
-  fetcher?: FetchLike,
+type ProviderKind = ServiceConfig["provider"];
+type ProviderService<Kind extends ProviderKind> = Extract<ServiceConfig, { provider: Kind }>;
+type ProviderImplementation<Kind extends ProviderKind> = (
+  service: ProviderService<Kind>,
+  context: ProviderContext,
+) => Promise<ProviderSnapshot>;
+type ProviderImplementations = {
+  [Kind in ProviderKind]: ProviderImplementation<Kind>;
+};
+
+const providerImplementations: ProviderImplementations = {
+  slack: fetchSlackSnapshot,
+  statuspage: fetchStatuspageSnapshot,
+  "openai-chatgpt": fetchOpenAIChatGPTSnapshot,
+};
+
+export function fetchServiceSnapshot<Kind extends ProviderKind>(
+  service: ProviderService<Kind>,
+  context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  if (service.provider === "slack") return fetchSlackSnapshot(service, signal, fetcher);
-  if (service.provider === "openai-chatgpt")
-    return fetchOpenAIChatGPTSnapshot(service, signal, fetcher, knownActiveIncidents);
-  return fetchStatuspageSnapshot(service, signal, fetcher);
+  return providerImplementations[service.provider](service, context);
 }

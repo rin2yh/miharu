@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERVICES, type ServiceConfig } from "../../shared/config/services";
+import type { ProviderContext } from "../provider-context";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
 
@@ -25,6 +26,10 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
       status: 200,
       headers: { "content-type": contentType },
     })) as FetchLike;
+}
+
+function providerContext(fetcher: FetchLike): ProviderContext {
+  return { signal: abortSignal, fetcher, getActiveIncidents: async () => [] };
 }
 
 const github = getService("github", "statuspage");
@@ -75,13 +80,14 @@ function oversizedCloudflareSummary(serviceCount: number) {
 function fetchIncidentWithFallbackTitle(title: string) {
   return fetchStatuspageSnapshot(
     github,
-    abortSignal,
-    jsonFetcher({
-      status: { indicator: "none" },
-      components: [],
-      incidents: [{ name: title, status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
-      scheduled_maintenances: [],
-    }),
+    providerContext(
+      jsonFetcher({
+        status: { indicator: "none" },
+        components: [],
+        incidents: [{ name: title, status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
+        scheduled_maintenances: [],
+      }),
+    ),
   );
 }
 
@@ -89,31 +95,32 @@ describe("Statuspage provider", () => {
   it("normalizes overall status and keeps incident impact separate", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       github,
-      abortSignal,
-      jsonFetcher({
-        status: { indicator: "major", description: "Partial System Outage" },
-        components: [{ id: "actions", name: "Actions", status: "partial_outage" }],
-        incidents: [
-          {
-            id: "inc-1",
-            name: "Actions are delayed",
-            status: "monitoring",
-            impact: "critical",
-            created_at: "2026-10-23T01:00:00Z",
-            updated_at: "2026-10-23T01:14:00Z",
-            component_ids: ["actions"],
-            incident_updates: [
-              {
-                body: "Mitigation is in place.<br />Next line.",
-                created_at: "2026-10-23T01:14:00Z",
-                affected_components: [{ name: "Actions" }],
-              },
-            ],
-            url: "https://www.githubstatus.com/incidents/inc-1",
-          },
-        ],
-        scheduled_maintenances: [],
-      }),
+      providerContext(
+        jsonFetcher({
+          status: { indicator: "major", description: "Partial System Outage" },
+          components: [{ id: "actions", name: "Actions", status: "partial_outage" }],
+          incidents: [
+            {
+              id: "inc-1",
+              name: "Actions are delayed",
+              status: "monitoring",
+              impact: "critical",
+              created_at: "2026-10-23T01:00:00Z",
+              updated_at: "2026-10-23T01:14:00Z",
+              component_ids: ["actions"],
+              incident_updates: [
+                {
+                  body: "Mitigation is in place.<br />Next line.",
+                  created_at: "2026-10-23T01:14:00Z",
+                  affected_components: [{ name: "Actions" }],
+                },
+              ],
+              url: "https://www.githubstatus.com/incidents/inc-1",
+            },
+          ],
+          scheduled_maintenances: [],
+        }),
+      ),
     );
 
     expect(snapshot.status).toBe("partial_outage");
@@ -143,24 +150,25 @@ describe("Statuspage provider", () => {
   it("accepts Notion's current Statuspage-compatible summary without a maintenance list", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       notion,
-      abortSignal,
-      jsonFetcher({
-        page: { name: "Notion" },
-        status: { indicator: "none", description: "All Systems Operational" },
-        components: [],
-        incidents: [
-          {
-            id: "notion-incident",
-            name: "Users unable to access Notion",
-            status: "monitoring",
-            impact: "critical",
-            created_at: "2026-10-23T03:38:19Z",
-            incident_updates: [
-              { body: "Service is recovering.", created_at: "2026-10-23T04:01:17Z" },
-            ],
-          },
-        ],
-      }),
+      providerContext(
+        jsonFetcher({
+          page: { name: "Notion" },
+          status: { indicator: "none", description: "All Systems Operational" },
+          components: [],
+          incidents: [
+            {
+              id: "notion-incident",
+              name: "Users unable to access Notion",
+              status: "monitoring",
+              impact: "critical",
+              created_at: "2026-10-23T03:38:19Z",
+              incident_updates: [
+                { body: "Service is recovering.", created_at: "2026-10-23T04:01:17Z" },
+              ],
+            },
+          ],
+        }),
+      ),
     );
 
     expect(snapshot.status).toBe("operational");
@@ -177,12 +185,13 @@ describe("Statuspage provider", () => {
     await expect(
       fetchStatuspageSnapshot(
         github,
-        abortSignal,
-        jsonFetcher({
-          status: { indicator: "none" },
-          components: [],
-          incidents: [],
-        }),
+        providerContext(
+          jsonFetcher({
+            status: { indicator: "none" },
+            components: [],
+            incidents: [],
+          }),
+        ),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
   });
@@ -194,8 +203,8 @@ describe("Statuspage provider", () => {
       incidents: [{ name: "A title", status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
       scheduled_maintenances: [],
     };
-    const first = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
-    const second = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
+    const first = await fetchStatuspageSnapshot(github, providerContext(jsonFetcher(payload)));
+    const second = await fetchStatuspageSnapshot(github, providerContext(jsonFetcher(payload)));
     expect(first.incidents[0]?.id).toMatch(/^generated_/);
     expect(first.incidents[0]?.id).toBe(second.incidents[0]?.id);
   });
@@ -210,13 +219,14 @@ describe("Statuspage provider", () => {
     await expect(
       fetchStatuspageSnapshot(
         github,
-        abortSignal,
-        jsonFetcher({
-          status: { indicator: "none" },
-          components: [],
-          incidents: "not-an-array",
-          scheduled_maintenances: [],
-        }),
+        providerContext(
+          jsonFetcher({
+            status: { indicator: "none" },
+            components: [],
+            incidents: "not-an-array",
+            scheduled_maintenances: [],
+          }),
+        ),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
   });
@@ -246,7 +256,10 @@ describe("Cloudflare", () => {
     async ({ getPayload, expectedCount, expectedStatus, expectedSourceStatus }) => {
       const payload = getPayload();
       expect(payload.components).toHaveLength(482);
-      const snapshot = await fetchStatuspageSnapshot(cloudflare, abortSignal, jsonFetcher(payload));
+      const snapshot = await fetchStatuspageSnapshot(
+        cloudflare,
+        providerContext(jsonFetcher(payload)),
+      );
 
       expect(snapshot.status).toBe(expectedStatus);
       expect(snapshot.sourceStatus).toBe(expectedSourceStatus);
@@ -324,7 +337,10 @@ describe("Cloudflare", () => {
         },
       ],
     };
-    const snapshot = await fetchStatuspageSnapshot(cloudflare, abortSignal, jsonFetcher(payload));
+    const snapshot = await fetchStatuspageSnapshot(
+      cloudflare,
+      providerContext(jsonFetcher(payload)),
+    );
 
     expect(snapshot.incidents.map(({ id }) => id)).toEqual([
       "sufgcbe8rrwt",
@@ -358,16 +374,14 @@ describe("Cloudflare", () => {
   it("checks the component limit after the group filter", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       cloudflare,
-      abortSignal,
-      jsonFetcher(cloudflareSummaryFixture),
+      providerContext(jsonFetcher(cloudflareSummaryFixture)),
     );
     expect(snapshot.components).toHaveLength(133);
 
     await expect(
       fetchStatuspageSnapshot(
         cloudflare,
-        abortSignal,
-        jsonFetcher(oversizedCloudflareSummary(201)),
+        providerContext(jsonFetcher(oversizedCloudflareSummary(201))),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
   });
@@ -376,12 +390,13 @@ describe("Cloudflare", () => {
     await expect(
       fetchStatuspageSnapshot(
         cloudflare,
-        abortSignal,
-        jsonFetcher({
-          status: { indicator: "none" },
-          components: [],
-          incidents: [],
-        }),
+        providerContext(
+          jsonFetcher({
+            status: { indicator: "none" },
+            components: [],
+            incidents: [],
+          }),
+        ),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
   });
