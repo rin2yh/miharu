@@ -87,6 +87,11 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     );
   }, [orderedServices, query]);
 
+  const filteredRecentEvents = useMemo(() => {
+    const serviceIds = new Set(filteredServices.map((service) => service.id));
+    return (payload?.recentEvents ?? []).filter((event) => serviceIds.has(event.serviceId));
+  }, [filteredServices, payload]);
+
   return (
     <main className="mx-auto w-full max-w-5xl px-6 pt-8 pb-6 max-md:max-w-2xl max-md:px-4 max-md:pt-5 max-sm:max-w-md max-sm:px-3">
       <header className="mb-7 flex min-h-10 items-center justify-between max-md:mb-5">
@@ -202,15 +207,17 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
             </h2>
           </div>
         </div>
-        {payload?.recentEvents.length ? (
+        {filteredRecentEvents.length ? (
           <ol className="m-0 grid list-none gap-0 border-t border-line p-0">
-            {payload.recentEvents.map((event) => (
+            {filteredRecentEvents.map((event) => (
               <EventRow key={event.id} event={event} />
             ))}
           </ol>
         ) : (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
-            最近の障害・メンテナンスの更新はありません。
+            {query.trim()
+              ? "検索条件に一致する最近の更新はありません。"
+              : "最近の障害・メンテナンスの更新はありません。"}
           </div>
         )}
       </section>
