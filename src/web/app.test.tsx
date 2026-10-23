@@ -80,15 +80,66 @@ describe("dashboard", () => {
   });
 
   it("filters services by name and clears the query", async () => {
-    render(<App load={async () => basePayload} />);
+    const slackEvent: DashboardEvent = {
+      id: "slack-event",
+      serviceId: "slack",
+      serviceName: "Slack",
+      incidentId: "slack-incident",
+      title: "Slack update",
+      kind: "incident",
+      eventKind: "opened",
+      sourceStatus: "investigating",
+      severityStatus: "partial_outage",
+      detectedAt: lastSuccessAt,
+      officialEventAt: lastSuccessAt,
+      url: "https://slack-status.com/incident/slack-incident",
+    };
+    const githubEvent: DashboardEvent = {
+      ...slackEvent,
+      id: "github-event",
+      serviceId: "github",
+      serviceName: "GitHub",
+      title: "GitHub update",
+      url: "https://www.githubstatus.com/incidents/github-incident",
+    };
+    render(<App load={async () => payload(basePayload.services, [slackEvent, githubEvent])} />);
     await screen.findByRole("link", { name: githubLinkName });
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
       target: { value: "slack" },
     });
     expect(screen.getByRole("link", { name: slackLinkName })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Slack update" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "GitHub update" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
     expect(screen.getByRole("link", { name: githubLinkName })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GitHub update" })).toBeInTheDocument();
+  });
+
+  it("shows an empty message when a service search has no matching recent events", async () => {
+    const githubEvent: DashboardEvent = {
+      id: "github-event",
+      serviceId: "github",
+      serviceName: "GitHub",
+      incidentId: "github-incident",
+      title: "GitHub update",
+      kind: "incident",
+      eventKind: "opened",
+      sourceStatus: "investigating",
+      severityStatus: "partial_outage",
+      detectedAt: lastSuccessAt,
+      officialEventAt: lastSuccessAt,
+      url: "https://www.githubstatus.com/incidents/github-incident",
+    };
+    render(<App load={async () => payload(basePayload.services, [githubEvent])} />);
+    await screen.findByRole("link", { name: githubLinkName });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
+      target: { value: "Slack" },
+    });
+
+    expect(screen.getByText("検索条件に一致する最近の更新はありません。")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "GitHub update" })).not.toBeInTheDocument();
   });
 
   it("loads on entry and polls once per minute", async () => {
