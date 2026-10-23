@@ -5,7 +5,7 @@ Slack、Notion、GitHubなど、複数サービスの公式ステータスをま
 ## 開発環境
 
 - [mise](https://mise.jdx.dev/)で固定したNode.jsとpnpm
-- Node.js `24.21.0`
+- Node.js `24.22.0`
 - pnpm `11.5.1`
 
 ```sh
@@ -13,11 +13,11 @@ mise install
 pnpm install --frozen-lockfile
 ```
 
-pnpmは公開から7日未満のパッケージをインストールしない設定です。ロックファイルを更新するときも、このルールが適用されます。
+pnpmは公開から7日未満のパッケージをインストールしない設定です。ロックファイルを更新するときも、このルールが適用されます。Cloudflare CLI beta版と実行に必要な固定版だけ例外にしています。
 
 ## ローカルで動かす
 
-ローカルのWorker、D1、React画面を使って、公式APIの取得から画面表示まで確認できます。ローカルD1は本番D1から分離され、データはWranglerのローカル状態ディレクトリ（`.wrangler/state`）に保存されます。
+ローカルのWorker、D1、React画面を使って、公式APIの取得から画面表示まで確認できます。ローカルD1は本番D1から分離され、データは`.cloudflare/state`に保存されます。
 
 1. ローカルD1にスキーマを適用します。
 
@@ -31,7 +31,7 @@ pnpmは公開から7日未満のパッケージをインストールしない設
    pnpm dev
    ```
 
-   Viteが表示するURL（通常は `http://localhost:5173`）をブラウザーで開きます。
+   表示されたURL（通常は `http://localhost:5173`）をブラウザーで開きます。
 
 3. 別のターミナルからCronを手動で実行します。
 
@@ -45,13 +45,11 @@ pnpmは公開から7日未満のパッケージをインストールしない設
 
    ```sh
    curl "http://localhost:5173/api/status"
-   pnpm exec wrangler d1 execute miharu-status --local \
-     --command "SELECT service_id, status, last_success_at FROM service_status ORDER BY service_id"
-   pnpm exec wrangler d1 execute miharu-status --local \
-     --command "SELECT service_id, id, title, state, active FROM incidents ORDER BY service_id, official_created_at"
+   local_d1_file=$(find .cloudflare/state/v3/d1/miniflare-D1DatabaseObject -name 'db*.sqlite' -print -quit)
+   sqlite3 "$local_d1_file" "SELECT service_id, status, last_success_at FROM service_status ORDER BY service_id; SELECT service_id, id, title, state, active FROM incidents ORDER BY service_id, official_created_at;"
    ```
 
-   履歴は `incident_events` テーブルで確認できます。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加されます。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local` の前に`.wrangler/state`内のD1状態を削除してください。
+   履歴は `incident_events` テーブルで確認できます。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加されます。`cf d1 query`はローカルD1に対応していないため、上の例ではSQLite CLIを使います。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local`の前に`.cloudflare/state`内のD1状態を削除してください。
 
 ## 開発コマンド
 
@@ -61,7 +59,7 @@ pnpm lint                # OxlintとOxfmt
 pnpm test                # Vitestと60%以上のカバレッジ確認
 pnpm typecheck           # TypeScriptの型確認
 pnpm build               # 型確認とWorker/Reactの本番ビルド
-pnpm cf-typegen          # Wrangler設定からWorker型を更新
+pnpm cf-typegen          # cloudflare.config.tsからWorker型を更新
 ```
 
 テストはプロバイダーのレスポンス正規化、収集失敗時の状態保持、インシデントの追加・更新・復旧・重複排除、APIレスポンス、画面表示と手動更新を確認します。テスト中に外部SaaSへリクエストは送りません。
@@ -123,23 +121,18 @@ WebとCronは共通設定・D1ストアを利用します。ドメイン層はWo
 
 画面を開き続けた場合、1クライアントあたり約1,440回/日のAPIポーリングです。HTTP枠をすべて画面更新に使う単純計算では、24時間連続表示がおよそ69クライアント分に相当します（他のHTTPリクエストを除く）。実際のアクセス数とCloudflareの使用量を確認してください。50サービス程度なら取得先あたりのCron実行数は増やさず、D1書き込み量はサービス数に応じて増加します。
 
-## Workers Buildsでデプロイする
+## デプロイとD1スキーマ変更
 
-デプロイはGitHub ActionsではなくCloudflare Workers Buildsに接続します。具体的なダッシュボード設定は、リポジトリのGitHub Issue「Cloudflare Workers Buildsの初期設定」にも記載します。
+Workers Buildsは`main`へのpushでアプリをデプロイします。Workerの設定は[`cloudflare.config.ts`](cloudflare.config.ts)で管理します。ローカルから手動でデプロイするときは`pnpm build`の後に`pnpm deploy`を実行してください。
 
-1. Cloudflareダッシュボードの **Workers & Pages → Create application → GitHub** から、このリポジトリを接続します。
-2. Worker名を `miharu` にし、本番ブランチを `main` に設定します。
-3. Build commandを `pnpm run build`、Deploy commandを `pnpm run deploy` に設定します。ビルドツールのバージョンはWorkerコードとは独立してWorkers Builds環境で指定します。Build Variablesに `NODE_VERSION=24.21.0` と `PNPM_VERSION=11.5.1` を設定してください。ローカル開発では同じ値を `.mise.toml` で固定し、Wranglerのバージョンは `package.json` の依存関係で固定します。
-4. D1データベースを作成し、Wranglerが返すIDで [`wrangler.jsonc`](wrangler.jsonc) の `database_id` を置き換えます。現在の全ゼロIDはローカル開発用のプレースホルダーです。
-5. リモートD1へ初回マイグレーションを適用します。
+D1のスキーマを変更する場合は既存のmigration SQLを編集せず、`db/migrations/`に新しい連番SQLを追加します。まずローカルで確認し、本番D1へ適用してからアプリをデプロイします。
 
-   ```sh
-   pnpm db:migrate:remote
-   ```
+```sh
+pnpm db:migrate:local
+pnpm db:migrate:remote
+```
 
-6. CloudflareのWorkers Builds設定にD1の `DB` バインディングが反映されていることを確認し、`main` へpushしてデプロイします。Workers BuildsはCloudflareダッシュボードからGitHub接続を設定し、ビルド用の認証トークンを管理します。
-
-ローカル用の `wrangler d1 ... --local` コマンドは本番DBに接続しません。リモートコマンドにはCloudflareアカウントへの認証が必要です。初回デプロイ時はCloudflare上のWorker名とWrangler設定、D1 ID、`DB` bindingを揃えてください。
+通常のアプリ更新ではmigrationは不要です。スキーマ変更は旧Workerでも動くように段階的に行い、列の追加とアプリ側の切り替えを分け、不要な列の削除は後続のmigrationにしてください。
 
 ## ライセンス
 

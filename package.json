@@ -5,17 +5,16 @@
   "description": "外部サービスの公式ステータスを集約するダッシュボード",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "pnpm typecheck && vite build",
-    "preview": "vite preview",
-    "deploy": "wrangler deploy",
-    "cf-typegen": "wrangler types",
-    "db:migrate:local": "wrangler d1 migrations apply miharu-status --local",
-    "db:migrate:remote": "wrangler d1 migrations apply miharu-status --remote",
+    "dev": "cf dev",
+    "build": "pnpm typecheck && cf build",
+    "deploy": "cf deploy --prebuilt",
+    "cf-typegen": "cf workers types",
+    "db:migrate:local": "cf d1 migrations apply ec29a528-708c-4ce3-8a35-f9416dacf499 --dir db/migrations --local --persist-to .cloudflare/state",
+    "db:migrate:remote": "cf d1 migrations apply ec29a528-708c-4ce3-8a35-f9416dacf499 --dir db/migrations",
     "lint": "oxlint . && oxfmt --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "pnpm cf-typegen && tsc --noEmit"
   },
   "dependencies": {
     "hono": "4.13.13",
@@ -24,7 +23,7 @@
     "simple-icons": "^16.30.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.64.0",
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.0",
     "@rolldown/plugin-babel": "^0.2.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -33,16 +32,16 @@
     "@vitejs/plugin-react": "^6.0.0",
     "@vitest/coverage-v8": "^4.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "cf": "1.0.0-beta.20",
     "jsdom": "^27.0.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
     "typescript": "^5.9.0",
     "vite": "^8.0.0",
-    "vitest": "^4.0.0",
-    "wrangler": "4.151.0"
+    "vitest": "^4.0.0"
   },
   "engines": {
-    "node": ">=24.21.0"
+    "node": ">=24.22.0"
   },
   "packageManager": "pnpm@11.5.1"
 }

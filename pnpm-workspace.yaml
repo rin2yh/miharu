@@ -3,3 +3,16 @@ allowBuilds:
   workerd: true
   better-sqlite3: false
 minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  # cf beta 20 requires these exact CLI runtime versions; other packages keep the one-week age gate.
+  - cf@1.0.0-beta.20
+  - "@cloudflare/build-output-utils@0.9.3"
+  - "@cloudflare/config@0.27.0"
+  - "@cloudflare/runtime-types@0.1.14"
+  - "@cloudflare/workerd-darwin-64@1.20261019.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261019.1"
+  - "@cloudflare/workerd-linux-64@1.20261019.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261019.1"
+  - "@cloudflare/workerd-windows-64@1.20261019.1"
+  - miniflare@5.20261019.1-beta
+  - workerd@1.20261019.1
