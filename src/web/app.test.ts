@@ -82,7 +82,8 @@ describe("status API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("max-age=10");
-    expect(payload.services).toHaveLength(3);
+    expect(payload.services).toHaveLength(5);
+    expect(payload.services.slice(3).map((service) => service.id)).toEqual(["claude", "chatgpt"]);
     expect(payload.services[0]).toMatchObject({
       id: "slack",
       hasFetchError: true,

@@ -49,6 +49,8 @@ export interface ProviderSnapshot {
   summary: string | null;
   components?: NormalizedComponent[];
   incidents: NormalizedIncident[];
+  /** False when omitted incidents must not be treated as resolved. */
+  incidentListComplete?: boolean;
 }
 
 export interface DashboardIncident {

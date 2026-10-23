@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SERVICES } from "../../shared/config/services";
+import { fetchOpenAIChatGPTSnapshot } from "./openai-chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
@@ -8,6 +9,8 @@ const abortSignal = new AbortController().signal;
 const github = SERVICES.find((service) => service.id === "github");
 const notion = SERVICES.find((service) => service.id === "notion");
 const slack = SERVICES.find((service) => service.id === "slack");
+const claude = SERVICES.find((service) => service.id === "claude");
+const chatgpt = SERVICES.find((service) => service.id === "chatgpt");
 
 if (
   !github ||
@@ -15,7 +18,11 @@ if (
   !notion ||
   notion.provider !== "statuspage" ||
   !slack ||
-  slack.provider !== "slack"
+  slack.provider !== "slack" ||
+  !claude ||
+  claude.provider !== "statuspage" ||
+  !chatgpt ||
+  chatgpt.provider !== "openai-chatgpt"
 ) {
   throw new Error("Service config is missing a provider fixture");
 }
@@ -28,6 +35,16 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
       status: 200,
       headers: { "content-type": contentType },
     })) as FetchLike;
+}
+
+function routedJsonFetcher(payloads: Record<string, unknown>): FetchLike {
+  return (async (input) => {
+    const path = new URL(String(input)).pathname;
+    return new Response(JSON.stringify(payloads[path]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as FetchLike;
 }
 
 function fetchIncidentWithFallbackTitle(title: string) {
@@ -131,6 +148,41 @@ describe("Statuspage provider", () => {
     });
   });
 
+  it("accepts Claude's current Statuspage-compatible summary", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      claude,
+      abortSignal,
+      jsonFetcher({
+        page: { name: "Claude" },
+        status: { indicator: "none", description: "All Systems Operational" },
+        components: [
+          { id: "rwppv331jlwc", name: "claude.ai", status: "operational" },
+          {
+            id: "k8w3r06qmzrp",
+            name: "Claude API (api.anthropic.com)",
+            status: "operational",
+          },
+        ],
+        incidents: [],
+        scheduled_maintenances: [],
+      }),
+    );
+
+    expect(snapshot).toMatchObject({
+      status: "operational",
+      sourceStatus: "none",
+      components: [
+        { id: "rwppv331jlwc", name: "claude.ai", status: "operational" },
+        {
+          id: "k8w3r06qmzrp",
+          name: "Claude API (api.anthropic.com)",
+          status: "operational",
+        },
+      ],
+      incidents: [],
+    });
+  });
+
   it("does not interpret a missing GitHub maintenance list as an empty list", async () => {
     await expect(
       fetchStatuspageSnapshot(
@@ -174,6 +226,191 @@ describe("Statuspage provider", () => {
           components: [],
           incidents: "not-an-array",
           scheduled_maintenances: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_payload" });
+  });
+});
+
+describe("OpenAI ChatGPT provider", () => {
+  it("uses ChatGPT section components and explicitly scoped incidents", async () => {
+    const conversationId = chatgpt.componentIds[0]!;
+    const loginId = chatgpt.componentIds[1]!;
+    const snapshot = await fetchOpenAIChatGPTSnapshot(
+      chatgpt,
+      abortSignal,
+      routedJsonFetcher({
+        "/api/v2/summary.json": {
+          page: { name: "OpenAI" },
+          status: { indicator: "major", description: "OpenAI page-wide outage" },
+          components: [
+            { id: conversationId, name: "Conversations", status: "degraded_performance" },
+            { id: loginId, name: "Login", status: "operational" },
+            { id: "api-component", name: "Chat Completions", status: "major_outage" },
+          ],
+        },
+        "/api/v2/incidents.json": {
+          page: { name: "OpenAI" },
+          incidents: [
+            {
+              id: "chatgpt-incident",
+              name: "Elevated ChatGPT conversation errors",
+              status: "investigating",
+              impact: "major",
+              created_at: "2026-10-23T04:00:00Z",
+              updated_at: "2026-10-23T04:15:00Z",
+              incident_updates: [
+                { body: "We are investigating the issue.", created_at: "2026-10-23T04:15:00Z" },
+              ],
+            },
+            {
+              id: "api-incident",
+              name: "Responses API elevated errors",
+              status: "investigating",
+              impact: "major",
+              created_at: "2026-10-23T04:00:00Z",
+              incident_updates: [{ body: "The Responses API is affected." }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(snapshot).toMatchObject({
+      status: "degraded_performance",
+      sourceStatus: "degraded_performance",
+      summary: null,
+      components: [
+        { id: conversationId, name: "Conversations", status: "degraded_performance" },
+        { id: loginId, name: "Login", status: "operational" },
+      ],
+    });
+    expect(snapshot.components).toHaveLength(2);
+    expect(snapshot.incidents).toHaveLength(1);
+    expect(snapshot.incidents[0]).toMatchObject({
+      id: "chatgpt-incident",
+      title: "Elevated ChatGPT conversation errors",
+      active: true,
+      componentIds: [],
+      components: [],
+      url: "https://status.openai.com/incidents/chatgpt-incident",
+    });
+  });
+
+  it("parses the official OpenAI incident feed shape missing from summary.json", async () => {
+    const conversationId = chatgpt.componentIds[0]!;
+    const incidentId = "01M5GPE9C4E19HE461P8JAMYXD";
+    const snapshot = await fetchOpenAIChatGPTSnapshot(
+      chatgpt,
+      abortSignal,
+      routedJsonFetcher({
+        "/api/v2/summary.json": {
+          page: { name: "OpenAI" },
+          status: { indicator: "none", description: "All Systems Operational" },
+          components: [{ id: conversationId, name: "Conversations", status: "operational" }],
+        },
+        "/api/v2/incidents.json": {
+          page: { name: "OpenAI" },
+          incidents: [
+            {
+              id: incidentId,
+              name: "Elevated ChatGPT conversation and Responses API errors",
+              status: "resolved",
+              created_at: "2026-10-22T02:18:32Z",
+              updated_at: "2026-10-22T08:50:43Z",
+              resolved_at: "2026-10-22T08:50:43Z",
+              impact: "minor",
+              page_id: "01JMDK9XYNY6RXSED6SDWW50WY",
+              incident_updates: [
+                {
+                  id: "01M5HCWCW9XX2VDNZE2TG5WDBX",
+                  body: "All impacted services have now fully recovered.",
+                  created_at: "2026-10-22T08:50:43Z",
+                  display_at: "2026-10-22T08:50:43Z",
+                  incident_id: incidentId,
+                  status: "resolved",
+                  updated_at: "2026-10-22T08:50:43Z",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(snapshot.incidentListComplete).toBe(false);
+    expect(snapshot.incidents).toMatchObject([
+      {
+        id: incidentId,
+        title: "Elevated ChatGPT conversation and Responses API errors",
+        state: "resolved",
+        active: false,
+        officialUpdatedAt: "2026-10-22T08:50:43.000Z",
+      },
+    ]);
+  });
+
+  it("uses official component links when the incident text has no product name", async () => {
+    const conversationId = chatgpt.componentIds[0]!;
+    const snapshot = await fetchOpenAIChatGPTSnapshot(
+      chatgpt,
+      abortSignal,
+      routedJsonFetcher({
+        "/api/v2/summary.json": {
+          status: { indicator: "none" },
+          components: [{ id: conversationId, name: "Conversations", status: "operational" }],
+        },
+        "/api/v2/incidents.json": {
+          incidents: [
+            {
+              id: "linked-incident",
+              name: "A service issue",
+              status: "monitoring",
+              component_ids: [conversationId],
+              components: [{ id: conversationId, name: "Conversations" }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(snapshot.incidents).toMatchObject([
+      { id: "linked-incident", componentIds: [conversationId], components: ["Conversations"] },
+    ]);
+  });
+
+  it("fails when OpenAI's separate incident list is missing instead of treating it as empty", async () => {
+    await expect(
+      fetchOpenAIChatGPTSnapshot(
+        chatgpt,
+        abortSignal,
+        routedJsonFetcher({
+          "/api/v2/summary.json": {
+            status: { indicator: "none" },
+            components: [
+              {
+                id: chatgpt.componentIds[0],
+                name: "Conversations",
+                status: "operational",
+              },
+            ],
+          },
+          "/api/v2/incidents.json": { incidents: "not-an-array" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_payload" });
+  });
+
+  it("rejects a component response without the known ChatGPT page section", async () => {
+    await expect(
+      fetchOpenAIChatGPTSnapshot(
+        chatgpt,
+        abortSignal,
+        routedJsonFetcher({
+          "/api/v2/summary.json": {
+            status: { indicator: "none" },
+            components: [{ id: "api-component", name: "Chat Completions", status: "operational" }],
+          },
         }),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });

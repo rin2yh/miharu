@@ -69,6 +69,7 @@ export function createD1Store(database: D1Database): DashboardStore {
         existing.results.map(toIncidentRecord),
         snapshot.incidents,
         observedAt,
+        snapshot.incidentListComplete,
       );
 
       await database.batch([
