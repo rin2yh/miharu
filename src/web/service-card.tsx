@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { siGithub, siNotion, type SimpleIcon } from "simple-icons";
-import type { DashboardIncident, DashboardComponent, DashboardService } from "../domain";
+import type {
+  DashboardIncident,
+  DashboardComponent,
+  DashboardService,
+  NormalizedStatus,
+} from "../domain";
 import { ExternalIcon, WarningIcon } from "./icons";
 import {
   formatDateTime,
@@ -14,6 +19,42 @@ import {
 const serviceIcons: Record<string, SimpleIcon> = {
   notion: siNotion,
   github: siGithub,
+};
+
+const statusColors: Record<NormalizedStatus, string> = {
+  operational: "bg-healthy-bg text-healthy",
+  degraded_performance: "bg-degraded-bg text-degraded",
+  partial_outage: "bg-partial-bg text-partial",
+  major_outage: "bg-outage-bg text-outage",
+  under_maintenance: "bg-maintenance-bg text-maintenance",
+  unknown: "bg-unknown-bg text-unknown",
+};
+
+const statusBorders: Record<NormalizedStatus, string> = {
+  operational: "border-t-line-strong",
+  degraded_performance: "border-t-degraded",
+  partial_outage: "border-t-partial",
+  major_outage: "border-t-outage",
+  under_maintenance: "border-t-maintenance",
+  unknown: "border-t-unknown",
+};
+
+const incidentStateColors: Record<DashboardIncident["state"], string> = {
+  investigating: "bg-partial-bg text-partial",
+  identified: "bg-partial-bg text-partial",
+  scheduled: "bg-partial-bg text-partial",
+  monitoring: "bg-degraded-bg text-degraded",
+  resolved: "bg-healthy-bg text-healthy",
+  unknown: "bg-unknown-bg text-unknown",
+};
+
+const incidentImpactColors: Record<NormalizedStatus, string> = {
+  operational: "bg-unknown-bg text-unknown",
+  degraded_performance: "bg-degraded-bg text-degraded",
+  partial_outage: "bg-partial-bg text-partial",
+  major_outage: "bg-outage-bg text-outage",
+  under_maintenance: "bg-maintenance-bg text-maintenance",
+  unknown: "bg-unknown-bg text-unknown",
 };
 
 export function ServiceCard({ service }: { service: DashboardService }) {
@@ -43,13 +84,13 @@ export function ServiceCard({ service }: { service: DashboardService }) {
 
   return (
     <li
-      className={`service-card status-${service.status}`}
+      className={`min-w-0 rounded-lg border border-line border-t-4 bg-surface px-5 pt-4 pb-2.5 shadow-sm max-sm:px-3 max-sm:pt-3 max-sm:pb-2 ${statusBorders[service.status]}`}
       id={`service-details-${service.id}`}
       aria-label={`${service.name}のサービス状況`}
     >
-      <header className="service-card-header">
+      <header className="flex items-center gap-2 border-b border-line pb-3 max-sm:items-start">
         <span
-          className={`service-icon service-icon-${service.id}`}
+          className="grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-ink max-sm:h-6 max-sm:w-6 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current dark:[&>svg]:invert"
           style={{ color: iconColor }}
           aria-hidden="true"
         >
@@ -61,9 +102,10 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             service.name.slice(0, 1)
           )}
         </span>
-        <div className="service-card-title">
-          <h2>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-x-2.5 gap-y-2 max-sm:items-start">
+          <h2 className="m-0 min-w-0 text-lg font-bold leading-snug max-sm:text-base">
             <a
+              className="inline-flex items-baseline gap-1 text-ink underline-offset-2 hover:underline focus-visible:underline"
               href={service.statusPageUrl}
               target="_blank"
               rel="noreferrer noopener"
@@ -74,27 +116,29 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             </a>
           </h2>
           <span
-            className={`status-pill status-pill-${service.status}`}
+            className={`inline-flex min-h-7 items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-xs font-bold ${statusColors[service.status]}`}
             aria-label={`公式全体ステータス: ${STATUS_LABELS[service.status]}`}
           >
-            <span className="status-pip" aria-hidden="true" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
             {STATUS_LABELS[service.status]}
           </span>
         </div>
       </header>
 
       {service.status !== "operational" && service.summary && (
-        <p className="service-summary">{service.summary}</p>
+        <p className="mt-2 mb-0 [overflow-wrap:anywhere] text-xs leading-relaxed text-muted">
+          {service.summary}
+        </p>
       )}
 
       {service.hasFetchError && (
-        <output className="service-warning">
+        <output className="mt-4 flex items-center gap-2 text-xs leading-normal text-warning">
           <WarningIcon />
           このサービスの最新情報を取得できません。状態は前回取得時のものです。
         </output>
       )}
       {service.isStale && !service.hasFetchError && (
-        <output className="service-warning stale-warning">
+        <output className="mt-4 flex items-center gap-2 text-xs leading-normal text-stale">
           <WarningIcon />
           {service.lastSuccessAt
             ? `前回の情報更新から${relativeTime(service.lastSuccessAt)}経過しています。最新の状態と異なる可能性があります。`
@@ -103,11 +147,14 @@ export function ServiceCard({ service }: { service: DashboardService }) {
       )}
 
       {components.length > 0 && (
-        <section className="component-section" aria-label={`${service.name}のコンポーネント`}>
-          <h3>コンポーネント</h3>
-          <div className="component-listing">
+        <section className="mt-2.5" aria-label={`${service.name}のコンポーネント`}>
+          <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">コンポーネント</h3>
+          <div>
             {visibleComponents.length > 0 && (
-              <ul className="component-item-list" aria-label="表示中のコンポーネント">
+              <ul
+                className="m-0 list-none border-t border-line p-0"
+                aria-label="表示中のコンポーネント"
+              >
                 {visibleComponents.map((component) => (
                   <ComponentItem
                     key={component.id}
@@ -120,18 +167,24 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             {healthyComponents.length > 0 && (
               <>
                 <button
-                  className="component-toggle"
+                  className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 border-0 border-b border-line bg-transparent px-0.5 py-2 text-left text-xs font-semibold text-healthy underline-offset-2 hover:underline"
                   type="button"
                   aria-expanded={showHealthyComponents}
                   aria-controls={healthyComponentsId}
                   onClick={() => setShowHealthyComponents((visible) => !visible)}
                 >
+                  <span
+                    className={`w-3 shrink-0 text-center text-lg leading-none text-quiet transition-transform duration-150 ${showHealthyComponents ? "rotate-90" : ""}`}
+                    aria-hidden="true"
+                  >
+                    ›
+                  </span>
                   {showHealthyComponents
                     ? "正常なコンポーネントを非表示"
                     : `正常なコンポーネント ${healthyComponents.length}件を表示`}
                 </button>
                 <ul
-                  className="component-item-list"
+                  className="m-0 list-none p-0"
                   id={healthyComponentsId}
                   aria-label="正常なコンポーネント"
                   hidden={!showHealthyComponents}
@@ -151,16 +204,15 @@ export function ServiceCard({ service }: { service: DashboardService }) {
       )}
 
       {unassigned.length > 0 && (
-        <section
-          className="service-direct-incidents"
-          aria-label={`${service.name}の障害・メンテナンス情報`}
-        >
-          <h3>その他の障害・メンテナンス情報</h3>
+        <section className="mt-3" aria-label={`${service.name}の障害・メンテナンス情報`}>
+          <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">
+            その他の障害・メンテナンス情報
+          </h3>
           <IncidentList incidents={unassigned} />
         </section>
       )}
 
-      <footer className="service-meta">
+      <footer className="mt-2 flex justify-end text-xs tabular-nums text-quiet">
         {service.lastSuccessAt ? (
           <span>
             最終取得{" "}
@@ -182,34 +234,49 @@ function ComponentItem({
   incidents: DashboardIncident[];
 }) {
   return (
-    <li
-      className={`component-item status-${component.status}`}
-      aria-label={`${component.name}コンポーネント`}
-    >
-      <div className="component-row-heading">
-        <h4 className="component-summary-name">{component.name}</h4>
-        <span className={`status-pill status-pill-${component.status}`}>
-          <span className="status-pip" aria-hidden="true" />
+    <li className="border-b border-line" aria-label={`${component.name}コンポーネント`}>
+      <div className="flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-2 px-0.5 py-2 text-xs text-ink max-sm:gap-1.5">
+        <h4 className="m-0 min-w-0 [overflow-wrap:anywhere] font-semibold">{component.name}</h4>
+        <span
+          className={`inline-flex min-h-6 items-center gap-2 whitespace-nowrap rounded px-2 py-0.5 text-xs font-bold ${statusColors[component.status]}`}
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
           {STATUS_LABELS[component.status]}
         </span>
       </div>
-      {incidents.length > 0 && <IncidentList incidents={incidents} />}
+      {incidents.length > 0 && <IncidentList incidents={incidents} nested />}
     </li>
   );
 }
 
-function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
+function IncidentList({
+  incidents,
+  nested = false,
+}: {
+  incidents: DashboardIncident[];
+  nested?: boolean;
+}) {
   return (
-    <ul className="incident-list">
+    <ul className={`m-0 block list-none border-t border-line p-0 ${nested ? "mb-2 ml-5" : ""}`}>
       {incidents.map((incident) => (
-        <li className="incident-item" key={incident.id} aria-label={incident.title}>
-          <details>
-            <summary className="incident-summary">
-              <span className="incident-title">{incident.title}</span>
-              <span className={`incident-state incident-state-${incident.state}`}>
+        <li className="border-b border-line" key={incident.id} aria-label={incident.title}>
+          <details className="group">
+            <summary className="relative grid min-h-11 cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-3.5 gap-y-2 py-2 pr-1 pl-5 text-ink max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-x-2.5 max-sm:gap-y-1.5">
+              <span
+                className="absolute left-0.5 text-lg leading-none text-quiet transition-transform duration-150 group-open:rotate-90"
+                aria-hidden="true"
+              >
+                ›
+              </span>
+              <span className="min-w-0 text-xs font-semibold leading-normal [overflow-wrap:anywhere] max-sm:col-span-full">
+                {incident.title}
+              </span>
+              <span
+                className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColors[incident.state]}`}
+              >
                 {incidentStateLabel(incident.state)}
               </span>
-              <span className="incident-updated">
+              <span className="whitespace-nowrap text-xs tabular-nums text-quiet">
                 更新{" "}
                 {incident.officialUpdatedAt ? (
                   <time dateTime={incident.officialUpdatedAt}>
@@ -219,26 +286,39 @@ function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
                   "時刻不明"
                 )}
               </span>
-              <span className="incident-disclosure-label">詳細</span>
+              <span className="whitespace-nowrap text-xs text-muted max-sm:justify-self-end">
+                詳細
+              </span>
             </summary>
-            <div className="incident-detail">
-              <div className="incident-detail-meta">
-                <span className={`incident-kind incident-kind-${incident.kind}`}>
+            <div className="pr-1 pb-3 pl-5">
+              <div className="flex flex-wrap gap-1.5">
+                <span
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incident.kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage"}`}
+                >
                   {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
                 </span>
                 {incident.severityStatus && (
-                  <span className={`incident-impact impact-${incident.severityStatus}`}>
+                  <span
+                    className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentImpactColors[incident.severityStatus]}`}
+                  >
                     {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
                   </span>
                 )}
               </div>
-              {incident.body && <p className="incident-body">{incident.body}</p>}
+              {incident.body && (
+                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
+                  {incident.body}
+                </p>
+              )}
               {incident.components.length > 0 && (
-                <p className="component-list" aria-label="公式の影響対象">
+                <p
+                  className="mt-2 mb-0 text-xs leading-normal text-muted"
+                  aria-label="公式の影響対象"
+                >
                   影響対象: {incident.components.join("、")}
                 </p>
               )}
-              <div className="incident-times">
+              <div className="mt-2 flex flex-wrap gap-3 text-xs tabular-nums text-quiet">
                 <span>
                   公式発生{" "}
                   {incident.officialCreatedAt ? (
@@ -252,7 +332,7 @@ function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
               </div>
               {incident.url && (
                 <a
-                  className="incident-official-link"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-healthy decoration-healthy/50 underline-offset-2 hover:underline"
                   href={incident.url}
                   target="_blank"
                   rel="noreferrer noopener"

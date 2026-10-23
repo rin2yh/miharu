@@ -49,6 +49,7 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
 });
 
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
+  dashboardStatus,
   page,
   statusDashboard,
 }) => {
@@ -61,6 +62,9 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
   await test.step("サービス一覧が縦並びで表示されることを確認する", async () => {
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
     await expect(serviceList).toBeVisible();
+    await expect(
+      statusDashboard.serviceCount(dashboardStatus.payload.services.length),
+    ).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
 
     const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
