@@ -5,7 +5,7 @@ Slack、Notion、GitHubなど、複数サービスの公式ステータスをま
 ## 開発環境
 
 - [mise](https://mise.jdx.dev/)で固定したNode.jsとpnpm
-- Node.js `24.22.1`
+- Node.js `26.12.1`
 - pnpm `11.5.1`
 
 ```sh
