@@ -21,17 +21,9 @@ const providerImplementations: ProviderImplementations = {
   "openai-chatgpt": fetchOpenAIChatGPTSnapshot,
 };
 
-function runProvider<Kind extends ProviderKind>(
-  kind: Kind,
+export function fetchServiceSnapshot<Kind extends ProviderKind>(
   service: ProviderService<Kind>,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  return providerImplementations[kind](service, context);
-}
-
-export function fetchServiceSnapshot(
-  service: ServiceConfig,
-  context: ProviderContext,
-): Promise<ProviderSnapshot> {
-  return runProvider(service.provider, service, context);
+  return providerImplementations[service.provider](service, context);
 }
