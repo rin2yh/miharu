@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
-import { fetchOpenAIChatGPTSnapshot } from "./openai-chatgpt";
+import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import type { FetchLike } from "./shared";
 
 const abortSignal = new AbortController().signal;
@@ -17,7 +17,7 @@ if (!chatgptConversation || !chatgptLogin) {
 const configuredChatGPTComponents = chatgpt.components;
 const configuredChatGPTService = chatgpt;
 const capturedChatGPTFeed = readFileSync(
-  "src/cron/providers/fixtures/openai-chatgpt-incident.rss",
+  "src/cron/providers/openai/fixtures/chatgpt-incident.rss",
   "utf8",
 );
 const capturedChatGPTIncident: KnownIncident = {

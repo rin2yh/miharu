@@ -1,6 +1,6 @@
 import type { KnownIncident, ProviderSnapshot } from "../../domain";
 import type { ServiceConfig } from "../../shared/config/services";
-import { fetchOpenAIChatGPTSnapshot } from "./openai-chatgpt";
+import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";

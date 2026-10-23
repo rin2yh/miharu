@@ -2,7 +2,7 @@ import {
   INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
   type KnownIncident,
   type NormalizedIncident,
-} from "../../domain";
+} from "../../../domain";
 import {
   fetchText,
   isIncidentActive,
@@ -12,8 +12,8 @@ import {
   safeIncidentUrl,
   statusText,
   type FetchLike,
-} from "./shared";
-import type { OpenAIChatGPTService } from "./openai-chatgpt-components";
+} from "../shared";
+import type { OpenAIChatGPTService } from "./chatgpt-components";
 const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
 
 export async function recheckOmittedIncident(

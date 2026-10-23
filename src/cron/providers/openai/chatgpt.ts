@@ -1,8 +1,7 @@
-import type { KnownIncident, ProviderSnapshot } from "../../domain";
-import { asRecord, fetchJson, ProviderError, type FetchLike } from "./shared";
-import { parseChatGPTComponents } from "./openai-chatgpt-components";
-import { parseOpenAIChatGPTIncidents } from "./openai-chatgpt-incidents";
-import type { OpenAIChatGPTService } from "./openai-chatgpt-components";
+import type { KnownIncident, ProviderSnapshot } from "../../../domain";
+import { asRecord, fetchJson, ProviderError, type FetchLike } from "../shared";
+import { parseChatGPTComponents, type OpenAIChatGPTService } from "./chatgpt-components";
+import { parseOpenAIChatGPTIncidents } from "./chatgpt-incidents";
 
 export async function fetchOpenAIChatGPTSnapshot(
   service: OpenAIChatGPTService,

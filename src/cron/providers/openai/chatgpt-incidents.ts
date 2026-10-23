@@ -1,9 +1,9 @@
-import { type KnownIncident, type NormalizedIncident } from "../../domain";
-import { stableFallbackId } from "../../domain/id";
+import { type KnownIncident, type NormalizedIncident } from "../../../domain";
+import { stableFallbackId } from "../../../domain/id";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
-} from "../../shared/config/services";
+} from "../../../shared/config/services";
 import {
   asRecord,
   boundedText,
@@ -17,9 +17,9 @@ import {
   uniqueNames,
   type FetchLike,
   ProviderError,
-} from "./shared";
-import type { OpenAIChatGPTService } from "./openai-chatgpt-components";
-import { recheckOmittedIncident, selectOmittedIncidentsForRecheck } from "./openai-chatgpt-rss";
+} from "../shared";
+import type { OpenAIChatGPTService } from "./chatgpt-components";
+import { recheckOmittedIncident, selectOmittedIncidentsForRecheck } from "./chatgpt-rss";
 
 export async function parseOpenAIChatGPTIncidents(
   service: OpenAIChatGPTService,
