@@ -3,17 +3,11 @@ import { SERVICES } from "../shared/config/services";
 
 type ServiceSelectorProps = {
   selectedServiceIds: string[];
-  shareUrl: string;
   onApply: (serviceIds: string[]) => void;
 };
 
-export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: ServiceSelectorProps) {
+export function ServiceSelector({ selectedServiceIds, onApply }: ServiceSelectorProps) {
   const [draftServiceIds, setDraftServiceIds] = useState(selectedServiceIds);
-  const [copyResult, setCopyResult] = useState<{
-    shareUrl: string;
-    status: "copied" | "error";
-  } | null>(null);
-  const copyStatus = copyResult?.shareUrl === shareUrl ? copyResult.status : "idle";
 
   const allDraftServicesSelected = draftServiceIds.length === SERVICES.length;
   const someDraftServicesSelected = draftServiceIds.length > 0 && !allDraftServicesSelected;
@@ -33,16 +27,6 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
     updateDraftSelection(
       SERVICES.filter((service) => selected.has(service.id)).map((service) => service.id),
     );
-    setCopyResult(null);
-  };
-
-  const copyShareUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopyResult({ shareUrl, status: "copied" });
-    } catch {
-      setCopyResult({ shareUrl, status: "error" });
-    }
   };
 
   return (
@@ -62,10 +46,10 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
           </span>
         </span>
       </summary>
-      <div className="border-t border-line px-4 py-4 dark:border-line">
-        <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
+      <div className="border-t border-line px-4 py-3 dark:border-line">
+        <fieldset className="m-0 grid max-w-2xl grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-x-6 gap-y-1 border-0 p-0">
           <legend className="sr-only">表示するサービス</legend>
-          <label className="flex min-h-8 items-center gap-2 text-sm font-medium text-ink sm:col-span-2">
+          <label className="col-span-full flex min-h-7 items-center gap-2 text-sm font-medium text-ink">
             <input
               className="h-4 w-4 accent-forest focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy"
               type="checkbox"
@@ -77,13 +61,12 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
                 updateDraftSelection(
                   event.target.checked ? SERVICES.map((service) => service.id) : [],
                 );
-                setCopyResult(null);
               }}
             />
             すべて選択
           </label>
           {SERVICES.map((service) => (
-            <label className="flex min-h-8 items-center gap-2 text-sm text-ink" key={service.id}>
+            <label className="flex min-h-7 items-center gap-2 text-sm text-ink" key={service.id}>
               <input
                 className="h-4 w-4 accent-forest focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy"
                 type="checkbox"
@@ -94,12 +77,11 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
             </label>
           ))}
         </fieldset>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             className="inline-flex min-h-9 items-center justify-center rounded-md border border-forest bg-forest px-3 text-xs font-semibold text-white transition-colors enabled:hover:bg-forest/90 disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => {
-              setCopyResult(null);
               onApply(draftServiceIds);
             }}
             disabled={draftServiceIds.length === 0}
@@ -108,35 +90,6 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
           </button>
           {draftServiceIds.length === 0 && (
             <span className="text-xs text-muted">1件以上選択してください。</span>
-          )}
-        </div>
-        <div className="mt-4 border-t border-line pt-4 dark:border-line">
-          <label className="mb-2 block text-xs font-semibold text-ink" htmlFor="share-url">
-            現在の表示条件を共有
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              className="min-h-9 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy"
-              id="share-url"
-              readOnly
-              value={shareUrl}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <button
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-xs font-semibold text-ink transition-colors hover:bg-control-hover"
-              type="button"
-              onClick={() => void copyShareUrl()}
-            >
-              URLをコピー
-            </button>
-          </div>
-          {copyStatus === "copied" && (
-            <output className="mt-2 block text-xs text-healthy">URLをコピーしました。</output>
-          )}
-          {copyStatus === "error" && (
-            <output className="mt-2 block text-xs text-alert">
-              URLをコピーできませんでした。入力欄からコピーしてください。
-            </output>
           )}
         </div>
       </div>
