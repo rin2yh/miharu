@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERVICES } from "../../shared/config/services";
 import { fetchSlackSnapshot } from "./slack";
@@ -26,150 +27,44 @@ if (
 const githubStatuspage = github;
 const cloudflareStatuspage = cloudflare;
 
+type CloudflareSummaryFixture = {
+  status: { indicator: string; description: string };
+  components: unknown[];
+  incidents: unknown[];
+  scheduled_maintenances: unknown[];
+};
+
+// Captured from Cloudflare's official API on 2026-10-24; component rows are minimized.
+const cloudflareSummaryFixture = JSON.parse(
+  readFileSync("src/cron/providers/fixtures/cloudflare-summary.json", "utf8"),
+) as CloudflareSummaryFixture;
+
 const cloudflareServiceGroupId = "1km35smx8p41";
 const cloudflareWorkersId = "57srcl8zcn7c";
 const cloudflareNetworkId = "4n0gb0kh02gf";
 const cloudflareD1Id = "z0yd3sxqjqdm";
-const cloudflareRegionalGroupId = "00gpj4s37mz4";
 const cloudflareRegionalComponentId = "8h9sn12x310t";
-const cloudflareRegions = [
-  { id: cloudflareRegionalGroupId, name: "Africa", count: 33 },
-  { id: "77867vxkttgw", name: "Asia", count: 99 },
-  { id: "zqxhg7y54vy8", name: "Europe", count: 59 },
-  { id: "91blz4ztt7dm", name: "Latin America & the Caribbean", count: 57 },
-  { id: "m3639x4txd08", name: "Middle East", count: 21 },
-  { id: "4l01sk5cdn5c", name: "North America", count: 58 },
-  { id: "q6qm6fvkst4h", name: "Oceania", count: 14 },
-];
 
-function cloudflareSummary(serviceCount = 133, regionalCount = 341) {
-  const knownServices = [
-    { id: cloudflareWorkersId, name: "Workers", status: "major_outage" },
-    { id: "hb7g5sq2zz0h", name: "R2", status: "operational" },
-    { id: cloudflareD1Id, name: "D1", status: "operational" },
-    { id: "tmh50tx2nprs", name: "Workers KV", status: "operational" },
-    { id: "dp8ppfycqxcs", name: "Authoritative DNS", status: "operational" },
-    { id: "5wnz34mhfhrk", name: "CDN/Cache", status: "operational" },
-    { id: cloudflareNetworkId, name: "Network", status: "degraded_performance" },
-  ];
+function oversizedCloudflareSummary(serviceCount: number) {
   const serviceComponents = Array.from({ length: serviceCount }, (_, index) => ({
-    ...(knownServices[index] ?? {
-      id: `cf-service-${index}`,
-      name: `Service ${index}`,
-      status: "operational",
-    }),
+    id: `cf-service-${index}`,
+    name: `Service ${index}`,
+    status: "operational",
     group_id: cloudflareServiceGroupId,
   }));
-  let regionalIndex = 0;
-  const regionalGroups = cloudflareRegions.map(({ id, name, count }) => {
-    const memberCount = Math.min(count, regionalCount - regionalIndex);
-    const memberComponents = Array.from({ length: Math.max(memberCount, 0) }, (_, index) => {
-      const globalIndex = regionalIndex + index;
-      return {
-        id: globalIndex === 0 ? cloudflareRegionalComponentId : `cf-region-${globalIndex}`,
-        name: globalIndex === 0 ? "Accra, Ghana - (ACC)" : `Region ${globalIndex}`,
-        status: "operational",
-        group_id: id,
-      };
-    });
-    regionalIndex += memberComponents.length;
-    return {
-      id,
-      name,
-      group: true,
-      components: memberComponents.map((component) => component.id),
-      memberComponents,
-    };
-  });
-  const regionalComponents = regionalGroups.flatMap((group) => group.memberComponents);
-
   return {
-    page: { id: "yh6f0r4529hb", name: "Cloudflare Status" },
-    status: { indicator: "major", description: "Partial System Outage" },
+    status: cloudflareSummaryFixture.status,
     components: [
       ...serviceComponents,
-      ...regionalComponents,
       {
         id: cloudflareServiceGroupId,
         name: "Cloudflare Sites and Services",
         group: true,
         components: serviceComponents.map((component) => component.id),
       },
-      ...regionalGroups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        group: true,
-        components: group.components,
-      })),
     ],
-    incidents: [
-      {
-        id: "network-incident",
-        name: "Network connectivity issues affecting services in North America",
-        status: "identified",
-        impact: "major",
-        components: [{ id: cloudflareNetworkId, name: "Network" }],
-        incident_updates: [
-          {
-            status: "identified",
-            created_at: "2026-10-23T16:07:54.202Z",
-            body: "We are rerouting traffic away from affected paths.",
-            affected_components: null,
-          },
-          {
-            status: "investigating",
-            created_at: "2026-10-23T15:47:08.918Z",
-            body: "Some customers may see increased latency.",
-            affected_components: [
-              { code: cloudflareNetworkId, name: "Cloudflare Sites and Services - Network" },
-            ],
-          },
-        ],
-      },
-      {
-        id: "workers-incident",
-        name: "Delayed, missed, and duplicated Workers Cron Triggers",
-        status: "investigating",
-        impact: "critical",
-        components: [{ id: cloudflareWorkersId, name: "Workers" }],
-        incident_updates: [
-          {
-            body: "We are investigating.",
-            affected_components: [
-              { code: cloudflareWorkersId, name: "Cloudflare Sites and Services - Workers" },
-            ],
-          },
-        ],
-      },
-      {
-        id: "d1-incident",
-        name: "D1 API errors",
-        status: "investigating",
-        impact: "major",
-        incident_updates: [
-          {
-            affected_components: [
-              { code: cloudflareD1Id, name: "Cloudflare Sites and Services - D1" },
-            ],
-          },
-        ],
-      },
-      {
-        id: "regional-incident",
-        name: "Connectivity issues in Accra",
-        status: "investigating",
-        impact: "major",
-        components: [{ id: cloudflareRegionalComponentId, name: "Accra, Ghana - (ACC)" }],
-        incident_updates: [{ affected_components: null }],
-      },
-      {
-        id: "unassigned-incident",
-        name: "Unassigned incident",
-        status: "investigating",
-        impact: "minor",
-        incident_updates: [{ affected_components: null }],
-      },
-    ],
+    incidents: [],
+    scheduled_maintenances: [],
   };
 }
 
@@ -298,8 +193,8 @@ describe("Statuspage provider", () => {
 
   it.each([
     {
-      scenario: "the current 482-component official summary",
-      payload: cloudflareSummary(),
+      scenario: "the captured official summary",
+      payload: cloudflareSummaryFixture,
       expectedCount: 133,
       expectedStatus: "partial_outage",
       expectedSourceStatus: "major",
@@ -307,17 +202,17 @@ describe("Statuspage provider", () => {
     {
       scenario: "service components whose states differ from the official overall status",
       payload: {
-        ...cloudflareSummary(2, 341),
+        ...cloudflareSummaryFixture,
         status: { indicator: "none", description: "All Systems Operational" },
       },
-      expectedCount: 2,
+      expectedCount: 133,
       expectedStatus: "operational",
       expectedSourceStatus: "none",
     },
   ])(
     "filters Cloudflare components for $scenario",
     async ({ payload, expectedCount, expectedStatus, expectedSourceStatus }) => {
-      expect(payload.components).toHaveLength(expectedCount === 133 ? 482 : 351);
+      expect(payload.components).toHaveLength(482);
       const snapshot = await fetchStatuspageSnapshot(
         cloudflareStatuspage,
         abortSignal,
@@ -328,27 +223,62 @@ describe("Statuspage provider", () => {
       expect(snapshot.sourceStatus).toBe(expectedSourceStatus);
       expect(snapshot.summary).toBe(payload.status.description);
       expect(snapshot.components).toHaveLength(expectedCount);
-      const expectedNames =
-        expectedCount === 133
-          ? ["Workers", "R2", "D1", "Workers KV", "Authoritative DNS", "CDN/Cache"]
-          : ["Workers", "R2"];
       expect(snapshot.components?.map(({ name }) => name)).toEqual(
-        expect.arrayContaining(expectedNames),
+        expect.arrayContaining([
+          "Workers",
+          "R2",
+          "D1",
+          "Workers KV",
+          "Authoritative DNS",
+          "CDN/Cache",
+        ]),
       );
       expect(snapshot.components?.some(({ name }) => name === "Accra, Ghana - (ACC)")).toBe(false);
     },
   );
 
   it("keeps only incidents linked to a Cloudflare service component", async () => {
+    const payload = {
+      ...cloudflareSummaryFixture,
+      incidents: [
+        ...cloudflareSummaryFixture.incidents,
+        {
+          id: "d1-incident",
+          name: "D1 API errors",
+          status: "investigating",
+          impact: "major",
+          incident_updates: [
+            {
+              affected_components: [
+                { code: cloudflareD1Id, name: "Cloudflare Sites and Services - D1" },
+              ],
+            },
+          ],
+        },
+        {
+          id: "regional-incident",
+          name: "Connectivity issues in Accra",
+          status: "investigating",
+          impact: "major",
+          components: [{ id: cloudflareRegionalComponentId, name: "Accra, Ghana - (ACC)" }],
+        },
+        {
+          id: "unassigned-incident",
+          name: "Unassigned incident",
+          status: "investigating",
+          impact: "minor",
+        },
+      ],
+    };
     const snapshot = await fetchStatuspageSnapshot(
       cloudflareStatuspage,
       abortSignal,
-      jsonFetcher(cloudflareSummary()),
+      jsonFetcher(payload),
     );
 
     expect(snapshot.incidents.map(({ id }) => id)).toEqual([
-      "network-incident",
-      "workers-incident",
+      "sufgcbe8rrwt",
+      "3ts1mfzs0khz",
       "d1-incident",
     ]);
     expect(snapshot.incidents[0]).toMatchObject({
@@ -369,7 +299,7 @@ describe("Statuspage provider", () => {
     const snapshot = await fetchStatuspageSnapshot(
       cloudflareStatuspage,
       abortSignal,
-      jsonFetcher(cloudflareSummary(133, 341)),
+      jsonFetcher(cloudflareSummaryFixture),
     );
     expect(snapshot.components).toHaveLength(133);
 
@@ -377,7 +307,7 @@ describe("Statuspage provider", () => {
       fetchStatuspageSnapshot(
         cloudflareStatuspage,
         abortSignal,
-        jsonFetcher(cloudflareSummary(201, 0)),
+        jsonFetcher(oversizedCloudflareSummary(201)),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
   });
