@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
+import { SERVICES } from "../shared/config/services";
 import { createStatusRoutes } from "./routes/api/status";
+
+const slackService = SERVICES.find((service) => service.provider === "slack");
+const githubService = SERVICES.find(
+  (service) => service.provider === "statuspage" && service.scheduledMaintenances,
+);
+if (!slackService || !githubService) throw new Error("Service config is missing a test fixture");
 
 const rows: DashboardRows = {
   statusRows: [
     {
-      serviceId: "slack",
+      serviceId: slackService.id,
       status: "operational",
       sourceStatus: "ok",
       summary: null,
@@ -17,7 +24,7 @@ const rows: DashboardRows = {
   ],
   componentRows: [
     {
-      serviceId: "github",
+      serviceId: githubService.id,
       id: "actions",
       name: "Actions",
       status: "degraded_performance",
@@ -27,7 +34,7 @@ const rows: DashboardRows = {
   ],
   activeRows: [
     {
-      serviceId: "slack",
+      serviceId: slackService.id,
       id: "incident-1",
       title: "Message delivery delays",
       body: "<p>We are investigating.<br />Update &amp; details</p>",
@@ -53,7 +60,7 @@ const rows: DashboardRows = {
   eventRows: [
     {
       id: "event-1",
-      serviceId: "slack",
+      serviceId: slackService.id,
       incidentId: "incident-1",
       title: "Message delivery delays",
       body: "Private history body",
@@ -82,16 +89,18 @@ describe("status API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("max-age=10");
-    expect(payload.services).toHaveLength(5);
-    expect(payload.services.slice(3).map((service) => service.id)).toEqual(["claude", "chatgpt"]);
-    expect(payload.services[0]).toMatchObject({
-      id: "slack",
+    expect(payload.services.map((service) => service.id)).toEqual(
+      SERVICES.map((service) => service.id),
+    );
+    const slack = payload.services.find((service) => service.id === slackService.id);
+    const github = payload.services.find((service) => service.id === githubService.id);
+    expect(slack).toMatchObject({
       hasFetchError: true,
       isStale: true,
     });
-    expect(payload.services[0]).not.toHaveProperty("errorCode");
-    expect(payload.services[0]).not.toHaveProperty("lastCheckedAt");
-    expect(payload.services[0]).toMatchObject({
+    expect(slack).not.toHaveProperty("errorCode");
+    expect(slack).not.toHaveProperty("lastCheckedAt");
+    expect(slack).toMatchObject({
       incidents: [
         {
           title: "Message delivery delays",
@@ -100,8 +109,8 @@ describe("status API", () => {
         },
       ],
     });
-    expect(payload.services[0]).toMatchObject({ components: [] });
-    expect(payload.services[2]).toMatchObject({
+    expect(slack).toMatchObject({ components: [] });
+    expect(github).toMatchObject({
       components: [
         {
           id: "actions",

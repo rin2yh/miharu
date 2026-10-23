@@ -1,5 +1,5 @@
 import { COLLECTION_TIMEOUT_MS, type ServiceConfig } from "../shared/config/services";
-import type { ProviderSnapshot } from "../domain";
+import type { KnownIncident, ProviderSnapshot } from "../domain";
 import { fetchServiceSnapshot } from "./providers";
 import { ProviderError } from "./providers/shared";
 import type { CollectionStore } from "../shared/store";
@@ -7,6 +7,7 @@ import type { CollectionStore } from "../shared/store";
 export type SnapshotFetcher = (
   service: ServiceConfig,
   signal: AbortSignal,
+  knownActiveIncidents: KnownIncident[],
 ) => Promise<ProviderSnapshot>;
 
 export async function collectService(
@@ -20,7 +21,9 @@ export async function collectService(
   let snapshot: ProviderSnapshot;
 
   try {
-    snapshot = await fetcher(service, controller.signal);
+    const knownActiveIncidents =
+      service.provider === "openai-chatgpt" ? await store.getActiveIncidents(service.id) : [];
+    snapshot = await fetcher(service, controller.signal, knownActiveIncidents);
   } catch (error) {
     const errorCode = getCollectionErrorCode(error, controller.signal.aborted);
     await store.saveFailure(service, observedAt, errorCode);

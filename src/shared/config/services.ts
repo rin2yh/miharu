@@ -10,7 +10,7 @@ export type ServiceConfig = {
       provider: "openai-chatgpt";
       summaryUrl: string;
       incidentsUrl: string;
-      componentIds: string[];
+      components: Array<{ id: string; name: string }>;
     }
   | { provider: "slack"; currentUrl: string }
 );
@@ -60,23 +60,18 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["status.openai.com"],
     // OpenAI's public component response omits group metadata. These IDs are
     // the components shown under the official page's "ChatGPT" section.
-    componentIds: [
-      "01JMXBNJXGV1T5GT2M9XA83XNG", // Conversations
-      "01JMXBNJXG1S2D9V65P1ZZTD94", // Login
-      "01KX45G1SH21AX5DT93D4HMF0P", // ChatGPT Work
-      "01KMKFAMWKQ81YWSE1Z18R6VHR", // Codex in ChatGPT Desktop
-      "01JNKS9D9S72PMP1938PVFFQN4", // Compliance API
-      "01JMXBNJXGKKP51D4DEJ2HZJ8Q", // Search
-      "01JMXBNJXG1YMQPPCPCQX3MPA2", // File uploads
-      "01JMXBNJXGGT5SR5DB9J7GYY48", // Voice mode
-      "01JSFK5QX36ZRW0TW0ZV0ZYFXQ", // GPTs
-      "01JQ7EKW990MSPSWVXC7VPV2ZJ", // Image Generation
-      "01JSYVYQSWMJ9QG35XHP08BHA7", // Deep Research
-      "01JSG1XMJ9RVJJQ0E85NVSJ2AZ", // Agent
-      "01M3Q6NERHVE2WPPAQRHBAC6XB", // dots
-      "01M3Q6NERHS4BG0HQ85VAR1SRH", // Space
-      "01KX45G1SHQQ9DTAX9S4W7FV8G", // Sites
-      "01K6TVGGGDCP0PPGCHXAG3AQX8", // Connectors/Apps
+    components: [
+      { id: "01JMXBNJXGV1T5GT2M9XA83XNG", name: "Conversations" },
+      { id: "01JMXBNJXG1S2D9V65P1ZZTD94", name: "Login" },
+      { id: "01KX45G1SH21AX5DT93D4HMF0P", name: "ChatGPT Work" },
+      { id: "01KMKFAMWKQ81YWSE1Z18R6VHR", name: "Codex in ChatGPT Desktop" },
+      { id: "01JNKS9D9S72PMP1938PVFFQN4", name: "Compliance API" },
+      { id: "01JMXBNJXGKKP51D4DEJ2HZJ8Q", name: "Search" },
+      { id: "01JMXBNJXG1YMQPPCPCQX3MPA2", name: "File uploads" },
+      { id: "01JMXBNJXGGT5SR5DB9J7GYY48", name: "Voice mode" },
+      { id: "01JSFK5QX36ZRW0TW0ZV0ZYFXQ", name: "GPTs" },
+      { id: "01JQ7EKW990MSPSWVXC7VPV2ZJ", name: "Image Generation" },
+      { id: "01JSYVYQSWMJ9QG35XHP08BHA7", name: "Deep Research" },
     ],
   },
 ];

@@ -3,10 +3,14 @@ import { SERVICES } from "../shared/config/services";
 import type { ProviderSnapshot } from "../domain";
 import type { CollectionStore } from "../shared/store";
 import { ProviderError } from "./providers/shared";
-import { collectAll, collectService } from "./collector";
+import { collectAll, collectService, type SnapshotFetcher } from "./collector";
 
-const service = SERVICES.find((item) => item.id === "github");
-if (!service) throw new Error("GitHub service config is missing");
+const service = SERVICES[0];
+if (!service) throw new Error("Service config is empty");
+const chatgptService = SERVICES.find((item) => item.provider === "openai-chatgpt");
+if (!chatgptService || chatgptService.provider !== "openai-chatgpt") {
+  throw new Error("ChatGPT service config is missing");
+}
 
 const snapshot: ProviderSnapshot = {
   status: "operational",
@@ -17,6 +21,7 @@ const snapshot: ProviderSnapshot = {
 
 function store(overrides: Partial<CollectionStore> = {}): CollectionStore {
   return {
+    getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => []),
     saveSuccess: vi.fn<CollectionStore["saveSuccess"]>(async () => undefined),
     saveFailure: vi.fn<CollectionStore["saveFailure"]>(async () => undefined),
     ...overrides,
@@ -60,6 +65,44 @@ describe("status collection", () => {
     expect(persistence.saveSuccess).not.toHaveBeenCalled();
   });
 
+  it("passes known active ChatGPT incidents to the provider for rechecks", async () => {
+    const knownIncident = {
+      id: "older-chatgpt-incident",
+      title: "Elevated ChatGPT conversation errors",
+      body: "Investigating.",
+      kind: "incident" as const,
+      state: "investigating" as const,
+      sourceStatus: "investigating",
+      sourceType: "incident",
+      sourceImpact: null,
+      severityStatus: null,
+      componentIds: [],
+      components: [],
+      officialCreatedAt: null,
+      officialUpdatedAt: null,
+      url: null,
+      active: true,
+      lastObservedAt: "2026-10-23T04:59:00.000Z",
+    };
+    const persistence = store({
+      getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => [knownIncident]),
+    });
+    const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, _signal, knownIncidents) => {
+      expect(knownIncidents).toEqual([knownIncident]);
+      return snapshot;
+    });
+
+    const result = await collectService(
+      chatgptService,
+      "2026-10-23T05:00:00.000Z",
+      persistence,
+      fetchSnapshot,
+    );
+
+    expect(result).toBe("ok");
+    expect(persistence.getActiveIncidents).toHaveBeenCalledWith(chatgptService.id);
+  });
+
   it("uses the service timeout and labels an abort as a timeout", async () => {
     const shortTimeout = { ...service, timeoutMs: 5 };
     const persistence = store();
@@ -82,17 +125,21 @@ describe("status collection", () => {
 
   it("isolates failures across services", async () => {
     const persistence = store();
+    const failedServiceIds = new Set([service.id]);
     const result = await collectAll(
       SERVICES,
       "2026-10-23T05:00:00.000Z",
       persistence,
       async (item) => {
-        if (item.id === "notion") throw new ProviderError("network_error", "unavailable");
+        if (failedServiceIds.has(item.id)) {
+          throw new ProviderError("network_error", "unavailable");
+        }
         return snapshot;
       },
     );
     expect(result).toBeUndefined();
-    expect(persistence.saveSuccess).toHaveBeenCalledTimes(4);
-    expect(persistence.saveFailure).toHaveBeenCalledTimes(1);
+    const successfulServiceCount = SERVICES.filter((item) => !failedServiceIds.has(item.id)).length;
+    expect(persistence.saveSuccess).toHaveBeenCalledTimes(successfulServiceCount);
+    expect(persistence.saveFailure).toHaveBeenCalledTimes(failedServiceIds.size);
   });
 });

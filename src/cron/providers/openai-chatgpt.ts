@@ -1,5 +1,7 @@
 import {
   normalizeStatus,
+  INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+  type KnownIncident,
   type NormalizedComponent,
   type NormalizedIncident,
   type NormalizedStatus,
@@ -15,6 +17,7 @@ import {
   asRecord,
   boundedText,
   fetchJson,
+  fetchText,
   isIncidentActive,
   normalizeTimestamp,
   parseIncidentState,
@@ -28,6 +31,7 @@ import {
 } from "./shared";
 
 type OpenAIChatGPTService = Extract<ServiceConfig, { provider: "openai-chatgpt" }>;
+const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
 
 const statusPriority: Record<NormalizedStatus, number> = {
   unknown: -1,
@@ -38,24 +42,11 @@ const statusPriority: Record<NormalizedStatus, number> = {
   major_outage: 4,
 };
 
-// OpenAI does not include incidents in summary.json, and its incidents.json
-// currently omits component links. Only explicit product/component wording in
-// official titles or updates can associate those page-wide incidents with ChatGPT.
-const explicitChatGPTIncidentTerms = [
-  "chatgpt",
-  "chatgpt work",
-  "codex in chatgpt desktop",
-  "gpts",
-  "deep research",
-  "voice mode",
-  "image generation",
-  "file uploads",
-];
-
 export async function fetchOpenAIChatGPTSnapshot(
   service: OpenAIChatGPTService,
   signal: AbortSignal,
   fetcher: FetchLike = fetch,
+  knownActiveIncidents: KnownIncident[] = [],
 ): Promise<ProviderSnapshot> {
   const data = asRecord(await fetchJson(service.summaryUrl, signal, fetcher));
   if (!data || !Array.isArray(data.components)) {
@@ -68,11 +59,14 @@ export async function fetchOpenAIChatGPTSnapshot(
     );
   }
 
+  const expectedComponents = new Map(
+    service.components.map((component) => [component.id, component]),
+  );
   const componentsById = new Map<string, NormalizedComponent>();
   for (const value of data.components) {
     const row = asRecord(value);
     const id = boundedText(row?.id, 200);
-    if (!id || !service.componentIds.includes(id)) continue;
+    if (!id || !expectedComponents.has(id)) continue;
     const sourceStatus = requiredText(row?.status, "component status", 100);
     componentsById.set(id, {
       id,
@@ -81,12 +75,20 @@ export async function fetchOpenAIChatGPTSnapshot(
       sourceStatus,
     });
   }
-  const components = service.componentIds
-    .map((id) => componentsById.get(id))
-    .filter((component): component is NormalizedComponent => component !== undefined);
-  if (components.length === 0) {
+  if (componentsById.size === 0) {
     throw new ProviderError("invalid_payload", "OpenAI ChatGPT components were not found");
   }
+
+  const components = service.components.map(
+    ({ id, name }) =>
+      componentsById.get(id) ?? {
+        id,
+        name,
+        status: "unknown" as const,
+        sourceStatus: "missing",
+      },
+  );
+  const missingComponents = components.some((component) => component.sourceStatus === "missing");
 
   let incidents: unknown[];
   if (Object.hasOwn(data, "incidents")) {
@@ -101,21 +103,35 @@ export async function fetchOpenAIChatGPTSnapshot(
     throw new ProviderError("invalid_payload", "OpenAI incident list exceeded the supported limit");
   }
 
-  const componentNames = new Map(components.map((component) => [component.id, component.name]));
+  const componentNames = new Map(service.components.map(({ id, name }) => [id, name]));
   const normalizedIncidents = incidents
     .map((incident) => parseOpenAIIncident(incident, service, componentNames))
     .filter((incident): incident is NormalizedIncident => incident !== null);
+  const listedIncidentIds = new Set(normalizedIncidents.map((incident) => incident.id));
+  const omittedActiveIncidents = knownActiveIncidents.filter(
+    (incident) => incident.active && !listedIncidentIds.has(incident.id),
+  );
+  const recheckedIncidents = await Promise.all(
+    selectOmittedIncidentsForRecheck(omittedActiveIncidents).map((incident) =>
+      recheckOmittedIncident(incident, service, signal, fetcher),
+    ),
+  );
+  normalizedIncidents.push(...recheckedIncidents);
+
   const overall = components.toSorted(
     (left, right) => statusPriority[right.status] - statusPriority[left.status],
   )[0]!;
 
   return {
-    status: components.some((component) => component.status === "unknown")
-      ? "unknown"
-      : overall.status,
-    sourceStatus: components.some((component) => component.status === "unknown")
-      ? "unknown"
-      : overall.sourceStatus,
+    status:
+      missingComponents || components.some((component) => component.status === "unknown")
+        ? "unknown"
+        : overall.status,
+    sourceStatus: missingComponents
+      ? "incomplete_components"
+      : components.some((component) => component.status === "unknown")
+        ? "unknown"
+        : overall.sourceStatus,
     // The OpenAI page-level status describes more than ChatGPT, so it is omitted.
     summary: null,
     components,
@@ -158,35 +174,12 @@ function parseOpenAIIncident(
       return rightTime - leftTime;
     });
   const latestUpdate = parsedUpdates[0];
-  const explicitNames = [...parsedUpdates]
+  const updateBodies = parsedUpdates
     .map((update) => statusText(update.body ?? update.update_text))
     .filter((body): body is string => body !== null);
-  if (!incidentBelongsToChatGPT(title, explicitNames, row, componentNames)) return null;
+  const componentEvidence = extractIncidentComponents(row, parsedUpdates, componentNames);
+  if (!incidentBelongsToChatGPT(title, updateBodies, componentEvidence)) return null;
 
-  const componentIds = uniqueNames(
-    Array.isArray(row.component_ids) ? row.component_ids : [],
-    COMPONENTS_PER_SERVICE_LIMIT,
-  ).filter((id) => componentNames.has(id));
-  const affectedNames = Array.isArray(latestUpdate?.affected_components)
-    ? latestUpdate.affected_components
-        .map((component) => boundedText(asRecord(component)?.name, 100))
-        .filter((name): name is string => Boolean(name))
-    : [];
-  const directNames = Array.isArray(row.components)
-    ? row.components
-        .map((component) => {
-          const record = asRecord(component);
-          return (
-            boundedText(record?.name, 100) ?? (typeof component === "string" ? component : null)
-          );
-        })
-        .filter((name): name is string => Boolean(name))
-    : [];
-  const components = uniqueNames([
-    ...componentIds.map((id) => componentNames.get(id)),
-    ...affectedNames.filter((name) => [...componentNames.values()].includes(name)),
-    ...directNames.filter((name) => [...componentNames.values()].includes(name)),
-  ]);
   const rawId = boundedText(row.id, 200);
   const createdAt = normalizeTimestamp(row.created_at);
   const updatedAt =
@@ -216,8 +209,8 @@ function parseOpenAIIncident(
     sourceType: "incident",
     sourceImpact,
     severityStatus: statusFromImpact(sourceImpact),
-    componentIds,
-    components,
+    componentIds: componentEvidence.componentIds,
+    components: componentEvidence.components,
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url: incidentUrl,
@@ -225,34 +218,210 @@ function parseOpenAIIncident(
   };
 }
 
+interface IncidentComponentEvidence {
+  componentIds: string[];
+  components: string[];
+  hasOfficialIds: boolean;
+  hasOfficialNames: boolean;
+}
+
+function extractIncidentComponents(
+  row: Record<string, unknown>,
+  updates: Record<string, unknown>[],
+  selectedComponents: Map<string, string>,
+): IncidentComponentEvidence {
+  const componentRows = Array.isArray(row.components) ? row.components : [];
+  const affectedRows = updates.flatMap((update) =>
+    Array.isArray(update.affected_components) ? update.affected_components : [],
+  );
+  const allRows = [...componentRows, ...affectedRows];
+  const directIds = Array.isArray(row.component_ids) ? row.component_ids : [];
+  const rowIds = allRows.map((value) => {
+    const component = asRecord(value);
+    return component?.id ?? component?.component_id;
+  });
+  const rawIds = uniqueNames([...directIds, ...rowIds], COMPONENTS_PER_SERVICE_LIMIT);
+  const rawNames = uniqueNames(
+    allRows.map((value) => {
+      const component = asRecord(value);
+      return component?.name ?? (typeof value === "string" ? value : null);
+    }),
+  );
+  const componentIds = rawIds.filter((id) => selectedComponents.has(id));
+  const selectedNames = new Set(selectedComponents.values());
+  const components = uniqueNames([
+    ...componentIds.map((id) => selectedComponents.get(id)),
+    ...rawNames.filter((name) => selectedNames.has(name)),
+  ]);
+
+  return {
+    componentIds,
+    components,
+    hasOfficialIds: rawIds.length > 0,
+    hasOfficialNames: rawNames.length > 0,
+  };
+}
+
 function incidentBelongsToChatGPT(
   title: string,
   updateBodies: string[],
-  row: Record<string, unknown>,
-  componentNames: Map<string, string>,
+  evidence: IncidentComponentEvidence,
 ): boolean {
-  const selectedIds = new Set(componentNames.keys());
-  const componentIds = Array.isArray(row.component_ids) ? row.component_ids : [];
-  if (componentIds.some((id) => typeof id === "string" && selectedIds.has(id))) return true;
+  if (evidence.hasOfficialIds) return evidence.componentIds.length > 0;
+  if (evidence.hasOfficialNames) return evidence.components.length > 0;
+  return [title, ...updateBodies].some(explicitlyMentionsChatGPT);
+}
 
-  const directNames = Array.isArray(row.components)
-    ? row.components.map((component) => boundedText(asRecord(component)?.name ?? component, 100))
-    : [];
-  if (directNames.some((name) => name && [...componentNames.values()].includes(name))) return true;
-
-  const affectedNames = Array.isArray(row.incident_updates)
-    ? row.incident_updates.flatMap((update) => {
-        const updateRecord = asRecord(update);
-        return Array.isArray(updateRecord?.affected_components)
-          ? updateRecord.affected_components.map((component) =>
-              boundedText(asRecord(component)?.name, 100),
-            )
-          : [];
-      })
-    : [];
-  if (affectedNames.some((name) => name && [...componentNames.values()].includes(name)))
+function explicitlyMentionsChatGPT(text: string): boolean {
+  const mention = /\bchatgpt\b/gi;
+  for (const match of text.matchAll(mention)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const sentenceStart = Math.max(
+      text.lastIndexOf(".", start - 1),
+      text.lastIndexOf("!", start - 1),
+      text.lastIndexOf("?", start - 1),
+      text.lastIndexOf(";", start - 1),
+      text.lastIndexOf("\n", start - 1),
+    );
+    const sentenceEnd = [".", "!", "?", ";", "\n"]
+      .map((separator) => text.indexOf(separator, end))
+      .filter((position) => position >= 0)
+      .reduce((nearest, position) => Math.min(nearest, position), text.length);
+    const before = text.slice(sentenceStart + 1, start);
+    const after = text.slice(end, sentenceEnd);
+    if (
+      /\b(?:not|never|no|without|unrelated to|does not affect|doesn't affect|will not affect|won't affect|not affecting|not impacting|excluding|except)\b[^.!?;\n]{0,40}$/i.test(
+        before,
+      ) ||
+      /^\s*(?:(?:is|are|was|were)\s+)?(?:not|never|no longer)\s+(?:currently\s+)?(?:affected|impacted|experiencing|degraded|down)\b/i.test(
+        after,
+      ) ||
+      /^\s*(?:(?:is|are|was|were)\s+)?unaffected\b/i.test(after)
+    ) {
+      continue;
+    }
     return true;
+  }
+  return false;
+}
 
-  const officialText = `${title} ${updateBodies.join(" ")}`.toLocaleLowerCase();
-  return explicitChatGPTIncidentTerms.some((term) => officialText.includes(term));
+function selectOmittedIncidentsForRecheck(incidents: KnownIncident[]): KnownIncident[] {
+  if (incidents.length <= OMITTED_INCIDENT_RECHECKS_PER_POLL) return incidents;
+  const currentMinute = Math.floor(Date.now() / 60_000);
+  const firstIndex = currentMinute % incidents.length;
+  // Bound request fanout while rotating the starting point to cover every omitted incident.
+  return Array.from(
+    { length: OMITTED_INCIDENT_RECHECKS_PER_POLL },
+    (_, offset) => incidents[(firstIndex + offset) % incidents.length]!,
+  );
+}
+
+async function recheckOmittedIncident(
+  incident: KnownIncident,
+  service: OpenAIChatGPTService,
+  signal: AbortSignal,
+  fetcher: FetchLike,
+): Promise<NormalizedIncident> {
+  if (incident.id.startsWith("generated_")) return unknownIncident(incident);
+  const feedUrl = safeIncidentUrl(
+    new URL(
+      `incidents/${encodeURIComponent(incident.id)}/feed.rss`,
+      service.statusPageUrl,
+    ).toString(),
+    service,
+  );
+  if (!feedUrl) return unknownIncident(incident);
+
+  try {
+    const feed = await fetchText(feedUrl, signal, fetcher);
+    const update = parseIncidentFeed(feed, incident.id, service);
+    return {
+      ...incident,
+      state: update.state,
+      sourceStatus: update.sourceStatus,
+      body: update.body ?? incident.body,
+      officialUpdatedAt: update.updatedAt ?? incident.officialUpdatedAt,
+      active: isIncidentActive(update.state),
+    };
+  } catch {
+    return unknownIncident(incident);
+  }
+}
+
+function unknownIncident(incident: KnownIncident): NormalizedIncident {
+  return {
+    ...incident,
+    state: "unknown",
+    sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+    active: true,
+  };
+}
+
+interface IncidentFeedUpdate {
+  state: NormalizedIncident["state"];
+  sourceStatus: string;
+  body: string | null;
+  updatedAt: string | null;
+}
+
+function parseIncidentFeed(
+  xml: string,
+  incidentId: string,
+  service: OpenAIChatGPTService,
+): IncidentFeedUpdate {
+  const channel = xml.match(/<channel\b[^>]*>([\s\S]*?)<\/channel>/i)?.[1];
+  if (!channel) throw new ProviderError("invalid_payload", "OpenAI incident feed is invalid");
+
+  const expectedPath = `/incidents/${encodeURIComponent(incidentId)}`;
+  const feedLinks = [...channel.matchAll(/<link\b[^>]*>([\s\S]*?)<\/link>/gi)].map((match) =>
+    decodeXmlText(match[1] ?? ""),
+  );
+  const linksToIncident = feedLinks.some((link) => {
+    const safeUrl = safeIncidentUrl(link, service);
+    return safeUrl ? new URL(safeUrl).pathname.replaceAll("//", "/") === expectedPath : false;
+  });
+  if (!linksToIncident) {
+    throw new ProviderError("invalid_payload", "OpenAI incident feed did not match the incident");
+  }
+
+  const items = [...channel.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(
+    (match) => match[1] ?? "",
+  );
+  const updates = items
+    .map((item) => {
+      const sourceStatus = extractXmlTag(item, "title");
+      if (!sourceStatus) return null;
+      const updatedAt = normalizeTimestamp(extractXmlTag(item, "pubDate"));
+      const description = extractXmlTag(item, "description");
+      return {
+        sourceStatus,
+        state: parseIncidentState(sourceStatus),
+        updatedAt,
+        body: statusText(description),
+      } satisfies IncidentFeedUpdate;
+    })
+    .filter((update): update is IncidentFeedUpdate => update !== null);
+  const latest = updates.toSorted(
+    (left, right) =>
+      (Date.parse(right.updatedAt ?? "") || 0) - (Date.parse(left.updatedAt ?? "") || 0),
+  )[0];
+  if (!latest) throw new ProviderError("invalid_payload", "OpenAI incident feed has no updates");
+  return latest;
+}
+
+function extractXmlTag(value: string, tag: string): string | null {
+  const match = value.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXmlText(match[1] ?? "") : null;
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .trim();
 }
