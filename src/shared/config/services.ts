@@ -5,7 +5,12 @@ export type ServiceConfig = {
   allowedLinkHosts: string[];
   timeoutMs?: number;
 } & (
-  | { provider: "statuspage"; summaryUrl: string; scheduledMaintenances?: boolean }
+  | {
+      provider: "statuspage";
+      summaryUrl: string;
+      scheduledMaintenances?: boolean;
+      componentGroupId?: string;
+    }
   | {
       provider: "openai-chatgpt";
       summaryUrl: string;
@@ -41,6 +46,15 @@ export const SERVICES: ServiceConfig[] = [
     scheduledMaintenances: true,
     statusPageUrl: "https://www.githubstatus.com/",
     allowedLinkHosts: ["www.githubstatus.com", "githubstatus.com"],
+  },
+  {
+    id: "cloudflare",
+    name: "Cloudflare",
+    provider: "statuspage",
+    summaryUrl: "https://www.cloudflarestatus.com/api/v2/summary.json",
+    componentGroupId: "1km35smx8p41",
+    statusPageUrl: "https://www.cloudflarestatus.com/",
+    allowedLinkHosts: ["www.cloudflarestatus.com", "cloudflarestatus.com"],
   },
   {
     id: "claude",
@@ -83,5 +97,6 @@ export const INCIDENT_HISTORY_DISPLAY_LIMIT = 8;
 export const DASHBOARD_POLL_INTERVAL_MS = 60_000;
 export const INCIDENTS_PER_SERVICE_LIMIT = 100;
 export const PROVIDER_RESPONSE_LIMIT_BYTES = 1_000_000;
-// The component cleanup query binds two fixed values alongside each official ID.
-export const COMPONENTS_PER_SERVICE_LIMIT = 98;
+// Cloudflare's service group currently has 133 components. Keep a bounded limit
+// after provider-specific filtering; store cleanup handles larger ID sets.
+export const COMPONENTS_PER_SERVICE_LIMIT = 200;

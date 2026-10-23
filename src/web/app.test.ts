@@ -7,7 +7,12 @@ const slackService = SERVICES.find((service) => service.provider === "slack");
 const githubService = SERVICES.find(
   (service) => service.provider === "statuspage" && service.scheduledMaintenances,
 );
-if (!slackService || !githubService) throw new Error("Service config is missing a test fixture");
+const cloudflareService = SERVICES.find(
+  (service) => service.provider === "statuspage" && service.componentGroupId !== undefined,
+);
+if (!slackService || !githubService || !cloudflareService) {
+  throw new Error("Service config is missing a test fixture");
+}
 
 const rows: DashboardRows = {
   statusRows: [
@@ -94,6 +99,7 @@ describe("status API", () => {
     );
     const slack = payload.services.find((service) => service.id === slackService.id);
     const github = payload.services.find((service) => service.id === githubService.id);
+    const cloudflare = payload.services.find((service) => service.id === cloudflareService.id);
     expect(slack).toMatchObject({
       hasFetchError: true,
       isStale: true,
@@ -119,6 +125,11 @@ describe("status API", () => {
           sourceStatus: "partial_outage",
         },
       ],
+    });
+    expect(cloudflare).toMatchObject({
+      id: cloudflareService.id,
+      name: "Cloudflare",
+      statusPageUrl: "https://www.cloudflarestatus.com/",
     });
     expect(payload.recentEvents[0]).toMatchObject({ serviceName: "Slack", eventKind: "opened" });
     expect(payload.recentEvents[0]).not.toHaveProperty("body");

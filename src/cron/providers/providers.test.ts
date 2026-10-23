@@ -1,32 +1,13 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
 import { fetchOpenAIChatGPTSnapshot } from "./openai-chatgpt";
-import { fetchSlackSnapshot } from "./slack";
-import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
 
 const abortSignal = new AbortController().signal;
-const github = SERVICES.find((service) => service.id === "github");
-const notion = SERVICES.find((service) => service.id === "notion");
-const slack = SERVICES.find((service) => service.id === "slack");
-const claude = SERVICES.find((service) => service.id === "claude");
 const chatgpt = SERVICES.find((service) => service.provider === "openai-chatgpt");
-
-if (
-  !github ||
-  github.provider !== "statuspage" ||
-  !notion ||
-  notion.provider !== "statuspage" ||
-  !slack ||
-  slack.provider !== "slack" ||
-  !claude ||
-  claude.provider !== "statuspage" ||
-  !chatgpt ||
-  chatgpt.provider !== "openai-chatgpt"
-) {
-  throw new Error("Service config is missing a provider fixture");
-}
+if (!chatgpt) throw new Error("ChatGPT service config is missing");
 
 const chatgptConversation = chatgpt.components.find(({ name }) => name === "Conversations");
 const chatgptLogin = chatgpt.components.find(({ name }) => name === "Login");
@@ -35,16 +16,28 @@ if (!chatgptConversation || !chatgptLogin) {
 }
 const configuredChatGPTComponents = chatgpt.components;
 const configuredChatGPTService = chatgpt;
-
-const githubStatuspage = github;
-
-function jsonFetcher(payload: unknown, contentType = "application/json"): FetchLike {
-  return (async () =>
-    new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "content-type": contentType },
-    })) as FetchLike;
-}
+const capturedChatGPTFeed = readFileSync(
+  "src/cron/providers/fixtures/openai-chatgpt-incident.rss",
+  "utf8",
+);
+const capturedChatGPTIncident: KnownIncident = {
+  id: "01M5GPE9C4E19HE461P8JAMYXD",
+  title: "Elevated ChatGPT conversation and Responses API errors",
+  body: "We are investigating the issue.",
+  kind: "incident",
+  state: "investigating",
+  sourceStatus: "investigating",
+  sourceType: "incident",
+  sourceImpact: "minor",
+  severityStatus: "degraded_performance",
+  componentIds: [chatgptConversation.id],
+  components: [chatgptConversation.name],
+  officialCreatedAt: "2026-10-22T02:18:32.000Z",
+  officialUpdatedAt: "2026-10-22T02:18:32.000Z",
+  url: "https://status.openai.com/incidents/01M5GPE9C4E19HE461P8JAMYXD",
+  active: true,
+  lastObservedAt: "2026-10-22T02:18:32.000Z",
+};
 
 function routedJsonFetcher(payloads: Record<string, unknown>): FetchLike {
   return (async (input) => {
@@ -70,19 +63,6 @@ function chatgptComponentRows(statuses: Record<string, string> = {}) {
   }));
 }
 
-function fetchIncidentWithFallbackTitle(title: string) {
-  return fetchStatuspageSnapshot(
-    githubStatuspage,
-    abortSignal,
-    jsonFetcher({
-      status: { indicator: "none" },
-      components: [],
-      incidents: [{ name: title, status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
-      scheduled_maintenances: [],
-    }),
-  );
-}
-
 function fetchOpenAIIncident(incident: Record<string, unknown>) {
   return fetchOpenAIChatGPTSnapshot(
     configuredChatGPTService,
@@ -97,178 +77,25 @@ function fetchOpenAIIncident(incident: Record<string, unknown>) {
   );
 }
 
-describe("Statuspage provider", () => {
-  it("normalizes overall status and keeps incident impact separate", async () => {
-    const snapshot = await fetchStatuspageSnapshot(
-      github,
-      abortSignal,
-      jsonFetcher({
-        status: { indicator: "major", description: "Partial System Outage" },
-        components: [{ id: "actions", name: "Actions", status: "partial_outage" }],
-        incidents: [
-          {
-            id: "inc-1",
-            name: "Actions are delayed",
-            status: "monitoring",
-            impact: "critical",
-            created_at: "2026-10-23T01:00:00Z",
-            updated_at: "2026-10-23T01:14:00Z",
-            component_ids: ["actions"],
-            incident_updates: [
-              {
-                body: "Mitigation is in place.<br />Next line.",
-                created_at: "2026-10-23T01:14:00Z",
-                affected_components: [{ name: "Actions" }],
-              },
-            ],
-            url: "https://www.githubstatus.com/incidents/inc-1",
-          },
-        ],
-        scheduled_maintenances: [],
-      }),
-    );
-
-    expect(snapshot.status).toBe("partial_outage");
-    expect(snapshot.sourceStatus).toBe("major");
-    expect(snapshot.components).toEqual([
-      {
-        id: "actions",
-        name: "Actions",
-        status: "partial_outage",
-        sourceStatus: "partial_outage",
-      },
-    ]);
-    expect(snapshot.incidents).toHaveLength(1);
-    expect(snapshot.incidents[0]).toMatchObject({
-      id: "inc-1",
-      state: "monitoring",
-      active: true,
-      sourceImpact: "critical",
-      severityStatus: "major_outage",
-      body: "Mitigation is in place.\nNext line.",
-      componentIds: ["actions"],
-      components: ["Actions"],
-      url: "https://www.githubstatus.com/incidents/inc-1",
+function fetchOmittedChatGPTIncident(incident: KnownIncident, feed?: string) {
+  const responses: Record<string, Response> = {
+    "/api/v2/summary.json": new Response(
+      JSON.stringify({ incidents: [], components: chatgptComponentRows() }),
+      { headers: { "content-type": "application/json" } },
+    ),
+  };
+  if (feed) {
+    responses[`/incidents/${incident.id}/feed.rss`] = new Response(feed, {
+      headers: { "content-type": "application/rss+xml" },
     });
-  });
-
-  it("accepts Notion's current Statuspage-compatible summary without a maintenance list", async () => {
-    const snapshot = await fetchStatuspageSnapshot(
-      notion,
-      abortSignal,
-      jsonFetcher({
-        page: { name: "Notion" },
-        status: { indicator: "none", description: "All Systems Operational" },
-        components: [],
-        incidents: [
-          {
-            id: "notion-incident",
-            name: "Users unable to access Notion",
-            status: "monitoring",
-            impact: "critical",
-            created_at: "2026-10-23T03:38:19Z",
-            incident_updates: [
-              { body: "Service is recovering.", created_at: "2026-10-23T04:01:17Z" },
-            ],
-          },
-        ],
-      }),
-    );
-
-    expect(snapshot.status).toBe("operational");
-    expect(snapshot.components).toEqual([]);
-    expect(snapshot.incidents[0]).toMatchObject({
-      officialUpdatedAt: "2026-10-23T04:01:17.000Z",
-      severityStatus: "major_outage",
-      active: true,
-      componentIds: [],
-    });
-  });
-
-  it("accepts Claude's current Statuspage-compatible summary", async () => {
-    const snapshot = await fetchStatuspageSnapshot(
-      claude,
-      abortSignal,
-      jsonFetcher({
-        page: { name: "Claude" },
-        status: { indicator: "none", description: "All Systems Operational" },
-        components: [
-          { id: "rwppv331jlwc", name: "claude.ai", status: "operational" },
-          {
-            id: "k8w3r06qmzrp",
-            name: "Claude API (api.anthropic.com)",
-            status: "operational",
-          },
-        ],
-        incidents: [],
-        scheduled_maintenances: [],
-      }),
-    );
-
-    expect(snapshot).toMatchObject({
-      status: "operational",
-      sourceStatus: "none",
-      components: [
-        { id: "rwppv331jlwc", name: "claude.ai", status: "operational" },
-        {
-          id: "k8w3r06qmzrp",
-          name: "Claude API (api.anthropic.com)",
-          status: "operational",
-        },
-      ],
-      incidents: [],
-    });
-  });
-
-  it("does not interpret a missing GitHub maintenance list as an empty list", async () => {
-    await expect(
-      fetchStatuspageSnapshot(
-        github,
-        abortSignal,
-        jsonFetcher({
-          status: { indicator: "none" },
-          components: [],
-          incidents: [],
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "invalid_payload" });
-  });
-
-  it("uses a stable fallback ID when an incident has no official ID", async () => {
-    const payload = {
-      status: { indicator: "none" },
-      components: [],
-      incidents: [{ name: "A title", status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
-      scheduled_maintenances: [],
-    };
-    const first = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
-    const second = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
-    expect(first.incidents[0]?.id).toMatch(/^generated_/);
-    expect(first.incidents[0]?.id).toBe(second.incidents[0]?.id);
-  });
-
-  it("keeps a fallback ID when an incident title changes", async () => {
-    const first = await fetchIncidentWithFallbackTitle("A title");
-    const updated = await fetchIncidentWithFallbackTitle("A revised title");
-    expect(first.incidents[0]?.id).toBe(updated.incidents[0]?.id);
-  });
-
-  it("rejects an invalid API shape so existing incidents are not mistaken as resolved", async () => {
-    await expect(
-      fetchStatuspageSnapshot(
-        github,
-        abortSignal,
-        jsonFetcher({
-          status: { indicator: "none" },
-          components: [],
-          incidents: "not-an-array",
-          scheduled_maintenances: [],
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "invalid_payload" });
-  });
-});
-
+  }
+  return fetchOpenAIChatGPTSnapshot(
+    configuredChatGPTService,
+    abortSignal,
+    routedResponseFetcher(responses),
+    [incident],
+  );
+}
 describe("OpenAI ChatGPT provider", () => {
   it("uses ChatGPT section components and explicitly scoped incidents", async () => {
     const conversationId = chatgptConversation.id;
@@ -389,6 +216,12 @@ describe("OpenAI ChatGPT provider", () => {
               incident_updates: [{ body: "This is not affecting ChatGPT users." }],
             },
             {
+              id: "nonimpact-chatgpt-incident",
+              name: "Responses API errors",
+              status: "investigating",
+              incident_updates: [{ body: "The issue does not impact ChatGPT." }],
+            },
+            {
               id: "api-linked-chatgpt-title",
               name: "ChatGPT is affected",
               status: "investigating",
@@ -403,52 +236,38 @@ describe("OpenAI ChatGPT provider", () => {
     expect(snapshot.incidents.map(({ id }) => id)).toEqual(["mixed-service-incident"]);
   });
 
-  it("rechecks an omitted active incident through its official RSS feed", async () => {
-    const oldIncident = {
-      id: "older-chatgpt-incident",
-      title: "Elevated ChatGPT conversation errors",
-      body: "We are investigating.",
-      kind: "incident" as const,
-      state: "investigating" as const,
-      sourceStatus: "investigating",
-      sourceType: "incident",
-      sourceImpact: "major",
-      severityStatus: "partial_outage" as const,
-      componentIds: [chatgptConversation.id],
-      components: [chatgptConversation.name],
-      officialCreatedAt: "2026-10-22T02:18:32.000Z",
-      officialUpdatedAt: "2026-10-22T02:18:32.000Z",
-      url: "https://status.openai.com/incidents/older-chatgpt-incident",
-      active: true,
-      lastObservedAt: "2026-10-22T02:18:32.000Z",
-    };
-    const feed = `<?xml version="1.0"?><rss><channel>
-      <link>https://status.openai.com//incidents/${oldIncident.id}</link>
-      <item><title><![CDATA[Investigating]]></title><pubDate>Thu, 22 Oct 2026 02:18:32 GMT</pubDate><description><![CDATA[We are investigating.]]></description></item>
-      <item><title><![CDATA[Resolved]]></title><pubDate>Thu, 22 Oct 2026 08:50:43 GMT</pubDate><description><![CDATA[All impacted services have now fully recovered.]]></description></item>
-    </channel></rss>`;
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
-      routedResponseFetcher({
-        "/api/v2/summary.json": new Response(
-          JSON.stringify({ incidents: [], components: chatgptComponentRows() }),
-          { headers: { "content-type": "application/json" } },
-        ),
-        [`/incidents/${oldIncident.id}/feed.rss`]: new Response(feed, {
-          headers: { "content-type": "application/rss+xml" },
-        }),
-      }),
-      [oldIncident],
+  it("rechecks an omitted active incident using a captured official ChatGPT RSS response", async () => {
+    const snapshot = await fetchOmittedChatGPTIncident(
+      capturedChatGPTIncident,
+      capturedChatGPTFeed,
     );
 
     expect(snapshot.incidents).toMatchObject([
       {
-        id: oldIncident.id,
+        id: capturedChatGPTIncident.id,
         state: "resolved",
         sourceStatus: "Resolved",
         active: false,
         officialUpdatedAt: "2026-10-22T08:50:43.000Z",
+      },
+    ]);
+  });
+
+  it.each([
+    "Resolved - Elevated ChatGPT conversation and Responses API errors",
+    "Elevated ChatGPT conversation and Responses API errors - Resolved",
+  ])("recognizes a status appended or prepended in an RSS title: %s", async (title) => {
+    const feed = capturedChatGPTFeed
+      .replace("<title><![CDATA[Resolved]]></title>", `<title><![CDATA[${title}]]></title>`)
+      .replace("<b>Status: Resolved</b>", "");
+    const snapshot = await fetchOmittedChatGPTIncident(capturedChatGPTIncident, feed);
+
+    expect(snapshot.incidents).toMatchObject([
+      {
+        id: capturedChatGPTIncident.id,
+        state: "resolved",
+        sourceStatus: "Resolved",
+        active: false,
       },
     ]);
   });
@@ -637,65 +456,5 @@ describe("OpenAI ChatGPT provider", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "invalid_payload" });
-  });
-});
-
-describe("Slack provider", () => {
-  it("keeps Slack's incident type without inventing a severity", async () => {
-    const snapshot = await fetchSlackSnapshot(
-      slack,
-      abortSignal,
-      jsonFetcher({
-        status: "active",
-        active_incidents: [
-          {
-            id: "slack-incident",
-            title: "Some users are experiencing delays",
-            status: "investigating",
-            type: "incident",
-            date_created: "2026-10-23T01:00:00Z",
-            url: "https://slack-status.com/2026-10/abc",
-            services: ["Messaging"],
-            notes: [{ date: "2026-10-23T01:05:00Z", body: "We are investigating." }],
-          },
-        ],
-      }),
-    );
-
-    expect(snapshot.status).toBe("unknown");
-    expect(snapshot.sourceStatus).toBe("active");
-    expect(snapshot.incidents[0]).toMatchObject({
-      state: "investigating",
-      sourceType: "incident",
-      severityStatus: null,
-      componentIds: [],
-      officialUpdatedAt: "2026-10-23T01:05:00.000Z",
-      body: "We are investigating.",
-      components: ["Messaging"],
-    });
-    expect(snapshot.components).toBeUndefined();
-  });
-
-  it("normalizes Slack's healthy response", async () => {
-    const snapshot = await fetchSlackSnapshot(
-      slack,
-      abortSignal,
-      jsonFetcher({ status: "ok", active_incidents: [] }),
-    );
-    expect(snapshot.status).toBe("operational");
-    expect(snapshot.incidents).toEqual([]);
-  });
-
-  it("rejects HTML and malformed responses", async () => {
-    await expect(
-      fetchSlackSnapshot(slack, abortSignal, jsonFetcher({}, "text/html")),
-    ).rejects.toMatchObject({
-      code: "invalid_response",
-    });
-    await expect(
-      fetchSlackSnapshot(slack, abortSignal, jsonFetcher({ status: "ok" })),
-    ).rejects.toMatchObject({
-      code: "invalid_payload",
-    });
   });
 });

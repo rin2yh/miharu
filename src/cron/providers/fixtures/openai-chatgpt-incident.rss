@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>OpenAI status: Elevated ChatGPT conversation and Responses API errors</title>
+        <link>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD</link>
+        <description>Elevated ChatGPT conversation and Responses API errors incident updates</description>
+        <lastBuildDate>Fri, 23 Oct 2026 16:58:32 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>incident.io</generator>
+        <item>
+            <title><![CDATA[Investigating]]></title>
+            <link>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5GPE9C4S2VSEPGANMJN77CN</link>
+            <guid>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5GPE9C4S2VSEPGANMJN77CN</guid>
+            <pubDate>Thu, 22 Oct 2026 02:18:32 GMT</pubDate>
+            <description><![CDATA[<b>Status: Investigating</b> <br/> <br /> This is impacting users in India, Japan, and Korea. We are investigating the issue for the listed services.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Degraded performance)</li> <li>Responses (Degraded performance)</li>
+      </ul>]]></description>
+            <content:encoded><![CDATA[<b>Status: Investigating</b> <br/> <br /> This is impacting users in India, Japan, and Korea. We are investigating the issue for the listed services.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Degraded performance)</li> <li>Responses (Degraded performance)</li>
+      </ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Monitoring]]></title>
+            <link>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5GQSZKNN3M28SHB5RMJ75HP</link>
+            <guid>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5GQSZKNN3M28SHB5RMJ75HP</guid>
+            <pubDate>Thu, 22 Oct 2026 02:42:24 GMT</pubDate>
+            <description><![CDATA[<b>Status: Monitoring</b> <br/> <br /> This is impacting users in India, Japan, and Korea. We have applied the mitigation and are monitoring the recovery.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Degraded performance)</li> <li>Responses (Degraded performance)</li>
+      </ul>]]></description>
+            <content:encoded><![CDATA[<b>Status: Monitoring</b> <br/> <br /> This is impacting users in India, Japan, and Korea. We have applied the mitigation and are monitoring the recovery.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Degraded performance)</li> <li>Responses (Degraded performance)</li>
+      </ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Resolved]]></title>
+            <link>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5HCWCW9XX2VDNZE2TG5WDBX</link>
+            <guid>https://status.openai.com//incidents/01M5GPE9C4E19HE461P8JAMYXD#01M5HCWCW9XX2VDNZE2TG5WDBX</guid>
+            <pubDate>Thu, 22 Oct 2026 08:50:43 GMT</pubDate>
+            <description><![CDATA[<b>Status: Resolved</b> <br/> <br /> All impacted services have now fully recovered.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Operational)</li> <li>Responses (Operational)</li>
+      </ul>]]></description>
+            <content:encoded><![CDATA[<b>Status: Resolved</b> <br/> <br /> All impacted services have now fully recovered.
+        <br/><br/><b>Affected components</b>
+      <ul>
+      <li>Conversations (Operational)</li> <li>Responses (Operational)</li>
+      </ul>]]></content:encoded>
+        </item>
+    </channel>
+</rss>

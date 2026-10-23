@@ -291,7 +291,7 @@ function explicitlyMentionsChatGPT(text: string): boolean {
     const before = text.slice(sentenceStart + 1, start);
     const after = text.slice(end, sentenceEnd);
     if (
-      /\b(?:not|never|no|without|unrelated to|does not affect|doesn't affect|will not affect|won't affect|not affecting|not impacting|excluding|except)\b[^.!?;\n]{0,40}$/i.test(
+      /\b(?:not|never|no|without|unrelated to|does not affect|doesn't affect|does not impact|doesn't impact|do not impact|don't impact|will not affect|won't affect|not affecting|not impacting|excluding|except)\b[^.!?;\n]{0,40}$/i.test(
         before,
       ) ||
       /^\s*(?:(?:is|are|was|were)\s+)?(?:not|never|no longer)\s+(?:currently\s+)?(?:affected|impacted|experiencing|degraded|down)\b/i.test(
@@ -352,6 +352,7 @@ async function recheckOmittedIncident(
 function unknownIncident(incident: KnownIncident): NormalizedIncident {
   return {
     ...incident,
+    body: null,
     state: "unknown",
     sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
     active: true,
@@ -390,13 +391,14 @@ function parseIncidentFeed(
   );
   const updates = items
     .map((item) => {
-      const sourceStatus = extractXmlTag(item, "title");
-      if (!sourceStatus) return null;
+      const title = extractXmlTag(item, "title");
+      if (!title) return null;
       const updatedAt = normalizeTimestamp(extractXmlTag(item, "pubDate"));
       const description = extractXmlTag(item, "description");
+      const { sourceStatus, state } = parseIncidentFeedStatus(title, description);
       return {
         sourceStatus,
-        state: parseIncidentState(sourceStatus),
+        state,
         updatedAt,
         body: statusText(description),
       } satisfies IncidentFeedUpdate;
@@ -408,6 +410,24 @@ function parseIncidentFeed(
   )[0];
   if (!latest) throw new ProviderError("invalid_payload", "OpenAI incident feed has no updates");
   return latest;
+}
+
+function parseIncidentFeedStatus(
+  title: string,
+  description: string | null,
+): { sourceStatus: string; state: NormalizedIncident["state"] } {
+  const descriptionStatus = description?.match(
+    /<(?:b|strong)\b[^>]*>\s*Status:\s*([^<]+)<\/(?:b|strong)>/i,
+  )?.[1];
+  const titleParts = title.split(/\s*(?:-|–|—|:)\s*/).filter(Boolean);
+  const candidates = [descriptionStatus, titleParts[0], titleParts.at(-1), title];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const sourceStatus = candidate.trim();
+    const state = parseIncidentState(sourceStatus);
+    if (state !== "unknown") return { sourceStatus, state };
+  }
+  return { sourceStatus: title, state: "unknown" };
 }
 
 function extractXmlTag(value: string, tag: string): string | null {

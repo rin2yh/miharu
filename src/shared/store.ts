@@ -421,20 +421,18 @@ async function syncComponents(
     upserts.map((statement) => [statement]),
   );
 
-  const componentIds = components.map((component) => component.id);
-  const notIn =
-    componentIds.length > 0 ? `AND id NOT IN (${componentIds.map(() => "?").join(",")})` : "";
   await database
     .prepare(
       `DELETE FROM service_components
-      WHERE service_id = ? ${notIn}
+      WHERE service_id = ?
+        AND id NOT IN (SELECT value FROM json_each(?))
         AND EXISTS (
           SELECT 1 FROM service_status
           WHERE service_id = service_components.service_id
             AND last_checked_at <= ?
         )`,
     )
-    .bind(serviceId, ...componentIds, observedAt)
+    .bind(serviceId, JSON.stringify(components.map((component) => component.id)), observedAt)
     .run();
 }
 
