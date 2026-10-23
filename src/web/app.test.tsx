@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
-import { App } from "./App";
+import { App } from "./app";
 import {
   basePayload,
   githubLinkName,

@@ -13,7 +13,7 @@ export default defineConfig({
         "src/domain/**/*.ts",
         "src/shared/**/*.ts",
         "src/web/api.ts",
-        "src/web/App.tsx",
+        "src/web/app.tsx",
         "src/web/routes/**/*.ts",
         "src/cron/**/*.ts",
       ],

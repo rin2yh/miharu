@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
-import { EventRow } from "./EventRow";
+import { EventRow } from "./event-row";
 import { RefreshIcon, SearchIcon } from "./icons";
-import { ServiceCard } from "./ServiceCard";
+import { ServiceCard } from "./service-card";
 import { servicePriority } from "./status-presentation";
 
 type DashboardLoader = () => Promise<DashboardPayload>;
