@@ -15,7 +15,7 @@
     "db:migrate:local": "wrangler d1 migrations apply miharu-status --local --persist-to .wrangler/state",
     "db:migrate:remote": "wrangler d1 migrations apply miharu-status --remote",
     "db:migrate:preview": "wrangler d1 migrations apply miharu-status-preview --remote --env preview",
-    "preview:deploy": "CLOUDFLARE_ENV=preview pnpm build && wrangler deploy",
+    "preview:deploy": "CLOUDFLARE_ENV=preview pnpm build && wrangler deploy --env preview",
     "lint": "oxlint . && oxfmt --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
