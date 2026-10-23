@@ -112,12 +112,6 @@ a {
   height: 8px;
 }
 
-.header-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .service-overview-heading {
   display: flex;
   align-items: baseline;
@@ -382,21 +376,6 @@ a {
   background: currentColor;
 }
 
-.service-freshness {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-top: 10px;
-  color: var(--quiet);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.freshness-label {
-  color: var(--quiet);
-  font-size: 9px;
-}
-
 .incident-list {
   display: grid;
   gap: 11px;
@@ -455,11 +434,6 @@ a {
   background: var(--unknown-bg);
   color: var(--unknown);
 }
-.incident-source-impact {
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .incident-item h4 {
   margin: 0;
   color: var(--ink);
@@ -644,19 +618,6 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.page-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 7px 16px;
-  margin-top: 26px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  color: var(--quiet);
-  font-size: 10px;
-}
-
 @media (max-width: 760px) {
   .page-shell {
     width: min(100% - 32px, 620px);
@@ -664,10 +625,6 @@ a {
   }
   .site-header {
     margin-bottom: 19px;
-  }
-  .header-note {
-    max-width: 130px;
-    text-align: right;
   }
   .service-overview-controls {
     justify-content: flex-start;
@@ -686,9 +643,6 @@ a {
   }
   .incident-list {
     margin-top: 14px;
-  }
-  .page-footer {
-    justify-content: flex-start;
   }
 }
 
@@ -1020,13 +974,6 @@ a {
   margin: 0 0 12px 24px;
 }
 
-.component-unavailable,
-.service-all-clear {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .service-direct-incidents {
   margin-top: 16px;
   padding-top: 13px;
@@ -1086,9 +1033,6 @@ a {
   }
   .service-card-title .status-pill {
     font-size: 11px;
-  }
-  .service-source-label {
-    margin-left: 43px;
   }
   .component-item details > summary {
     gap: 6px;

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
-import type { DashboardPayload, DashboardService } from "../domain";
+import type { DashboardEvent, DashboardPayload, DashboardService } from "../domain";
 import { App } from "./App";
 
 const lastSuccessAt = "2026-10-23T05:00:00.000Z";
@@ -54,12 +54,15 @@ function component(
   return { id, name, status, sourceStatus: status, lastChangedAt: lastSuccessAt };
 }
 
-function payload(services: DashboardService[]): DashboardPayload {
+function payload(
+  services: DashboardService[],
+  recentEvents: DashboardEvent[] = [],
+): DashboardPayload {
   return {
     generatedAt: lastSuccessAt,
     freshnessWarningSeconds: 180,
     services,
-    recentEvents: [],
+    recentEvents,
   };
 }
 
@@ -78,6 +81,8 @@ describe("dashboard", () => {
   it("links each service name to its official status page and shows incidents without a component catalogue", async () => {
     render(<App load={async () => basePayload} />);
 
+    expect(screen.getByRole("link", { name: "miharu ホーム" })).toBeInTheDocument();
+    expect(screen.queryByText(/公式情報を1分ごとに確認|画面更新 1分/)).not.toBeInTheDocument();
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
     const slackLink = screen.getByRole("link", { name: slackLinkName });
     expect(slackLink).toHaveAttribute("href", "https://slack-status.com/");
@@ -91,8 +96,8 @@ describe("dashboard", () => {
     expect(slackLink.closest(".service-card-title")?.querySelector(".status-pill")).not.toBeNull();
     expect(within(slackCard!).getByText("正常")).toBeInTheDocument();
     expect(
-      within(slackCard!).getByText("独立したコンポーネント状態は公式APIから提供されていません。"),
-    ).toBeInTheDocument();
+      within(slackCard!).queryByText("独立したコンポーネント状態は公式APIから提供されていません。"),
+    ).not.toBeInTheDocument();
     expect(
       within(slackCard!).queryByRole("button", { name: /正常なコンポーネント/ }),
     ).not.toBeInTheDocument();
@@ -153,7 +158,7 @@ describe("dashboard", () => {
     expect(packageRow.querySelector("details")).toBeNull();
     expect(within(componentRows[1]!).getByText("関連情報 2件")).toBeInTheDocument();
     expect(within(packageRow).getByText("関連情報 1件")).toBeInTheDocument();
-    const actionIncidents = componentRows[1]!.querySelectorAll(".incident-item");
+    const actionIncidents = componentRows[1]!.querySelectorAll<HTMLElement>(".incident-item");
     expect(actionIncidents).toHaveLength(2);
     const firstActionIncident = actionIncidents[0]!;
     expect(within(firstActionIncident).getByText("Actions delay")).toBeInTheDocument();
@@ -170,7 +175,7 @@ describe("dashboard", () => {
       firstActionIncident.querySelector('time[datetime="2026-10-23T04:55:00.000Z"]'),
     ).not.toBeNull();
     expect(screen.getAllByText("Unmatched incident")).toHaveLength(1);
-    expect(screen.getByText("コンポーネントに関連付けられていない情報")).toBeInTheDocument();
+    expect(screen.getByText("その他の障害・メンテナンス情報")).toBeInTheDocument();
     expect(card!.querySelectorAll(".incident-item")).toHaveLength(4);
 
     fireEvent.click(screen.getByRole("button", { name: "正常なコンポーネント 1件を表示" }));
@@ -279,8 +284,31 @@ describe("dashboard", () => {
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("表示中の情報は保持しています");
+    expect(await screen.findByRole("alert")).toHaveTextContent("前回取得時のものです");
     expect(screen.getByText("Messaging delays for some users")).toBeInTheDocument();
+  });
+
+  it("uses official event times and concise labels in the recent updates", async () => {
+    const event: DashboardEvent = {
+      id: "event-1",
+      serviceId: "github",
+      serviceName: "GitHub",
+      incidentId: "incident-1",
+      title: "Actions delay",
+      kind: "incident",
+      eventKind: "opened",
+      sourceStatus: "investigating",
+      severityStatus: "partial_outage",
+      detectedAt: lastSuccessAt,
+      officialEventAt: "2026-10-23T04:50:00.000Z",
+      url: "https://www.githubstatus.com/incidents/incident-1",
+    };
+    render(<App load={async () => payload([service()], [event])} />);
+
+    expect(await screen.findByText("障害発生")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Actions delay" })).toHaveAttribute("href", event.url);
+    expect(screen.getByText(/公式時刻/)).toBeInTheDocument();
+    expect(screen.queryByText(/アプリ検知|検知/)).not.toBeInTheDocument();
   });
 
   it("shows incident updates and removes the incident after recovery", async () => {
@@ -342,6 +370,6 @@ describe("dashboard", () => {
   it("makes stale information visible", async () => {
     const stalePayload = payload(basePayload.services.map((item) => ({ ...item, isStale: true })));
     render(<App load={async () => stalePayload} />);
-    expect(await screen.findAllByText(/情報が古い可能性があります/)).toHaveLength(2);
+    expect(await screen.findAllByText(/最新の状態と異なる可能性があります/)).toHaveLength(2);
   });
 });
