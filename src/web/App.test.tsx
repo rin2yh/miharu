@@ -101,11 +101,19 @@ describe("dashboard", () => {
     expect(
       within(slackCard!).queryByRole("button", { name: /正常なコンポーネント/ }),
     ).not.toBeInTheDocument();
-    expect(within(slackCard!).getByText("障害の重要度: 部分障害")).toBeInTheDocument();
-    expect(slackCard?.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]')).not.toBeNull();
+    const slackIncident = slackCard!.querySelector(".incident-item")!;
+    const slackIncidentDetails = slackIncident.querySelector("details")!;
+    expect(slackIncidentDetails).not.toHaveAttribute("open");
+    expect(within(slackIncident).getByText("調査中")).toBeInTheDocument();
+    expect(slackIncident.querySelector('time[datetime="2026-10-23T04:55:00.000Z"]')).not.toBeNull();
+    expect(within(slackIncident).getByText("We are investigating.")).not.toBeVisible();
+    fireEvent.click(slackIncident.querySelector("summary")!);
+    expect(within(slackIncident).getByText("障害の重要度: 部分障害")).toBeInTheDocument();
+    expect(within(slackIncident).getByText("We are investigating.")).toBeInTheDocument();
+    expect(slackIncident.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]')).not.toBeNull();
   });
 
-  it("keeps abnormal components visible, avoids nested disclosures, and shows each incident once", async () => {
+  it("keeps incidents visible under one component and expands their details independently", async () => {
     const github = service({
       status: "operational",
       components: [
@@ -113,6 +121,7 @@ describe("dashboard", () => {
         component("packages", "Packages"),
         component("actions", "Actions", "degraded_performance"),
         component("issues", "Issues", "major_outage"),
+        component("api", "API Requests"),
       ],
       incidents: [
         incident({ id: "actions-1", title: "Actions delay", componentIds: ["actions"] }),
@@ -140,34 +149,36 @@ describe("dashboard", () => {
     const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
     expect(card).not.toBeNull();
     expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain("正常");
-    const componentRows = [...card!.querySelectorAll<HTMLElement>(".component-item")];
+    const componentRows = [
+      ...card!.querySelectorAll<HTMLElement>(
+        ".component-listing > .component-item-list:not([hidden]) > .component-item",
+      ),
+    ];
     expect(
       componentRows.map((row) => row.querySelector(".component-summary-name")?.textContent),
     ).toEqual(["Issues", "Actions", "Web", "Packages"]);
 
-    const abnormalList = card!.querySelector(".component-listing > .component-item-list");
+    const visibleList = card!.querySelector(".component-listing > .component-item-list");
     const healthyList = card!.querySelector("#healthy-components-github");
-    const issueRow = componentRows[0]!;
-    const issueDetails = issueRow.querySelector("details");
-    const actionsDetails = componentRows[1]?.querySelector("details");
-    const packageRow = componentRows[3]!;
-    expect(abnormalList?.querySelectorAll(".component-item")).toHaveLength(3);
+    expect(visibleList?.querySelectorAll(".component-item")).toHaveLength(4);
     expect(healthyList).toHaveAttribute("hidden");
-    expect(issueDetails).toBeNull();
-    expect(actionsDetails?.open).toBe(true);
-    expect(packageRow.querySelector("details")).toBeNull();
-    expect(within(componentRows[1]!).getByText("関連情報 2件")).toBeInTheDocument();
-    expect(within(packageRow).getByText("関連情報 1件")).toBeInTheDocument();
+    expect(componentRows[0]?.querySelector(":scope > details")).toBeNull();
+    expect(componentRows[1]?.querySelector(":scope > details")).toBeNull();
     const actionIncidents = componentRows[1]!.querySelectorAll<HTMLElement>(".incident-item");
     expect(actionIncidents).toHaveLength(2);
     const firstActionIncident = actionIncidents[0]!;
     expect(within(firstActionIncident).getByText("Actions delay")).toBeInTheDocument();
     expect(within(componentRows[1]!).getByText("Workflow queue delay")).toBeInTheDocument();
     expect(within(firstActionIncident).getByText("調査中")).toBeInTheDocument();
+    const firstActionDetails = firstActionIncident.querySelector("details")!;
+    expect(firstActionDetails).not.toHaveAttribute("open");
+    expect(within(firstActionIncident).getByText("We are investigating.")).not.toBeVisible();
+    fireEvent.click(firstActionIncident.querySelector("summary")!);
     expect(within(firstActionIncident).getByText("We are investigating.")).toBeInTheDocument();
     expect(
       within(firstActionIncident).getByRole("link", { name: "公式情報を見る" }),
     ).toHaveAttribute("href", "https://www.githubstatus.com/incidents/incident-1");
+    expect(within(firstActionIncident).getByText(/公式発生/)).toBeInTheDocument();
     expect(
       firstActionIncident.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]'),
     ).not.toBeNull();
@@ -184,7 +195,6 @@ describe("dashboard", () => {
       "aria-expanded",
       "true",
     );
-    expect(packageRow.querySelector("details")).toBeNull();
     expect(within(componentRows[3]!).getByText("Package notice")).toBeInTheDocument();
     expect(within(card!).getAllByText("Package notice")).toHaveLength(1);
 
@@ -194,12 +204,12 @@ describe("dashboard", () => {
     expect(within(card!).getAllByText("Package notice")).toHaveLength(1);
     expect(card!.querySelectorAll(".incident-item")).toHaveLength(4);
 
-    const actionsSummary = actionsDetails?.querySelector("summary");
+    const actionsSummary = firstActionDetails.querySelector("summary");
     expect(actionsSummary?.tagName).toBe("SUMMARY");
     fireEvent.click(actionsSummary!);
-    expect(actionsDetails?.open).toBe(false);
+    expect(firstActionDetails.open).toBe(false);
     fireEvent.click(actionsSummary!);
-    expect(actionsDetails?.open).toBe(true);
+    expect(firstActionDetails.open).toBe(true);
     expect(within(componentRows[1]!).getAllByText("Actions delay")).toHaveLength(1);
   });
 

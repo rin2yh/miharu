@@ -194,7 +194,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           <div className="empty-panel">「{query}」に一致するサービスはありません。</div>
         )}
         {payload && filteredServices.length > 0 && (
-          <ul className="service-grid">
+          <ul className="service-list">
             {filteredServices.map((service) => (
               <ServiceCard key={service.id} service={service} />
             ))}
@@ -237,8 +237,14 @@ function ServiceCard({ service }: { service: DashboardService }) {
       left.id.localeCompare(right.id)
     );
   });
-  const abnormalComponents = components.filter((component) => isAbnormal(component.status));
-  const healthyComponents = components.filter((component) => !isAbnormal(component.status));
+  // Keep a healthy component visible when it owns an active incident, so each
+  // incident summary remains visible in the initial service list.
+  const visibleComponents = components.filter(
+    (component) => isAbnormal(component.status) || (assigned.get(component.id)?.length ?? 0) > 0,
+  );
+  const healthyComponents = components.filter(
+    (component) => !isAbnormal(component.status) && (assigned.get(component.id)?.length ?? 0) === 0,
+  );
   const healthyComponentsId = `healthy-components-${service.id}`;
 
   return (
@@ -299,14 +305,13 @@ function ServiceCard({ service }: { service: DashboardService }) {
         <section className="component-section" aria-label={`${service.name}のコンポーネント`}>
           <h3>コンポーネント</h3>
           <div className="component-listing">
-            {abnormalComponents.length > 0 && (
+            {visibleComponents.length > 0 && (
               <ul className="component-item-list">
-                {abnormalComponents.map((component) => (
+                {visibleComponents.map((component) => (
                   <ComponentItem
                     key={component.id}
                     component={component}
                     incidents={assigned.get(component.id) ?? []}
-                    expandable
                   />
                 ))}
               </ul>
@@ -334,7 +339,6 @@ function ServiceCard({ service }: { service: DashboardService }) {
                       key={component.id}
                       component={component}
                       incidents={assigned.get(component.id) ?? []}
-                      expandable={false}
                     />
                   ))}
                 </ul>
@@ -353,6 +357,17 @@ function ServiceCard({ service }: { service: DashboardService }) {
           <IncidentList incidents={unassigned} />
         </section>
       )}
+
+      <footer className="service-meta">
+        {service.lastSuccessAt ? (
+          <span>
+            最終取得{" "}
+            <time dateTime={service.lastSuccessAt}>{formatDateTime(service.lastSuccessAt)}</time>
+          </span>
+        ) : (
+          <span>最終取得時刻なし</span>
+        )}
+      </footer>
     </li>
   );
 }
@@ -360,11 +375,9 @@ function ServiceCard({ service }: { service: DashboardService }) {
 function ComponentItem({
   component,
   incidents,
-  expandable,
 }: {
   component: DashboardComponent;
   incidents: DashboardIncident[];
-  expandable: boolean;
 }) {
   const heading = (
     <>
@@ -373,26 +386,13 @@ function ComponentItem({
         <span className="status-pip" aria-hidden="true" />
         {STATUS_LABELS[component.status]}
       </span>
-      {incidents.length > 0 && (
-        <span className="component-incident-count">関連情報 {incidents.length}件</span>
-      )}
     </>
   );
-  const showDisclosure = expandable && incidents.length > 0;
 
   return (
     <li className={`component-item status-${component.status}`}>
-      {showDisclosure ? (
-        <details open={isAbnormal(component.status)}>
-          <summary className="component-row-heading">{heading}</summary>
-          <IncidentList incidents={incidents} />
-        </details>
-      ) : (
-        <>
-          <div className="component-row-heading">{heading}</div>
-          {incidents.length > 0 && <IncidentList incidents={incidents} />}
-        </>
-      )}
+      <div className="component-row-heading">{heading}</div>
+      {incidents.length > 0 && <IncidentList incidents={incidents} />}
     </li>
   );
 }
@@ -402,57 +402,66 @@ function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
     <ul className="incident-list">
       {incidents.map((incident) => (
         <li className="incident-item" key={incident.id}>
-          <div className="incident-topline">
-            <span className={`incident-kind incident-kind-${incident.kind}`}>
-              {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
-            </span>
-            <span className={`incident-state incident-state-${incident.state}`}>
-              {incidentStateLabel(incident.state)}
-            </span>
-            {incident.severityStatus && (
-              <span className={`incident-impact impact-${incident.severityStatus}`}>
-                {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
+          <details>
+            <summary className="incident-summary">
+              <span className="incident-title">{incident.title}</span>
+              <span className={`incident-state incident-state-${incident.state}`}>
+                {incidentStateLabel(incident.state)}
               </span>
-            )}
-          </div>
-          <h4>{incident.title}</h4>
-          {incident.body && <p className="incident-body">{incident.body}</p>}
-          {incident.components.length > 0 && (
-            <div className="component-list" aria-label="公式の影響対象">
-              {incident.components.map((component) => (
-                <span key={component}>{component}</span>
-              ))}
+              <span className="incident-updated">
+                更新{" "}
+                {incident.officialUpdatedAt ? (
+                  <time dateTime={incident.officialUpdatedAt}>
+                    {formatDateTime(incident.officialUpdatedAt)}
+                  </time>
+                ) : (
+                  "時刻不明"
+                )}
+              </span>
+              <span className="incident-disclosure-label">詳細</span>
+            </summary>
+            <div className="incident-detail">
+              <div className="incident-detail-meta">
+                <span className={`incident-kind incident-kind-${incident.kind}`}>
+                  {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
+                </span>
+                {incident.severityStatus && (
+                  <span className={`incident-impact impact-${incident.severityStatus}`}>
+                    {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
+                  </span>
+                )}
+              </div>
+              {incident.body && <p className="incident-body">{incident.body}</p>}
+              {incident.components.length > 0 && (
+                <p className="component-list" aria-label="公式の影響対象">
+                  影響対象: {incident.components.join("、")}
+                </p>
+              )}
+              <div className="incident-times">
+                <span>
+                  公式発生{" "}
+                  {incident.officialCreatedAt ? (
+                    <time dateTime={incident.officialCreatedAt}>
+                      {formatDateTime(incident.officialCreatedAt)}
+                    </time>
+                  ) : (
+                    "時刻不明"
+                  )}
+                </span>
+              </div>
+              {incident.url && (
+                <a
+                  className="incident-official-link"
+                  href={incident.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  公式情報を見る
+                  <ExternalIcon />
+                </a>
+              )}
             </div>
-          )}
-          <div className="incident-times">
-            {incident.officialCreatedAt && (
-              <span>
-                公式発生{" "}
-                <time dateTime={incident.officialCreatedAt}>
-                  {formatDateTime(incident.officialCreatedAt)}
-                </time>
-              </span>
-            )}
-            {incident.officialUpdatedAt && (
-              <span>
-                公式更新{" "}
-                <time dateTime={incident.officialUpdatedAt}>
-                  {formatDateTime(incident.officialUpdatedAt)}
-                </time>
-              </span>
-            )}
-          </div>
-          {incident.url && (
-            <a
-              className="incident-official-link"
-              href={incident.url}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              公式情報を見る
-              <ExternalIcon />
-            </a>
-          )}
+          </details>
         </li>
       ))}
     </ul>
