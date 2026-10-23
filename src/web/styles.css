@@ -951,6 +951,7 @@ a {
 
 .component-summary-name {
   min-width: 0;
+  margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
 }

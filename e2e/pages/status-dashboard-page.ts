@@ -22,7 +22,7 @@ export class StatusDashboardPage {
   }
 
   serviceCard(name: string): Locator {
-    return this.page.getByRole("listitem").filter({ has: this.serviceLink(name) });
+    return this.page.getByRole("listitem", { name: `${name}のサービス状況` });
   }
 
   recentUpdates(): Locator {

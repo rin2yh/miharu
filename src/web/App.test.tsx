@@ -87,30 +87,37 @@ describe("dashboard", () => {
     const slackLink = screen.getByRole("link", { name: slackLinkName });
     expect(slackLink).toHaveAttribute("href", "https://slack-status.com/");
     expect(slackLink).toHaveAttribute("target", "_blank");
-    const slackCard = slackLink.closest("li");
-    expect(slackCard).not.toBeNull();
+    const slackCard = screen.getByRole("listitem", { name: "Slackのサービス状況" });
     expect(within(slackCard!).getAllByRole("link", { name: /公式ステータスページ/ })).toHaveLength(
       1,
     );
     expect(within(slackCard!).queryByRole("link", { name: "公式" })).not.toBeInTheDocument();
-    expect(slackLink.closest(".service-card-title")?.querySelector(".status-pill")).not.toBeNull();
-    expect(within(slackCard!).getByText("正常")).toBeInTheDocument();
+    expect(within(slackCard!).getByLabelText("公式全体ステータス: 正常")).toBeInTheDocument();
     expect(
       within(slackCard!).queryByText("独立したコンポーネント状態は公式APIから提供されていません。"),
     ).not.toBeInTheDocument();
     expect(
       within(slackCard!).queryByRole("button", { name: /正常なコンポーネント/ }),
     ).not.toBeInTheDocument();
-    const slackIncident = slackCard!.querySelector(".incident-item")!;
-    const slackIncidentDetails = slackIncident.querySelector("details")!;
-    expect(slackIncidentDetails).not.toHaveAttribute("open");
+    const slackIncident = within(slackCard!).getByRole("listitem", {
+      name: "Messaging delays for some users",
+    });
+    const slackIncidentTitle = within(slackIncident).getByText("Messaging delays for some users");
     expect(within(slackIncident).getByText("調査中")).toBeInTheDocument();
-    expect(slackIncident.querySelector('time[datetime="2026-10-23T04:55:00.000Z"]')).not.toBeNull();
+    expect(
+      within(slackIncident)
+        .getAllByRole("time")
+        .find((time) => time.getAttribute("datetime") === "2026-10-23T04:55:00.000Z"),
+    ).toBeInTheDocument();
     expect(within(slackIncident).getByText("We are investigating.")).not.toBeVisible();
-    fireEvent.click(slackIncident.querySelector("summary")!);
+    fireEvent.click(slackIncidentTitle);
     expect(within(slackIncident).getByText("障害の重要度: 部分障害")).toBeInTheDocument();
     expect(within(slackIncident).getByText("We are investigating.")).toBeInTheDocument();
-    expect(slackIncident.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]')).not.toBeNull();
+    expect(
+      within(slackIncident)
+        .getAllByRole("time")
+        .map((time) => time.getAttribute("datetime")),
+    ).toContain("2026-10-23T04:50:00.000Z");
   });
 
   it("keeps incidents visible under one component and expands their details independently", async () => {
@@ -146,71 +153,77 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([github])} />);
 
-    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
-    expect(card).not.toBeNull();
-    expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain("正常");
-    const componentRows = [
-      ...card!.querySelectorAll<HTMLElement>(
-        ".component-listing > .component-item-list:not([hidden]) > .component-item",
-      ),
-    ];
-    expect(
-      componentRows.map((row) => row.querySelector(".component-summary-name")?.textContent),
-    ).toEqual(["Issues", "Actions", "Web", "Packages"]);
-
-    const visibleList = card!.querySelector(".component-listing > .component-item-list");
-    const healthyList = card!.querySelector("#healthy-components-github");
-    expect(visibleList?.querySelectorAll(".component-item")).toHaveLength(4);
+    await screen.findByRole("link", { name: githubLinkName });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
+    expect(within(card!).getByLabelText("公式全体ステータス: 正常")).toBeInTheDocument();
+    const visibleList = within(card!).getByRole("list", { name: "表示中のコンポーネント" });
+    const healthyToggle = within(card!).getByRole("button", {
+      name: "正常なコンポーネント 1件を表示",
+    });
+    const healthyList = document.getElementById(healthyToggle.getAttribute("aria-controls")!)!;
+    const componentHeadings = within(visibleList).getAllByRole("heading", { level: 4 });
+    expect(componentHeadings.map((heading) => heading.textContent)).toEqual([
+      "Issues",
+      "Actions",
+      "Web",
+      "Packages",
+    ]);
+    expect(componentHeadings).toHaveLength(4);
     expect(healthyList).toHaveAttribute("hidden");
-    expect(componentRows[0]?.querySelector(":scope > details")).toBeNull();
-    expect(componentRows[1]?.querySelector(":scope > details")).toBeNull();
-    const actionIncidents = componentRows[1]!.querySelectorAll<HTMLElement>(".incident-item");
-    expect(actionIncidents).toHaveLength(2);
-    const firstActionIncident = actionIncidents[0]!;
-    expect(within(firstActionIncident).getByText("Actions delay")).toBeInTheDocument();
-    expect(within(componentRows[1]!).getByText("Workflow queue delay")).toBeInTheDocument();
+    const actionsRow = within(visibleList).getByRole("listitem", {
+      name: "Actionsコンポーネント",
+    });
+    expect(within(actionsRow).queryByRole("button", { name: "Actions", exact: true })).toBeNull();
+    expect(within(actionsRow).getAllByText("詳細", { exact: true })).toHaveLength(2);
+    const firstActionIncident = within(actionsRow).getByRole("listitem", { name: "Actions delay" });
+    const firstActionTitle = within(firstActionIncident).getByText("Actions delay");
+    expect(within(actionsRow).getByText("Workflow queue delay")).toBeVisible();
     expect(within(firstActionIncident).getByText("調査中")).toBeInTheDocument();
-    const firstActionDetails = firstActionIncident.querySelector("details")!;
-    expect(firstActionDetails).not.toHaveAttribute("open");
     expect(within(firstActionIncident).getByText("We are investigating.")).not.toBeVisible();
-    fireEvent.click(firstActionIncident.querySelector("summary")!);
+    fireEvent.click(firstActionTitle);
     expect(within(firstActionIncident).getByText("We are investigating.")).toBeInTheDocument();
     expect(
       within(firstActionIncident).getByRole("link", { name: "公式情報を見る" }),
     ).toHaveAttribute("href", "https://www.githubstatus.com/incidents/incident-1");
     expect(within(firstActionIncident).getByText(/公式発生/)).toBeInTheDocument();
+    const actionTimes = within(firstActionIncident)
+      .getAllByRole("time")
+      .map((time) => time.getAttribute("datetime"));
+    expect(actionTimes).toContain("2026-10-23T04:50:00.000Z");
+    expect(actionTimes).toContain("2026-10-23T04:55:00.000Z");
+    const directIncidentRegion = within(card!).getByRole("region", {
+      name: "GitHubの障害・メンテナンス情報",
+    });
     expect(
-      firstActionIncident.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]'),
-    ).not.toBeNull();
+      within(directIncidentRegion).getByRole("listitem", { name: "Unmatched incident" }),
+    ).toBeVisible();
     expect(
-      firstActionIncident.querySelector('time[datetime="2026-10-23T04:55:00.000Z"]'),
-    ).not.toBeNull();
-    expect(screen.getAllByText("Unmatched incident")).toHaveLength(1);
-    expect(screen.getByText("その他の障害・メンテナンス情報")).toBeInTheDocument();
-    expect(card!.querySelectorAll(".incident-item")).toHaveLength(4);
+      within(card!).getByRole("heading", { name: "その他の障害・メンテナンス情報" }),
+    ).toBeVisible();
+    expect(within(card!).getAllByText("詳細", { exact: true })).toHaveLength(4);
 
-    fireEvent.click(screen.getByRole("button", { name: "正常なコンポーネント 1件を表示" }));
+    fireEvent.click(healthyToggle);
     expect(healthyList).not.toHaveAttribute("hidden");
     expect(screen.getByRole("button", { name: "正常なコンポーネントを非表示" })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
-    expect(within(componentRows[3]!).getByText("Package notice")).toBeInTheDocument();
-    expect(within(card!).getAllByText("Package notice")).toHaveLength(1);
+    const packageRow = within(visibleList).getByRole("listitem", {
+      name: "Packagesコンポーネント",
+    });
+    expect(within(packageRow).getByText("Package notice")).toBeInTheDocument();
+    expect(within(card!).getAllByText("Package notice", { exact: true })).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "正常なコンポーネントを非表示" }));
     expect(healthyList).toHaveAttribute("hidden");
-    fireEvent.click(screen.getByRole("button", { name: "正常なコンポーネント 1件を表示" }));
+    fireEvent.click(healthyToggle);
     expect(within(card!).getAllByText("Package notice")).toHaveLength(1);
-    expect(card!.querySelectorAll(".incident-item")).toHaveLength(4);
-
-    const actionsSummary = firstActionDetails.querySelector("summary");
-    expect(actionsSummary?.tagName).toBe("SUMMARY");
-    fireEvent.click(actionsSummary!);
-    expect(firstActionDetails.open).toBe(false);
-    fireEvent.click(actionsSummary!);
-    expect(firstActionDetails.open).toBe(true);
-    expect(within(componentRows[1]!).getAllByText("Actions delay")).toHaveLength(1);
+    expect(within(card!).getAllByText("詳細", { exact: true })).toHaveLength(4);
+    fireEvent.click(firstActionTitle);
+    expect(within(firstActionIncident).getByText("We are investigating.")).not.toBeVisible();
+    fireEvent.click(firstActionTitle);
+    expect(within(firstActionIncident).getByText("We are investigating.")).toBeVisible();
+    expect(within(actionsRow).getAllByText("Actions delay", { exact: true })).toHaveLength(1);
   });
 
   it("hides every healthy component initially and toggles the whole list", async () => {
@@ -219,16 +232,24 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([github])} />);
 
-    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
-    const healthyList = card!.querySelector("#healthy-components-github");
+    await screen.findByRole("link", { name: githubLinkName });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
+    const healthyToggle = within(card!).getByRole("button", {
+      name: "正常なコンポーネント 2件を表示",
+    });
+    const healthyList = document.getElementById(healthyToggle.getAttribute("aria-controls")!)!;
     expect(healthyList).toHaveAttribute("hidden");
     expect(
       within(card!).getByRole("button", { name: "正常なコンポーネント 2件を表示" }),
     ).toHaveAttribute("aria-expanded", "false");
-    expect(healthyList?.querySelectorAll("details")).toHaveLength(0);
-    expect(within(healthyList as HTMLElement).getByText("API Requests")).toBeInTheDocument();
+    expect(
+      within(healthyList).queryByRole("button", { name: /詳細/, hidden: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(healthyList).getByRole("heading", { name: "API Requests", hidden: true }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "正常なコンポーネント 2件を表示" }));
+    fireEvent.click(healthyToggle);
     expect(healthyList).not.toHaveAttribute("hidden");
     expect(screen.getByText("API Requests")).toBeInTheDocument();
     expect(screen.getByText("Git Operations")).toBeInTheDocument();
@@ -247,14 +268,17 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([github])} />);
 
-    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
-    const visibleList = card!.querySelector(".component-listing > .component-item-list");
-    expect(visibleList?.querySelectorAll(".component-item")).toHaveLength(3);
-    expect(within(visibleList as HTMLElement).getByText("API Requests")).toBeInTheDocument();
-    expect(within(visibleList as HTMLElement).getByText("Actions")).toBeInTheDocument();
-    expect(within(visibleList as HTMLElement).getByText("Web")).toBeInTheDocument();
-    expect(within(visibleList as HTMLElement).queryByRole("button")).not.toBeInTheDocument();
-    expect(visibleList?.querySelectorAll("details")).toHaveLength(0);
+    await screen.findByRole("link", { name: githubLinkName });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
+    const visibleList = within(card!).getByRole("list", { name: "表示中のコンポーネント" });
+    const componentHeadings = within(visibleList).getAllByRole("heading", { level: 4 });
+    expect(componentHeadings.map((heading) => heading.textContent)).toEqual([
+      "API Requests",
+      "Actions",
+      "Web",
+    ]);
+    expect(within(visibleList).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(visibleList).queryByRole("heading", { level: 5 })).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "正常なコンポーネント 1件を表示" }),
     ).toBeInTheDocument();
@@ -276,12 +300,10 @@ describe("dashboard", () => {
     });
     render(<App load={async () => payload([affected])} />);
 
-    const card = (await screen.findByRole("link", { name: githubLinkName })).closest("li");
-    expect(card).not.toBeNull();
+    await screen.findByRole("link", { name: githubLinkName });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     expect(within(card!).getAllByText("全面障害")).toHaveLength(2);
-    expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain(
-      "全面障害",
-    );
+    expect(within(card!).getByLabelText("公式全体ステータス: 全面障害")).toBeInTheDocument();
     expect(within(card!).getByText("Actions")).toBeInTheDocument();
   });
 

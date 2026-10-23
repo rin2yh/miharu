@@ -19,19 +19,18 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
     const card = statusDashboard.serviceCard("GitHub");
     await expect(card.getByText("部分障害", { exact: true })).toHaveCount(2);
     await expect(card.getByText("Actionsで一部のジョブ開始が遅延しています。")).toBeVisible();
-    const incident = card.locator(".incident-item details");
-    const summary = incident.locator("summary");
-    await expect(summary).toContainText(incidentTitle);
+    const summary = card.locator("summary").filter({ hasText: incidentTitle });
+    const incidentBody = card.getByText(
+      "We are investigating delayed job starts for some GitHub Actions workflows.",
+    );
+    await expect(summary).toBeVisible();
     await expect(summary).toContainText("調査中");
     await expect(summary).toContainText("更新");
-    expect(await incident.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+    await expect(incidentBody).not.toBeVisible();
     await summary.focus();
     await expect(summary).toBeFocused();
     await summary.press("Enter");
-    expect(await incident.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(true);
-    await expect(
-      card.getByText("We are investigating delayed job starts for some GitHub Actions workflows."),
-    ).toBeVisible();
+    await expect(incidentBody).toBeVisible();
     await expect(card.getByRole("link", { name: "公式情報を見る" })).toHaveAttribute(
       "href",
       incidentUrl,
@@ -57,12 +56,14 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
   await page.emulateMedia({ colorScheme: "dark" });
   await statusDashboard.goto();
 
-  const serviceList = page.locator(".service-list");
+  const serviceList = page.getByRole("list", { name: "サービス一覧" });
   await expect(serviceList).toBeVisible();
   await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-  expect(await serviceList.evaluate((element) => getComputedStyle(element).flexDirection)).toBe(
-    "column",
-  );
+  const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
+  const slackCard = await statusDashboard.serviceCard("Slack").boundingBox();
+  expect(githubCard).not.toBeNull();
+  expect(slackCard).not.toBeNull();
+  expect(slackCard!.y).toBeGreaterThan(githubCard!.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
