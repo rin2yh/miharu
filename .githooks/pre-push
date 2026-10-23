@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -eu
+
+printf '%s\n' 'Running Playwright E2E tests before push...'
+pnpm e2e
