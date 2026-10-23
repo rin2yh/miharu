@@ -1,0 +1,294 @@
+import type {
+  DashboardRows,
+  IncidentEventRow,
+  IncidentRow,
+  ServiceStatusRow,
+} from "../../db/schema";
+import {
+  INCIDENT_HISTORY_DISPLAY_LIMIT,
+  INCIDENT_HISTORY_RETENTION_DAYS,
+  type ServiceConfig,
+} from "./config/services";
+import type { ProviderSnapshot } from "../domain";
+import {
+  reconcileIncidents,
+  type IncidentEventRecord,
+  type IncidentRecord,
+} from "../domain/reconcile";
+import { failureMetadata } from "../domain/failure";
+
+export interface CollectionStore {
+  saveSuccess(
+    service: ServiceConfig,
+    snapshot: ProviderSnapshot,
+    observedAt: string,
+  ): Promise<void>;
+  saveFailure(service: ServiceConfig, observedAt: string, errorCode: string): Promise<void>;
+}
+
+export interface DashboardStore extends CollectionStore {
+  getDashboardRows(): Promise<DashboardRows>;
+  pruneHistory(now: Date): Promise<void>;
+}
+
+export function createD1Store(database: D1Database): DashboardStore {
+  return {
+    async saveSuccess(service, snapshot, observedAt) {
+      const existing = await database
+        .prepare("SELECT * FROM incidents WHERE service_id = ?")
+        .bind(service.id)
+        .all<IncidentRow>();
+      const reconciled = reconcileIncidents(
+        service.id,
+        existing.results.map(toIncidentRecord),
+        snapshot.incidents,
+        observedAt,
+      );
+
+      await database.batch([
+        database
+          .prepare(
+            `INSERT INTO service_status (
+              service_id, status, source_status, summary, last_checked_at,
+              last_success_at, last_error_at, error_code
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+            ON CONFLICT(service_id) DO UPDATE SET
+              status = excluded.status,
+              source_status = excluded.source_status,
+              summary = excluded.summary,
+              last_checked_at = excluded.last_checked_at,
+              last_success_at = excluded.last_success_at,
+              last_error_at = NULL,
+              error_code = NULL
+            WHERE service_status.last_checked_at IS NULL
+              OR service_status.last_checked_at <= excluded.last_checked_at`,
+          )
+          .bind(
+            service.id,
+            snapshot.status,
+            snapshot.sourceStatus,
+            snapshot.summary,
+            observedAt,
+            observedAt,
+          ),
+      ]);
+
+      const eventsById = new Map(reconciled.events.map((event) => [event.id, event]));
+      const groups = reconciled.changedIncidents.map((record) => {
+        const eventId = JSON.stringify([record.serviceId, record.id, record.revision]);
+        const event = eventsById.get(eventId);
+        return [incidentUpsert(database, record), ...(event ? [eventInsert(database, event)] : [])];
+      });
+      await runBatches(database, groups);
+    },
+
+    async saveFailure(service, observedAt, errorCode) {
+      const failure = failureMetadata(observedAt, errorCode);
+      await database
+        .prepare(
+          `INSERT INTO service_status (
+            service_id, status, last_checked_at, last_error_at, error_code
+          ) VALUES (?, 'unknown', ?, ?, ?)
+          ON CONFLICT(service_id) DO UPDATE SET
+            last_checked_at = excluded.last_checked_at,
+            last_error_at = excluded.last_error_at,
+            error_code = excluded.error_code
+          WHERE service_status.last_checked_at IS NULL
+            OR service_status.last_checked_at <= excluded.last_checked_at`,
+        )
+        .bind(service.id, failure.lastCheckedAt, failure.lastErrorAt, failure.errorCode)
+        .run();
+    },
+
+    async getDashboardRows() {
+      const [statuses, active, events] = await Promise.all([
+        database
+          .prepare(
+            `SELECT
+              service_id AS serviceId, status, source_status AS sourceStatus,
+              summary, last_checked_at AS lastCheckedAt, last_success_at AS lastSuccessAt,
+              last_error_at AS lastErrorAt, error_code AS errorCode
+            FROM service_status`,
+          )
+          .all<ServiceStatusRow>(),
+        database
+          .prepare(
+            `SELECT
+              service_id AS serviceId, id, title, body, kind, state,
+              source_status AS sourceStatus, source_type AS sourceType,
+              source_impact AS sourceImpact, severity_status AS severityStatus,
+              components_json AS componentsJson, official_created_at AS officialCreatedAt,
+              official_updated_at AS officialUpdatedAt, url, active,
+              first_seen_at AS firstSeenAt, resolved_detected_at AS resolvedDetectedAt,
+              fingerprint, revision, last_observed_at AS lastObservedAt
+            FROM incidents
+            WHERE active = 1
+            ORDER BY service_id, official_created_at DESC`,
+          )
+          .all<IncidentRow>(),
+        database
+          .prepare(
+            `SELECT
+              id, service_id AS serviceId, incident_id AS incidentId, title, body,
+              kind, event_kind AS eventKind, source_status AS sourceStatus,
+              severity_status AS severityStatus, components_json AS componentsJson,
+              detected_at AS detectedAt, official_event_at AS officialEventAt, url
+            FROM incident_events
+            ORDER BY detected_at DESC
+            LIMIT ?`,
+          )
+          .bind(INCIDENT_HISTORY_DISPLAY_LIMIT)
+          .all<IncidentEventRow>(),
+      ]);
+      return {
+        statusRows: statuses.results,
+        activeRows: active.results,
+        eventRows: events.results,
+      };
+    },
+
+    async pruneHistory(now) {
+      const cutoff = new Date(
+        now.getTime() - INCIDENT_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1_000,
+      ).toISOString();
+      await database.batch([
+        database.prepare("DELETE FROM incident_events WHERE detected_at < ?").bind(cutoff),
+        database
+          .prepare("DELETE FROM incidents WHERE active = 0 AND resolved_detected_at < ?")
+          .bind(cutoff),
+      ]);
+    },
+  };
+}
+
+function incidentUpsert(database: D1Database, record: IncidentRecord): D1PreparedStatement {
+  return database
+    .prepare(
+      `INSERT INTO incidents (
+        service_id, id, title, body, kind, state, source_status, source_type,
+        source_impact, severity_status, components_json, official_created_at,
+        official_updated_at, url, active, first_seen_at, resolved_detected_at,
+        fingerprint, revision, last_observed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(service_id, id) DO UPDATE SET
+        title = excluded.title,
+        body = excluded.body,
+        kind = excluded.kind,
+        state = excluded.state,
+        source_status = excluded.source_status,
+        source_type = excluded.source_type,
+        source_impact = excluded.source_impact,
+        severity_status = excluded.severity_status,
+        components_json = excluded.components_json,
+        official_created_at = excluded.official_created_at,
+        official_updated_at = excluded.official_updated_at,
+        url = excluded.url,
+        active = excluded.active,
+        resolved_detected_at = excluded.resolved_detected_at,
+        fingerprint = excluded.fingerprint,
+        revision = excluded.revision,
+        last_observed_at = excluded.last_observed_at
+      WHERE incidents.last_observed_at <= excluded.last_observed_at`,
+    )
+    .bind(
+      record.serviceId,
+      record.id,
+      record.title,
+      record.body,
+      record.kind,
+      record.state,
+      record.sourceStatus,
+      record.sourceType,
+      record.sourceImpact,
+      record.severityStatus,
+      record.componentsJson,
+      record.officialCreatedAt,
+      record.officialUpdatedAt,
+      record.url,
+      Number(record.active),
+      record.firstSeenAt,
+      record.resolvedDetectedAt,
+      record.fingerprint,
+      record.revision,
+      record.lastObservedAt,
+    );
+}
+
+function eventInsert(database: D1Database, event: IncidentEventRecord): D1PreparedStatement {
+  return database
+    .prepare(
+      `INSERT INTO incident_events (
+        id, service_id, incident_id, kind, event_kind, title, body, state,
+        source_status, source_type, source_impact, severity_status,
+        components_json, url, official_event_at, detected_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO NOTHING`,
+    )
+    .bind(
+      event.id,
+      event.serviceId,
+      event.incidentId,
+      event.kind,
+      event.eventKind,
+      event.title,
+      event.body,
+      event.state,
+      event.sourceStatus,
+      event.sourceType,
+      event.sourceImpact,
+      event.severityStatus,
+      event.componentsJson,
+      event.url,
+      event.officialEventAt,
+      event.detectedAt,
+    );
+}
+
+async function runBatches(database: D1Database, groups: D1PreparedStatement[][]): Promise<void> {
+  let batch: D1PreparedStatement[] = [];
+  for (const group of groups) {
+    if (batch.length + group.length > 100) {
+      if (batch.length > 0) await database.batch(batch);
+      batch = [];
+    }
+    batch.push(...group);
+  }
+  if (batch.length > 0) await database.batch(batch);
+}
+
+function toIncidentRecord(row: IncidentRow): IncidentRecord {
+  return {
+    serviceId: row.serviceId,
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    kind: row.kind,
+    state: row.state,
+    sourceStatus: row.sourceStatus,
+    sourceType: row.sourceType,
+    sourceImpact: row.sourceImpact,
+    severityStatus: row.severityStatus,
+    components: parseComponents(row.componentsJson),
+    componentsJson: row.componentsJson,
+    officialCreatedAt: row.officialCreatedAt,
+    officialUpdatedAt: row.officialUpdatedAt,
+    url: row.url,
+    active: Boolean(row.active),
+    firstSeenAt: row.firstSeenAt,
+    resolvedDetectedAt: row.resolvedDetectedAt,
+    fingerprint: row.fingerprint,
+    revision: row.revision,
+    lastObservedAt: row.lastObservedAt,
+  };
+}
+
+export function parseComponents(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
