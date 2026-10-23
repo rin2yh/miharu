@@ -21,9 +21,9 @@ export type ServiceConfig = {
 );
 
 // Service changes are intentionally managed in code and take effect on deploy.
-export const SERVICES: ServiceConfig[] = [
+export const SERVICES = [
   {
-    id: "slack",
+    id: "slack" as const,
     name: "Slack",
     provider: "slack",
     currentUrl: "https://slack-status.com/api/v2.0.0/current",
@@ -31,7 +31,7 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["slack-status.com", "www.slack-status.com"],
   },
   {
-    id: "notion",
+    id: "notion" as const,
     name: "Notion",
     provider: "statuspage",
     summaryUrl: "https://www.notion-status.com/api/v2/summary.json",
@@ -39,7 +39,7 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["status.notion.so", "www.notion-status.com"],
   },
   {
-    id: "github",
+    id: "github" as const,
     name: "GitHub",
     provider: "statuspage",
     summaryUrl: "https://www.githubstatus.com/api/v2/summary.json",
@@ -48,7 +48,7 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["www.githubstatus.com", "githubstatus.com"],
   },
   {
-    id: "cloudflare",
+    id: "cloudflare" as const,
     name: "Cloudflare",
     provider: "statuspage",
     summaryUrl: "https://www.cloudflarestatus.com/api/v2/summary.json",
@@ -57,7 +57,7 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["www.cloudflarestatus.com", "cloudflarestatus.com"],
   },
   {
-    id: "claude",
+    id: "claude" as const,
     name: "Claude",
     provider: "statuspage",
     summaryUrl: "https://status.claude.com/api/v2/summary.json",
@@ -65,7 +65,7 @@ export const SERVICES: ServiceConfig[] = [
     allowedLinkHosts: ["status.claude.com"],
   },
   {
-    id: "chatgpt",
+    id: "chatgpt" as const,
     name: "ChatGPT",
     provider: "openai-chatgpt",
     summaryUrl: "https://status.openai.com/api/v2/summary.json",
@@ -88,7 +88,7 @@ export const SERVICES: ServiceConfig[] = [
       { id: "01JSYVYQSWMJ9QG35XHP08BHA7", name: "Deep Research" },
     ],
   },
-];
+] satisfies ServiceConfig[];
 
 export const COLLECTION_TIMEOUT_MS = 8_000;
 export const FRESHNESS_WARNING_SECONDS = 180;
