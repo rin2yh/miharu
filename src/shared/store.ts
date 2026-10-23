@@ -36,7 +36,32 @@ export function createD1Store(database: D1Database): DashboardStore {
   return {
     async saveSuccess(service, snapshot, observedAt) {
       const existing = await database
-        .prepare("SELECT * FROM incidents WHERE service_id = ?")
+        .prepare(`
+    SELECT
+      service_id AS serviceId,
+      id,
+      title,
+      body,
+      kind,
+      state,
+      source_status AS sourceStatus,
+      source_type AS sourceType,
+      source_impact AS sourceImpact,
+      severity_status AS severityStatus,
+      component_ids_json AS componentIdsJson,
+      components_json AS componentsJson,
+      official_created_at AS officialCreatedAt,
+      official_updated_at AS officialUpdatedAt,
+      url,
+      active,
+      first_seen_at AS firstSeenAt,
+      resolved_detected_at AS resolvedDetectedAt,
+      fingerprint,
+      revision,
+      last_observed_at AS lastObservedAt
+    FROM incidents
+    WHERE service_id = ?
+  `)
         .bind(service.id)
         .all<IncidentRow>();
       const reconciled = reconcileIncidents(

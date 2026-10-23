@@ -44,7 +44,11 @@ export async function collectAll(
   );
   results.forEach((result, index) => {
     if (result.status === "rejected") {
-      console.error("Status collection persistence failed", services[index]?.id ?? "unknown");
+      console.error(
+        "Status collection persistence failed",
+        services[index]?.id ?? "unknown",
+        result.reason,
+      );
     }
   });
 }
