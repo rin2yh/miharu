@@ -27,6 +27,8 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
     })) as FetchLike;
 }
 
+const github = getService("github", "statuspage");
+const notion = getService("notion", "statuspage");
 const cloudflare = getService("cloudflare", "statuspage");
 
 type CloudflareSummaryFixture = {
@@ -70,7 +72,157 @@ function oversizedCloudflareSummary(serviceCount: number) {
   };
 }
 
-describe("Cloudflare Statuspage provider", () => {
+function fetchIncidentWithFallbackTitle(title: string) {
+  return fetchStatuspageSnapshot(
+    github,
+    abortSignal,
+    jsonFetcher({
+      status: { indicator: "none" },
+      components: [],
+      incidents: [{ name: title, status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
+      scheduled_maintenances: [],
+    }),
+  );
+}
+
+describe("Statuspage provider", () => {
+  it("normalizes overall status and keeps incident impact separate", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      github,
+      abortSignal,
+      jsonFetcher({
+        status: { indicator: "major", description: "Partial System Outage" },
+        components: [{ id: "actions", name: "Actions", status: "partial_outage" }],
+        incidents: [
+          {
+            id: "inc-1",
+            name: "Actions are delayed",
+            status: "monitoring",
+            impact: "critical",
+            created_at: "2026-10-23T01:00:00Z",
+            updated_at: "2026-10-23T01:14:00Z",
+            component_ids: ["actions"],
+            incident_updates: [
+              {
+                body: "Mitigation is in place.<br />Next line.",
+                created_at: "2026-10-23T01:14:00Z",
+                affected_components: [{ name: "Actions" }],
+              },
+            ],
+            url: "https://www.githubstatus.com/incidents/inc-1",
+          },
+        ],
+        scheduled_maintenances: [],
+      }),
+    );
+
+    expect(snapshot.status).toBe("partial_outage");
+    expect(snapshot.sourceStatus).toBe("major");
+    expect(snapshot.components).toEqual([
+      {
+        id: "actions",
+        name: "Actions",
+        status: "partial_outage",
+        sourceStatus: "partial_outage",
+      },
+    ]);
+    expect(snapshot.incidents).toHaveLength(1);
+    expect(snapshot.incidents[0]).toMatchObject({
+      id: "inc-1",
+      state: "monitoring",
+      active: true,
+      sourceImpact: "critical",
+      severityStatus: "major_outage",
+      body: "Mitigation is in place.\nNext line.",
+      componentIds: ["actions"],
+      components: ["Actions"],
+      url: "https://www.githubstatus.com/incidents/inc-1",
+    });
+  });
+
+  it("accepts Notion's current Statuspage-compatible summary without a maintenance list", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      notion,
+      abortSignal,
+      jsonFetcher({
+        page: { name: "Notion" },
+        status: { indicator: "none", description: "All Systems Operational" },
+        components: [],
+        incidents: [
+          {
+            id: "notion-incident",
+            name: "Users unable to access Notion",
+            status: "monitoring",
+            impact: "critical",
+            created_at: "2026-10-23T03:38:19Z",
+            incident_updates: [
+              { body: "Service is recovering.", created_at: "2026-10-23T04:01:17Z" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.components).toEqual([]);
+    expect(snapshot.incidents[0]).toMatchObject({
+      officialUpdatedAt: "2026-10-23T04:01:17.000Z",
+      severityStatus: "major_outage",
+      active: true,
+      componentIds: [],
+    });
+  });
+
+  it("does not interpret a missing GitHub maintenance list as an empty list", async () => {
+    await expect(
+      fetchStatuspageSnapshot(
+        github,
+        abortSignal,
+        jsonFetcher({
+          status: { indicator: "none" },
+          components: [],
+          incidents: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_payload" });
+  });
+
+  it("uses a stable fallback ID when an incident has no official ID", async () => {
+    const payload = {
+      status: { indicator: "none" },
+      components: [],
+      incidents: [{ name: "A title", status: "investigating", created_at: "2026-10-23T00:00:00Z" }],
+      scheduled_maintenances: [],
+    };
+    const first = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
+    const second = await fetchStatuspageSnapshot(github, abortSignal, jsonFetcher(payload));
+    expect(first.incidents[0]?.id).toMatch(/^generated_/);
+    expect(first.incidents[0]?.id).toBe(second.incidents[0]?.id);
+  });
+
+  it("keeps a fallback ID when an incident title changes", async () => {
+    const first = await fetchIncidentWithFallbackTitle("A title");
+    const updated = await fetchIncidentWithFallbackTitle("A revised title");
+    expect(first.incidents[0]?.id).toBe(updated.incidents[0]?.id);
+  });
+
+  it("rejects an invalid API shape so existing incidents are not mistaken as resolved", async () => {
+    await expect(
+      fetchStatuspageSnapshot(
+        github,
+        abortSignal,
+        jsonFetcher({
+          status: { indicator: "none" },
+          components: [],
+          incidents: "not-an-array",
+          scheduled_maintenances: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_payload" });
+  });
+});
+
+describe("Cloudflare", () => {
   it.each([
     {
       scenario: "the captured official summary",
@@ -203,7 +355,7 @@ describe("Cloudflare Statuspage provider", () => {
     });
   });
 
-  it("checks the component limit after Cloudflare's group filter", async () => {
+  it("checks the component limit after the group filter", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       cloudflare,
       abortSignal,
