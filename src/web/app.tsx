@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
@@ -11,7 +11,8 @@ import { servicePriority } from "./status-presentation";
 
 type DashboardLoader = () => Promise<DashboardPayload>;
 
-export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
+export function App({ load: providedLoad }: { load?: DashboardLoader }) {
+  const load = providedLoad ?? fetchDashboard;
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [query, setQuery] = useState("");
   const [locationSearch, setLocationSearch] = useState(() => window.location.search);
@@ -28,7 +29,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     return () => window.removeEventListener("popstate", syncSelectionFromUrl);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -37,19 +38,15 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
       setLoadError(false);
     } catch {
       setLoadError(true);
-    } finally {
-      inFlight.current = false;
     }
-  }, [load]);
+    inFlight.current = false;
+  };
 
   const refreshManually = async () => {
     if (inFlight.current) return;
     setRefreshing(true);
-    try {
-      await refresh();
-    } finally {
-      setRefreshing(false);
-    }
+    await refresh();
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -80,38 +77,30 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     };
   }, [load]);
 
-  const orderedServices = useMemo(() => {
-    const services = [...(payload?.services ?? [])];
-    services.sort((left, right) => {
-      const incidentDifference =
-        Number(right.incidents.length > 0) - Number(left.incidents.length > 0);
-      const priorityDifference = servicePriority(right) - servicePriority(left);
-      return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
-    });
-    return services;
-  }, [payload]);
+  const orderedServices = [...(payload?.services ?? [])];
+  orderedServices.sort((left, right) => {
+    const incidentDifference =
+      Number(right.incidents.length > 0) - Number(left.incidents.length > 0);
+    const priorityDifference = servicePriority(right) - servicePriority(left);
+    return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
+  });
 
-  const selectedServiceIds = useMemo(() => getSelectedServiceIds(locationSearch), [locationSearch]);
-  const activeServiceIds = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds]);
-
-  const filteredServices = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("ja");
-    return orderedServices.filter(
-      (service) =>
-        activeServiceIds.has(service.id) &&
-        (!needle || service.name.toLocaleLowerCase("ja").includes(needle)),
-    );
-  }, [activeServiceIds, orderedServices, query]);
+  const selectedServiceIds = getSelectedServiceIds(locationSearch);
+  const activeServiceIds = new Set(selectedServiceIds);
+  const needle = query.trim().toLocaleLowerCase("ja");
+  const filteredServices = orderedServices.filter(
+    (service) =>
+      activeServiceIds.has(service.id) &&
+      (!needle || service.name.toLocaleLowerCase("ja").includes(needle)),
+  );
 
   const visibleServiceIds = new Set(filteredServices.map((service) => service.id));
   const filteredRecentEvents = (payload?.recentEvents ?? []).filter((event) =>
     visibleServiceIds.has(event.serviceId),
   );
-  const shareUrl = useMemo(() => {
-    const url = new URL(window.location.href);
-    url.search = locationSearch;
-    return url.toString();
-  }, [locationSearch]);
+  const shareUrlObject = new URL(window.location.href);
+  shareUrlObject.search = locationSearch;
+  const shareUrl = shareUrlObject.toString();
 
   const applyServiceSelection = (selectedIds: string[]) => {
     if (selectedIds.length === 0) return;
