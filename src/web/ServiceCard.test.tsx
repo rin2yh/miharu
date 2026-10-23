@@ -182,10 +182,7 @@ describe("component lists", () => {
     const showButton = within(card).getByRole("button", {
       name: `正常なコンポーネント ${count}件を表示`,
     });
-    const healthyList = within(card).getByRole("list", {
-      name: "正常なコンポーネント",
-      hidden: true,
-    });
+    const healthyList = document.getElementById(showButton.getAttribute("aria-controls")!)!;
     expect(healthyList).toHaveAttribute("hidden");
 
     fireEvent.click(showButton);
