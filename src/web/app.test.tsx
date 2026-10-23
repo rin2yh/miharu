@@ -212,6 +212,7 @@ describe("dashboard", () => {
       fireEvent.click(screen.getByText("表示サービスを選択"));
       fireEvent.click(screen.getByRole("checkbox", { name: "Slack" }));
 
+      expect(screen.getByText("未適用")).toBeInTheDocument();
       expect(window.location.search).toBe("?services=github");
       expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
 
@@ -219,6 +220,7 @@ describe("dashboard", () => {
 
       expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
       expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+      expect(screen.queryByText("未適用")).not.toBeInTheDocument();
       expect(screen.getByLabelText("現在の表示条件を共有")).toHaveValue(window.location.href);
 
       fireEvent.click(screen.getByRole("button", { name: "URLをコピー" }));
@@ -252,6 +254,14 @@ describe("dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
     expect(new URL(window.location.href).searchParams.has("services")).toBe(false);
     expect(await screen.findByRole("link", { name: githubLinkName })).toBeInTheDocument();
+  });
+
+  it("shows an empty data message when the selected service is missing from the response", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => payload([service({ id: "slack", name: "Slack" })])} />);
+
+    expect(await screen.findByText("選択したサービスの情報はありません。")).toBeInTheDocument();
+    expect(screen.queryByText("「」に一致するサービスはありません。")).not.toBeInTheDocument();
   });
 
   it("loads on entry and polls once per minute", async () => {

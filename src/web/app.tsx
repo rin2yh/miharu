@@ -118,6 +118,9 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
   shareUrl.search = locationSearch;
   const allDraftServicesSelected = draftServiceIds.length === SERVICES.length;
   const someDraftServicesSelected = draftServiceIds.length > 0 && !allDraftServicesSelected;
+  const hasUnappliedServiceSelection =
+    draftServiceIds.length !== activeServiceIds.size ||
+    draftServiceIds.some((serviceId) => !activeServiceIds.has(serviceId));
 
   const toggleDraftService = (serviceId: string, checked: boolean) => {
     setDraftServiceIds((current) => {
@@ -224,13 +227,13 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           </button>
         </div>
         <details className="group mb-6 rounded-lg border border-line-strong bg-surface dark:border-line">
-          <summary
-            className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy"
-            aria-label="表示サービスを選択"
-          >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy">
             <span>表示サービスを選択</span>
             <span className="flex items-center gap-2 whitespace-nowrap text-xs font-normal text-muted">
               {draftServiceIds.length}/{SERVICES.length}件
+              {hasUnappliedServiceSelection && (
+                <span className="text-[11px] font-semibold">未適用</span>
+              )}
               <span
                 className="text-base leading-none transition-transform group-open:rotate-180"
                 aria-hidden="true"
@@ -339,7 +342,9 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
             {activeServiceIds.size === 0
               ? "表示するサービスがありません。「表示サービスを選択」から選んでください。"
-              : `「${query}」に一致するサービスはありません。`}
+              : query.trim()
+                ? `「${query}」に一致するサービスはありません。`
+                : "選択したサービスの情報はありません。"}
           </div>
         )}
         {payload && filteredServices.length > 0 && (
