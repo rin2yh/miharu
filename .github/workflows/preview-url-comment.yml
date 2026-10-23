@@ -3,29 +3,33 @@ name: Preview URL comment
 on:
   issue_comment:
     types: [created, edited]
+  pull_request_target:
+    types: [opened, reopened, synchronize]
 
 permissions:
   issues: write
+  pull-requests: write
 
 concurrency:
-  group: shared-preview-url-${{ github.repository }}-${{ github.event.issue.number }}
+  group: shared-preview-url-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   add-preview-url:
     if: >-
-      github.event.issue.pull_request &&
-      github.event.comment.user.login == 'cloudflare-workers-and-pages[bot]' &&
-      contains(github.event.comment.body, 'No Preview URL.') &&
-      contains(github.event.comment.body, '<b>Build:</b> Success') &&
-      contains(github.event.comment.body, '<!-- Preview Deployments -->')
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+       github.event.comment.user.login == 'cloudflare-workers-and-pages[bot]' &&
+       contains(github.event.comment.body, 'No Preview URL.') &&
+       contains(github.event.comment.body, '<b>Build:</b> Success') &&
+       contains(github.event.comment.body, '<!-- Preview Deployments -->'))
     runs-on: ubuntu-26.04
     steps:
       - name: Add the shared preview URL
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
           node --input-type=module <<'NODE'
           const [owner, repo] = process.env.REPOSITORY.split("/");
@@ -46,7 +50,8 @@ jobs:
           };
           const commentsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
           let existing;
-          for (let page = 1; !existing; page += 1) {
+          let cloudflareReady = false;
+          for (let page = 1; ; page += 1) {
             const listResponse = await fetch(
               `${commentsUrl}?per_page=100&page=${page}`,
               { headers },
@@ -55,12 +60,23 @@ jobs:
               throw new Error(`Could not list PR comments: ${listResponse.status}`);
             }
             const comments = await listResponse.json();
-            existing = comments.find(
+            existing ||= comments.find(
               (comment) =>
                 comment.user?.login === "github-actions[bot]" &&
                 comment.body?.includes(marker),
             );
+            cloudflareReady ||= comments.some(
+              (comment) =>
+                comment.user?.login === "cloudflare-workers-and-pages[bot]" &&
+                comment.body?.includes("No Preview URL.") &&
+                comment.body?.includes("<b>Build:</b> Success") &&
+                comment.body?.includes("<!-- Preview Deployments -->"),
+            );
             if (comments.length < 100) break;
+          }
+          if (!cloudflareReady) {
+            console.log("No successful Cloudflare build comment yet; skipping.");
+            process.exit(0);
           }
           const url = existing
             ? `https://api.github.com/repos/${owner}/${repo}/issues/comments/${existing.id}`
@@ -71,6 +87,7 @@ jobs:
             body: JSON.stringify({ body }),
           });
           if (!response.ok) {
-            throw new Error(`Could not publish preview URL: ${response.status}`);
+            const details = await response.text();
+            throw new Error(`Could not publish preview URL: ${response.status} ${details}`);
           }
           NODE
