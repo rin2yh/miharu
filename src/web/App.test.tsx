@@ -173,7 +173,7 @@ describe("dashboard", () => {
     const actionsRow = within(visibleList).getByRole("listitem", {
       name: "Actionsコンポーネント",
     });
-    expect(within(actionsRow).queryByRole("button", { name: "Actions", exact: true })).toBeNull();
+    expect(within(actionsRow).queryByRole("button", { name: /^Actions$/ })).toBeNull();
     expect(within(actionsRow).getAllByText("詳細", { exact: true })).toHaveLength(2);
     const firstActionIncident = within(actionsRow).getByRole("listitem", { name: "Actions delay" });
     const firstActionTitle = within(firstActionIncident).getByText("Actions delay");
