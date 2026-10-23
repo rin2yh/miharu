@@ -24,7 +24,7 @@ function providerContext(payload: unknown) {
         headers: { "content-type": "application/json" },
       }),
   );
-  const getActiveIncidents = vi.fn(async () => []);
+  const getActiveIncidents = vi.fn<ProviderContext["getActiveIncidents"]>(async () => []);
   const context: ProviderContext = { signal, fetcher, getActiveIncidents };
   return { context, fetcher, getActiveIncidents };
 }
