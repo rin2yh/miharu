@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { SERVICES } from "../shared/config/services";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./service-filter";
 
 describe("service selection URL", () => {
   it("selects every service when the services parameter is absent", () => {
-    expect(getSelectedServiceIds("?theme=dark")).toEqual(["slack", "notion", "github"]);
+    expect(getSelectedServiceIds("?theme=dark")).toEqual(SERVICES.map((service) => service.id));
   });
 
   it("ignores unknown IDs and duplicates while keeping the configured order", () => {
@@ -19,11 +20,10 @@ describe("service selection URL", () => {
 
   it("removes the parameter when every service is selected", () => {
     expect(
-      getServiceSelectionUrl("https://miharu.example/?theme=dark&services=unknown#top", [
-        "github",
-        "slack",
-        "notion",
-      ]),
+      getServiceSelectionUrl(
+        "https://miharu.example/?theme=dark&services=unknown#top",
+        SERVICES.toReversed().map((service) => service.id),
+      ),
     ).toBe("https://miharu.example/?theme=dark#top");
   });
 
