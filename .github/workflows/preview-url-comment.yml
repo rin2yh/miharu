@@ -7,6 +7,10 @@ on:
 permissions:
   issues: write
 
+concurrency:
+  group: shared-preview-url-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   add-preview-url:
     if: >-
