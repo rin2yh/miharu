@@ -1,0 +1,61 @@
+name: Preview URL comment
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  add-preview-url:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.user.login == 'cloudflare-workers-and-pages' &&
+      contains(github.event.comment.body, 'No Preview URL.') &&
+      contains(github.event.comment.body, '<b>Build:</b> Success') &&
+      contains(github.event.comment.body, '<!-- Preview Deployments -->')
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Add the shared preview URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          node --input-type=module <<'NODE'
+          const [owner, repo] = process.env.REPOSITORY.split("/");
+          const issueNumber = Number(process.env.ISSUE_NUMBER);
+          const marker = "<!-- miharu-shared-preview-url -->";
+          const body = [
+            marker,
+            "### miharu preview",
+            "",
+            "[Open the latest shared preview](https://miharu-preview.gtms.workers.dev)",
+            "",
+            "This URL points to the latest successful preview deployment. It is shared across pull requests.",
+          ].join("\n");
+          const headers = {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${process.env.GH_TOKEN}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          };
+          const commentsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`;
+          const listResponse = await fetch(commentsUrl, { headers });
+          if (!listResponse.ok) {
+            throw new Error(`Could not list PR comments: ${listResponse.status}`);
+          }
+          const comments = await listResponse.json();
+          const existing = comments.find((comment) => comment.body.includes(marker));
+          const url = existing
+            ? `https://api.github.com/repos/${owner}/${repo}/issues/comments/${existing.id}`
+            : commentsUrl.split("?")[0];
+          const response = await fetch(url, {
+            method: existing ? "PATCH" : "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ body }),
+          });
+          if (!response.ok) {
+            throw new Error(`Could not publish preview URL: ${response.status}`);
+          }
+          NODE
