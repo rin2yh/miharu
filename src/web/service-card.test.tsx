@@ -96,11 +96,7 @@ describe("service card incidents", () => {
     expect(within(incidentItem).getByText("状態不明")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
-    expect(
-      within(incidentItem).getByText(
-        "公式情報で復旧を確認できないため、状態不明として一覧に残している。現在も継続中とは断定していない。",
-      ),
-    ).toBeVisible();
+    expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
   });
 });
 

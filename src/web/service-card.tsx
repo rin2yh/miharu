@@ -308,7 +308,7 @@ function IncidentList({
               </div>
               {incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS ? (
                 <p className="mt-1.5 mb-0 max-w-3xl text-xs leading-relaxed text-muted">
-                  公式情報で復旧を確認できないため、状態不明として一覧に残している。現在も継続中とは断定していない。
+                  復旧状況を確認できていません。
                 </p>
               ) : (
                 incident.body && (
