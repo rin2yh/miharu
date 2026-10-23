@@ -5,12 +5,20 @@ import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
 
-export async function fetchServiceSnapshot(
+type ProviderImplementation = (
+  service: ServiceConfig,
+  context: ProviderContext,
+) => Promise<ProviderSnapshot>;
+
+const providerImplementations = {
+  slack: fetchSlackSnapshot,
+  statuspage: fetchStatuspageSnapshot,
+  "openai-chatgpt": fetchOpenAIChatGPTSnapshot,
+} satisfies Record<ServiceConfig["provider"], ProviderImplementation>;
+
+export function fetchServiceSnapshot(
   service: ServiceConfig,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  if (service.provider === "slack")
-    return fetchSlackSnapshot(service, context.signal, context.fetcher);
-  if (service.provider === "openai-chatgpt") return fetchOpenAIChatGPTSnapshot(service, context);
-  return fetchStatuspageSnapshot(service, context.signal, context.fetcher);
+  return providerImplementations[service.provider](service, context);
 }
