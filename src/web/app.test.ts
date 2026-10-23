@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
+import { SERVICES } from "../shared/config/services";
 import { createStatusRoutes } from "./routes/api/status";
 
 const rows: DashboardRows = {
@@ -82,7 +83,7 @@ describe("status API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("max-age=10");
-    expect(payload.services).toHaveLength(3);
+    expect(payload.services).toHaveLength(SERVICES.length);
     expect(payload.services[0]).toMatchObject({
       id: "slack",
       hasFetchError: true,
@@ -109,6 +110,11 @@ describe("status API", () => {
           sourceStatus: "partial_outage",
         },
       ],
+    });
+    expect(payload.services[3]).toMatchObject({
+      id: "cloudflare",
+      name: "Cloudflare",
+      statusPageUrl: "https://www.cloudflarestatus.com/",
     });
     expect(payload.recentEvents[0]).toMatchObject({ serviceName: "Slack", eventKind: "opened" });
     expect(payload.recentEvents[0]).not.toHaveProperty("body");

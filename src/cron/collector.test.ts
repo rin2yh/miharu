@@ -92,7 +92,7 @@ describe("status collection", () => {
       },
     );
     expect(result).toBeUndefined();
-    expect(persistence.saveSuccess).toHaveBeenCalledTimes(2);
+    expect(persistence.saveSuccess).toHaveBeenCalledTimes(SERVICES.length - 1);
     expect(persistence.saveFailure).toHaveBeenCalledTimes(1);
   });
 });
