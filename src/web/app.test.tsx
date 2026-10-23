@@ -142,7 +142,7 @@ describe("dashboard", () => {
       target: { value: "Slack" },
     });
 
-    expect(screen.getByText("検索条件に一致する最近の更新はありません。")).toBeInTheDocument();
+    expect(screen.getByText("表示中のサービスに最近の更新はありません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "GitHub update" })).not.toBeInTheDocument();
   });
 
@@ -195,27 +195,46 @@ describe("dashboard", () => {
     expect(screen.queryByRole("link", { name: "Slack update" })).not.toBeInTheDocument();
   });
 
-  it("keeps selection changes as a draft until apply and reflects the selection in the URL", async () => {
+  it("keeps selection changes as a draft until apply and copies the applied URL", async () => {
     window.history.replaceState(null, "", "/?services=github");
-    render(<App load={async () => basePayload} />);
-    await screen.findByRole("link", { name: githubLinkName });
-    expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    const previousClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
 
-    fireEvent.click(screen.getByText("表示サービスを選択"));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Slack" }));
+    try {
+      render(<App load={async () => basePayload} />);
+      await screen.findByRole("link", { name: githubLinkName });
+      expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
 
-    expect(screen.getByText("未適用")).toBeInTheDocument();
-    expect(window.location.search).toBe("?services=github");
-    expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("現在の表示条件を共有")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "URLをコピー" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText("表示サービスを選択"));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Slack" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
+      expect(screen.getByText("未適用")).toBeInTheDocument();
+      expect(window.location.search).toBe("?services=github");
+      expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("現在の表示条件を共有")).toHaveValue(window.location.href);
 
-    expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
-    expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
-    expect(screen.queryByText("未適用")).not.toBeInTheDocument();
-    expect(window.location.href).toContain("?services=slack%2Cgithub");
+      fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
+
+      expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
+      expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+      expect(screen.queryByText("未適用")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText("表示サービスを選択"));
+      expect(screen.getByLabelText("現在の表示条件を共有")).toHaveValue(window.location.href);
+
+      fireEvent.click(screen.getByRole("button", { name: "URLをコピー" }));
+      expect(await screen.findByRole("status")).toHaveTextContent("URLをコピーしました");
+      expect(writeText).toHaveBeenCalledWith(window.location.href);
+    } finally {
+      if (previousClipboard) {
+        Object.defineProperty(navigator, "clipboard", previousClipboard);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    }
   });
 
   it("shows an empty state for unknown URL services and disables applying no selection", async () => {
@@ -237,6 +256,19 @@ describe("dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
     expect(new URL(window.location.href).searchParams.has("services")).toBe(false);
     expect(await screen.findByRole("link", { name: githubLinkName })).toBeInTheDocument();
+  });
+
+  it("updates applied services when browser history changes the URL", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => basePayload} />);
+    await screen.findByRole("link", { name: githubLinkName });
+
+    window.history.pushState(null, "", "/");
+    fireEvent.popState(window);
+
+    expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("表示サービスを選択"));
+    expect(screen.getByLabelText("現在の表示条件を共有")).toHaveValue(window.location.href);
   });
 
   it("shows an empty data message when the selected service is missing from the response", async () => {

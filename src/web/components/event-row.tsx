@@ -1,6 +1,6 @@
-import type { DashboardEvent } from "../domain";
+import type { DashboardEvent } from "../../domain";
 import { ExternalIcon } from "./icons";
-import { formatDateTime } from "./status-presentation";
+import { formatDateTime } from "../status-presentation";
 
 export function EventRow({ event }: { event: DashboardEvent }) {
   const labels = {
