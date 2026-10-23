@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { siGithub, siNotion, type SimpleIcon } from "simple-icons";
+import { siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import type {
   DashboardIncident,
@@ -18,6 +18,7 @@ import {
 } from "./status-presentation";
 
 const serviceIcons: Record<string, SimpleIcon> = {
+  cloudflare: siCloudflare,
   notion: siNotion,
   github: siGithub,
 };
