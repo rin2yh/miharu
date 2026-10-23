@@ -59,7 +59,7 @@ Notionの公開ステータスページは `notion-status.com` に移行して�
 
 ## ローカルでの動作確認
 
-ローカルのWorker、D1、React画面を使って、公式APIの取得から画面表示まで確認できる。ローカルD1は本番D1から分離され、データは `.cloudflare/state` に保存される。
+ローカルのWorker、D1、React画面を使って、公式APIの取得から画面表示まで確認できる。ローカルD1は本番D1から分離され、データは `.wrangler/state` に保存される。
 
 1. ローカルD1にスキーマを適用する。
 
@@ -85,11 +85,11 @@ Notionの公開ステータスページは `notion-status.com` に移行して�
 
    ```sh
    curl "http://localhost:5173/api/status"
-   local_d1_file=$(find .cloudflare/state/v3/d1/miniflare-D1DatabaseObject -name 'db*.sqlite' -print -quit)
-   sqlite3 "$local_d1_file" "SELECT service_id, status, last_success_at FROM service_status ORDER BY service_id; SELECT service_id, id, title, state, active FROM incidents ORDER BY service_id, official_created_at;"
+   pnpm exec wrangler d1 execute miharu-status --local --command "SELECT service_id, status, last_success_at FROM service_status ORDER BY service_id"
+   pnpm exec wrangler d1 execute miharu-status --local --command "SELECT service_id, id, title, state, active FROM incidents ORDER BY service_id, official_created_at"
    ```
 
-   履歴は `incident_events` テーブルで確認できる。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加される。`cf d1 query` はローカルD1に対応していないため、上の例ではSQLite CLIを使う。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local` の前に `.cloudflare/state` 内のD1状態を削除する。
+   履歴は `incident_events` テーブルで確認できる。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加される。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local` の前に `.wrangler/state` 内のD1状態を削除する。
 
 ## Cloudflare Free枠の目安
 
