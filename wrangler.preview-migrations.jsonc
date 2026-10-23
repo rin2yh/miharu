@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "miharu-preview-migrations",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "miharu-status-preview",
+      "database_id": "fe57c26a-0fac-40f1-b083-7167cd2c19f4",
+      "migrations_dir": "db/migrations",
+    },
+  ],
+}
