@@ -311,18 +311,16 @@ a {
 
 .service-icon {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fafcfb;
+  color: var(--muted);
 }
 
 .service-icon svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
 }
 
@@ -377,26 +375,77 @@ a {
 }
 
 .incident-list {
-  display: grid;
-  gap: 11px;
-  margin: 18px 0 0;
+  display: block;
+  margin: 0;
   padding: 0;
+  border-top: 1px solid var(--line);
   list-style: none;
 }
 
 .incident-item {
-  padding: 13px 15px 12px;
-  border: 1px solid #e7ece8;
-  border-radius: 6px;
-  background: #fafcfb;
+  border-bottom: 1px solid var(--line);
 }
 
-.incident-topline {
-  display: flex;
+.incident-summary {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
+  gap: 8px 14px;
+  min-height: 43px;
+  padding: 7px 3px 7px 20px;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.incident-summary::-webkit-details-marker {
+  display: none;
+}
+
+.incident-summary::before {
+  position: absolute;
+  left: 2px;
+  color: var(--quiet);
+  content: "›";
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.incident-item details[open] > .incident-summary::before {
+  transform: rotate(90deg);
+}
+
+.incident-title {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.incident-updated {
+  color: var(--quiet);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.incident-disclosure-label {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.incident-detail {
+  padding: 0 3px 12px 20px;
+}
+
+.incident-detail-meta {
+  display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 6px;
+  gap: 6px;
 }
 
 .incident-kind,
@@ -434,15 +483,6 @@ a {
   background: var(--unknown-bg);
   color: var(--unknown);
 }
-.incident-item h4 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .event-copy p a {
   text-decoration-color: #b8c5bd;
   text-underline-offset: 3px;
@@ -466,36 +506,23 @@ a {
 }
 
 .incident-body {
-  display: -webkit-box;
   max-width: 780px;
   margin: 6px 0 0;
   color: #596960;
   font-size: 12px;
   line-height: 1.7;
-  overflow: hidden;
+  max-height: 12rem;
+  overflow: auto;
+  overscroll-behavior: contain;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
 
 .component-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 9px;
-}
-
-.component-list span {
-  display: inline-flex;
-  min-height: 21px;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px solid #dfe7e1;
-  border-radius: 4px;
-  background: #fff;
-  color: #536259;
+  margin: 7px 0 0;
+  color: var(--muted);
   font-size: 10px;
+  line-height: 1.5;
 }
 
 .incident-times {
@@ -642,7 +669,7 @@ a {
     flex: 1;
   }
   .incident-list {
-    margin-top: 14px;
+    margin-top: 0;
   }
 }
 
@@ -671,15 +698,19 @@ a {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
   }
-  .incident-item {
-    padding: 11px 11px 10px;
-  }
   .incident-body {
     font-size: 11px;
+    max-height: 8rem;
   }
-  .incident-times {
-    flex-direction: column;
-    gap: 4px;
+  .incident-summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 5px 10px;
+  }
+  .incident-title {
+    grid-column: 1 / -1;
+  }
+  .incident-disclosure-label {
+    justify-self: end;
   }
 }
 
@@ -722,11 +753,6 @@ a {
   .refresh-button:hover:not(:disabled) {
     background: #26372d;
   }
-  .service-icon {
-    border-color: var(--line);
-    background: #202e26;
-  }
-  .incident-item,
   .empty-panel,
   .history-empty {
     border-color: var(--line);
@@ -734,11 +760,6 @@ a {
   }
   .incident-body {
     color: #b7c2bb;
-  }
-  .component-list span {
-    border-color: #39483f;
-    background: #202d25;
-    color: #c1ccc4;
   }
   .global-alert {
     border-color: #624a2e;
@@ -767,11 +788,10 @@ a {
   }
 }
 
-.service-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 14px;
+.service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -779,7 +799,7 @@ a {
 
 .service-card {
   min-width: 0;
-  padding: 17px 18px 13px;
+  padding: 14px 18px 10px;
   border: 1px solid var(--line);
   border-top: 3px solid var(--line-strong);
   border-radius: 8px;
@@ -806,7 +826,9 @@ a {
 .service-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--line);
 }
 
 .service-card-title {
@@ -842,7 +864,7 @@ a {
 }
 
 .service-summary {
-  margin: 12px 0 0;
+  margin: 9px 0 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
@@ -850,19 +872,15 @@ a {
 }
 
 .component-section {
-  margin-top: 16px;
+  margin-top: 10px;
 }
 
 .component-section > h3,
 .service-direct-incidents > h3 {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.component-listing {
-  border-top: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .component-item-list {
@@ -877,6 +895,10 @@ a {
 
 .component-item {
   border-bottom: 1px solid var(--line);
+}
+
+.component-item-list:first-child {
+  border-top: 1px solid var(--line);
 }
 
 .component-toggle {
@@ -927,32 +949,9 @@ a {
   font-size: 12px;
 }
 
-.component-item details > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.component-item details > summary::marker {
-  content: "";
-}
-
-.component-item details > summary::before {
-  width: 12px;
-  flex: 0 0 12px;
-  color: var(--quiet);
-  content: "›";
-  font-size: 17px;
-  line-height: 1;
-  text-align: center;
-  transition: transform 120ms ease;
-}
-
-.component-item details[open] > summary::before {
-  transform: rotate(90deg);
-}
-
 .component-summary-name {
   min-width: 0;
+  margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -963,21 +962,12 @@ a {
   font-size: 10px;
 }
 
-.component-incident-count {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.component-item > .incident-list,
-.component-item details > .incident-list {
-  margin: 0 0 12px 24px;
+.component-item .incident-list {
+  margin: 0 0 8px 20px;
 }
 
 .service-direct-incidents {
-  margin-top: 16px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line);
+  margin-top: 11px;
 }
 
 .incident-state {
@@ -1007,23 +997,26 @@ a {
   color: var(--healthy);
 }
 
-@media (max-width: 760px) {
-  .service-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.service-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  color: var(--quiet);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 480px) {
   .service-card {
-    padding: 14px 14px 12px;
+    padding: 12px 13px 9px;
   }
   .service-card-header {
     align-items: flex-start;
     gap: 9px;
   }
   .service-card .service-icon {
-    width: 34px;
-    height: 34px;
+    width: 25px;
+    height: 25px;
   }
   .service-card-title {
     align-items: flex-start;
@@ -1034,22 +1027,12 @@ a {
   .service-card-title .status-pill {
     font-size: 11px;
   }
-  .component-item details > summary {
+  .component-row-heading {
     gap: 6px;
-  }
-  .component-incident-count {
-    width: 100%;
-    margin-left: 18px;
-  }
-  .incident-item {
-    padding: 11px 11px 10px;
   }
   .incident-body {
     font-size: 11px;
-  }
-  .incident-times {
-    flex-direction: column;
-    gap: 4px;
+    max-height: 7rem;
   }
 }
 
@@ -1059,7 +1042,7 @@ a {
     filter: invert(1);
   }
 
-  .service-card .service-icon {
-    background: #202e26;
+  .service-icon {
+    color: #e4ebe6;
   }
 }
