@@ -110,23 +110,15 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
   const filteredServices = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ja");
     if (!needle) return sortedServices;
-    return sortedServices.filter((service) => {
-      const searchable = [
-        service.name,
-        ...service.incidents.flatMap((incident) => [
-          incident.title,
-          incident.body ?? "",
-          ...incident.components,
-        ]),
-      ]
-        .join(" ")
-        .toLocaleLowerCase("ja");
-      return searchable.includes(needle);
-    });
+    return sortedServices.filter((service) =>
+      service.name.toLocaleLowerCase("ja").includes(needle),
+    );
   }, [query, sortedServices]);
 
-  const activeCount =
+  const incidentCount =
     payload?.services.reduce((count, service) => count + service.incidents.length, 0) ?? 0;
+  const affectedServiceCount =
+    payload?.services.filter((service) => isAffectedService(service)).length ?? 0;
   const staleCount = payload?.services.filter((service) => service.isStale).length ?? 0;
 
   return (
@@ -146,17 +138,25 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
       <section className="overview" id="top" aria-live="polite">
         <div className="overview-copy">
           <p className="eyebrow">稼働状況</p>
-          <h1>{overviewTitle(payload, activeCount, staleCount)}</h1>
+          <h1>{overviewTitle(payload, affectedServiceCount, incidentCount, staleCount)}</h1>
           <p className="overview-description">
             {payload
-              ? `${payload.services.length}つのサービスを監視中${activeCount ? `。確認が必要な情報は${activeCount}件です。` : "。"}`
+              ? `${payload.services.length}サービスを監視中です。`
               : "公式ステータスページから最新情報を取得しています。"}
           </p>
         </div>
-        <div className="overview-count" aria-label={`現在の障害情報 ${activeCount} 件`}>
-          <span className="overview-number">{activeCount}</span>
-          <span className="overview-count-label">障害・メンテナンス</span>
-        </div>
+        {(affectedServiceCount > 0 || incidentCount > 0) && (
+          <dl className="overview-stats">
+            <div className="overview-stat">
+              <dt className="overview-count-label">影響サービス</dt>
+              <dd className="overview-number">{affectedServiceCount}</dd>
+            </div>
+            <div className="overview-stat">
+              <dt className="overview-count-label">インシデント</dt>
+              <dd className="overview-number">{incidentCount}</dd>
+            </div>
+          </dl>
+        )}
       </section>
 
       {loadError && (
@@ -257,11 +257,16 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
 
 function ServiceRow({ service }: { service: DashboardService }) {
   const status = representativeStatus(service);
+  const showDetails =
+    status !== "operational" ||
+    service.hasFetchError ||
+    service.isStale ||
+    service.incidents.length > 0;
   const icon = serviceIcons[service.id];
   const iconColor = icon ? `#${icon.hex}` : "currentColor";
 
   return (
-    <article className={`service-row status-${status}`}>
+    <article className={`service-row status-${status}${showDetails ? "" : " service-row-clear"}`}>
       <div className="service-main">
         <div className="service-identity">
           <span className="service-icon" style={{ color: iconColor }} aria-hidden="true">
@@ -280,8 +285,9 @@ function ServiceRow({ service }: { service: DashboardService }) {
               href={service.statusPageUrl}
               target="_blank"
               rel="noreferrer noopener"
+              aria-label={`${service.name}の公式ステータスページを開く`}
             >
-              公式ステータスページ
+              公式
               <ExternalIcon />
             </a>
           </div>
@@ -297,16 +303,20 @@ function ServiceRow({ service }: { service: DashboardService }) {
             </span>
           )}
         </div>
-        <div className="service-freshness">
-          {service.lastSuccessAt ? (
-            <>
-              <span className="freshness-label">最終取得成功</span>
-              <time dateTime={service.lastSuccessAt}>{formatDateTime(service.lastSuccessAt)}</time>
-            </>
-          ) : (
-            <span className="freshness-label">取得成功なし</span>
-          )}
-        </div>
+        {showDetails && (
+          <div className="service-freshness">
+            {service.lastSuccessAt ? (
+              <>
+                <span className="freshness-label">最終取得成功</span>
+                <time dateTime={service.lastSuccessAt}>
+                  {formatDateTime(service.lastSuccessAt)}
+                </time>
+              </>
+            ) : (
+              <span className="freshness-label">取得成功なし</span>
+            )}
+          </div>
+        )}
       </div>
 
       {service.hasFetchError && (
@@ -376,9 +386,7 @@ function ServiceRow({ service }: { service: DashboardService }) {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="no-incidents">現在、公開中の障害情報はありません。</p>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -425,13 +433,20 @@ function representativeStatus(service: DashboardService): NormalizedStatus {
   }, service.status);
 }
 
+function isAffectedService(service: DashboardService): boolean {
+  const status = representativeStatus(service);
+  return service.incidents.length > 0 || (status !== "operational" && status !== "unknown");
+}
+
 function overviewTitle(
   payload: DashboardPayload | null,
-  activeCount: number,
+  affectedServiceCount: number,
+  incidentCount: number,
   staleCount: number,
 ): string {
   if (!payload) return "サービスの状態を確認しています";
-  if (activeCount > 0) return "障害・メンテナンス情報があります";
+  if (incidentCount > 0) return "障害・メンテナンス情報があります";
+  if (affectedServiceCount > 0) return "一部のサービスに影響があります";
   if (staleCount > 0) return "一部の情報を更新できていません";
   if (payload.services.every((service) => service.status === "operational"))
     return "すべて正常に稼働中です";

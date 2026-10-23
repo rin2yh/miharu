@@ -59,6 +59,7 @@ describe("dashboard", () => {
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
     expect(screen.getAllByText("部分障害")).toHaveLength(2);
     expect(screen.getByText("Messaging")).toBeInTheDocument();
+    expect(screen.getByText("公式全体状態: 状態不明")).toBeInTheDocument();
     const slackCard = screen.getByRole("heading", { name: "Slack" }).closest("article");
     expect(slackCard).not.toBeNull();
     expect(within(slackCard!).getByRole("link", { name: /公式ステータスページ/ })).toHaveAttribute(
@@ -68,9 +69,44 @@ describe("dashboard", () => {
     expect(within(slackCard!).getByText("最終取得成功")).toBeInTheDocument();
   });
 
+  it("keeps healthy rows compact and separates affected services from incidents", async () => {
+    const multiIncidentPayload: DashboardPayload = {
+      ...firstPayload,
+      services: firstPayload.services.map((service) =>
+        service.id === "slack"
+          ? {
+              ...service,
+              incidents: [
+                ...service.incidents,
+                { ...service.incidents[0], id: "incident-2", title: "File uploads delayed" },
+              ],
+            }
+          : service,
+      ),
+    };
+    render(<App load={async () => multiIncidentPayload} />);
+
+    const incidentCount = await screen.findByText("インシデント");
+    expect(incidentCount.parentElement).toHaveTextContent("2");
+    expect(screen.getByText("影響サービス").parentElement).toHaveTextContent("1");
+    const githubCard = screen.getByRole("heading", { name: "GitHub" }).closest("article");
+    expect(githubCard).not.toBeNull();
+    expect(
+      within(githubCard!).getByRole("link", { name: "GitHubの公式ステータスページを開く" }),
+    ).toHaveAttribute("href", "https://www.githubstatus.com/");
+    expect(within(githubCard!).queryByText("最終取得成功")).not.toBeInTheDocument();
+    expect(within(githubCard!).queryByText(/公開中の障害情報はありません/)).not.toBeInTheDocument();
+  });
+
   it("filters services and can clear the search", async () => {
     render(<App load={async () => firstPayload} />);
     await screen.findByRole("heading", { name: "GitHub" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
+      target: { value: "Messaging delays" },
+    });
+    expect(screen.queryByRole("heading", { name: "Slack" })).not.toBeInTheDocument();
+    expect(screen.getByText(/に一致するサービスはありません/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
       target: { value: "slack" },
