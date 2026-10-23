@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../../domain";
 import { SERVICES } from "../../../shared/config/services";
 import { fetchOpenAIChatGPTSnapshot } from "./chatgpt";
-import type { FetchLike } from "../shared";
+import type { FetchLike, ProviderContext } from "../shared";
 
 const abortSignal = new AbortController().signal;
 const chatgpt = SERVICES.find((service) => service.provider === "openai-chatgpt");
@@ -55,6 +55,15 @@ function routedResponseFetcher(responses: Record<string, Response>): FetchLike {
     new Response("Not found", { status: 404 })) as FetchLike;
 }
 
+function fetchChatGPTSnapshot(fetcher: FetchLike, knownActiveIncidents: KnownIncident[] = []) {
+  const context: ProviderContext = {
+    signal: abortSignal,
+    fetcher,
+    getActiveIncidents: async () => knownActiveIncidents,
+  };
+  return fetchOpenAIChatGPTSnapshot(configuredChatGPTService, context);
+}
+
 function chatgptComponentRows(statuses: Record<string, string> = {}) {
   return configuredChatGPTComponents.map(({ id, name }) => ({
     id,
@@ -64,9 +73,7 @@ function chatgptComponentRows(statuses: Record<string, string> = {}) {
 }
 
 function fetchOpenAIIncident(incident: Record<string, unknown>) {
-  return fetchOpenAIChatGPTSnapshot(
-    configuredChatGPTService,
-    abortSignal,
+  return fetchChatGPTSnapshot(
     routedJsonFetcher({
       "/api/v2/summary.json": {
         status: { indicator: "none" },
@@ -89,20 +96,13 @@ function fetchOmittedChatGPTIncident(incident: KnownIncident, feed?: string) {
       headers: { "content-type": "application/rss+xml" },
     });
   }
-  return fetchOpenAIChatGPTSnapshot(
-    configuredChatGPTService,
-    abortSignal,
-    routedResponseFetcher(responses),
-    [incident],
-  );
+  return fetchChatGPTSnapshot(routedResponseFetcher(responses), [incident]);
 }
 describe("OpenAI ChatGPT provider", () => {
   it("uses ChatGPT section components and explicitly scoped incidents", async () => {
     const conversationId = chatgptConversation.id;
     const loginId = chatgptLogin.id;
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedJsonFetcher({
         "/api/v2/summary.json": {
           page: { name: "OpenAI" },
@@ -166,9 +166,7 @@ describe("OpenAI ChatGPT provider", () => {
 
   it("marks missing configured ChatGPT components as unknown", async () => {
     const omittedComponent = chatgpt.components.at(-1)!;
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedJsonFetcher({
         "/api/v2/summary.json": {
           incidents: [],
@@ -188,9 +186,7 @@ describe("OpenAI ChatGPT provider", () => {
   });
 
   it("only uses explicit, non-negated ChatGPT wording when component links are absent", async () => {
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedJsonFetcher({
         "/api/v2/summary.json": {
           incidents: [
@@ -291,9 +287,7 @@ describe("OpenAI ChatGPT provider", () => {
       active: true,
       lastObservedAt: "2026-10-22T02:18:32.000Z",
     };
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedResponseFetcher({
         "/api/v2/summary.json": new Response(
           JSON.stringify({ incidents: [], components: chatgptComponentRows() }),
@@ -315,9 +309,7 @@ describe("OpenAI ChatGPT provider", () => {
 
   it("parses the official OpenAI incident feed shape missing from summary.json", async () => {
     const incidentId = "01M5GPE9C4E19HE461P8JAMYXD";
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedJsonFetcher({
         "/api/v2/summary.json": {
           page: { name: "OpenAI" },
@@ -367,9 +359,7 @@ describe("OpenAI ChatGPT provider", () => {
 
   it("uses official component links when the incident text has no product name", async () => {
     const conversationId = chatgptConversation.id;
-    const snapshot = await fetchOpenAIChatGPTSnapshot(
-      chatgpt,
-      abortSignal,
+    const snapshot = await fetchChatGPTSnapshot(
       routedJsonFetcher({
         "/api/v2/summary.json": {
           status: { indicator: "none" },
@@ -429,9 +419,7 @@ describe("OpenAI ChatGPT provider", () => {
 
   it("fails when OpenAI's separate incident list is missing instead of treating it as empty", async () => {
     await expect(
-      fetchOpenAIChatGPTSnapshot(
-        chatgpt,
-        abortSignal,
+      fetchChatGPTSnapshot(
         routedJsonFetcher({
           "/api/v2/summary.json": {
             status: { indicator: "none" },
@@ -445,9 +433,7 @@ describe("OpenAI ChatGPT provider", () => {
 
   it("rejects a component response without the known ChatGPT page section", async () => {
     await expect(
-      fetchOpenAIChatGPTSnapshot(
-        chatgpt,
-        abortSignal,
+      fetchChatGPTSnapshot(
         routedJsonFetcher({
           "/api/v2/summary.json": {
             status: { indicator: "none" },

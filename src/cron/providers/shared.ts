@@ -1,4 +1,4 @@
-import type { NormalizedIncident, NormalizedStatus } from "../../domain";
+import type { KnownIncident, NormalizedIncident, NormalizedStatus } from "../../domain";
 import { toPlainText } from "../../domain/text";
 import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../../shared/config/services";
 
@@ -18,6 +18,12 @@ export class ProviderError extends Error {
 }
 
 export type FetchLike = typeof fetch;
+
+export interface ProviderContext {
+  signal: AbortSignal;
+  fetcher: FetchLike;
+  getActiveIncidents: () => Promise<KnownIncident[]>;
+}
 
 export async function fetchJson(
   url: string,

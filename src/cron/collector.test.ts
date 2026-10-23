@@ -87,8 +87,8 @@ describe("status collection", () => {
     const persistence = store({
       getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => [knownIncident]),
     });
-    const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, _signal, knownIncidents) => {
-      expect(knownIncidents).toEqual([knownIncident]);
+    const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, context) => {
+      await expect(context.getActiveIncidents()).resolves.toEqual([knownIncident]);
       return snapshot;
     });
 
@@ -103,6 +103,13 @@ describe("status collection", () => {
     expect(persistence.getActiveIncidents).toHaveBeenCalledWith(chatgptService.id);
   });
 
+  it("lets the provider decide whether active incidents need to be loaded", async () => {
+    const persistence = store();
+    await collectService(service, "2026-10-23T05:00:00.000Z", persistence, async () => snapshot);
+
+    expect(persistence.getActiveIncidents).not.toHaveBeenCalled();
+  });
+
   it("uses the service timeout and labels an abort as a timeout", async () => {
     const shortTimeout = { ...service, timeoutMs: 5 };
     const persistence = store();
@@ -110,9 +117,11 @@ describe("status collection", () => {
       shortTimeout,
       "2026-10-23T05:00:00.000Z",
       persistence,
-      (_service, signal) =>
+      (_service, context) =>
         new Promise((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          context.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
         }),
     );
     expect(result).toBe("failed");
