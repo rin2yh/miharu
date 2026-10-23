@@ -23,25 +23,27 @@ pnpm dev
 
 ## Preview 環境
 
-Cloudflare Workers Builds の **Worker Previews** を利用し、ブランチごとに独立した Preview URL を発行します。Preview は `miharu-status-preview` D1 を共有します。本番 D1 は使用しません。
-
-ローカルから Preview をデプロイする場合:
+Cloudflare Workers Builds の Worker Previews を利用して、ブランチごとに独立した URL を発行します。Preview は専用の共有 D1 `miharu-status-preview` を使用し、本番 D1 は使用しません。
 
 ```sh
 pnpm preview:deploy
 ```
 
-既存の `miharu-preview` Worker は Preview 用 D1 にデータを収集するための **15分間隔の Cron 専用 Worker** として残します。Worker Previews 自体は Cron Trigger に対応していません。必要なときに `pnpm preview:collector:deploy` で収集 Worker を更新します。D1 のマイグレーションは `pnpm db:migrate:preview` で、共有 DB に対して一度だけ実行します。
+共有 D1 のスキーマ変更は、必要な場合に明示的に一度だけ実行してください。
 
-### Workers Builds の切り替え（初回のみ）
+```sh
+pnpm db:migrate:preview
+```
 
-1. Cloudflare ダッシュボードの `miharu` Worker → **Settings → Builds** で **Set up Worker Previews** を選択します（元に戻せない変更です）。
-2. Preview の変数・D1・Assets を `wrangler.jsonc` の `previews` に合わせます。
-3. Preview command を `pnpm preview:deploy`（Build command を別途実行する構成なら `pnpm wrangler preview`）に設定します。既存の Build command との二重ビルドを避けてください。
-4. Preview builds を有効にし、PR の Cloudflare コメントにブランチ固有 URL が表示されることを確認します。
-5. Cloudflare Access で Preview URL を保護する場合は、新しい Worker Previews の URL にもポリシーを適用します。
+Worker Previews には Cron Trigger がなく、Preview D1 は自動更新されません。検証用データの投入・更新方法は別途用意する必要があります。旧 `miharu-preview` Worker へのデプロイ設定は撤去しましたが、**Cloudflare 上に既存の Worker が存在する場合は、動作確認後にダッシュボードから削除してください**。旧 Worker を残したままにすると Cron が引き続き稼働する可能性があります。
 
-ブランチ固有 Preview のデプロイ成功後、別のブランチを更新しても URL とコードが上書きされないことを確認してください。共有 D1 のスキーマ変更には注意が必要です。
+### Workers Builds の設定
+
+- ビルド コマンド: `pnpm run build`
+- プレビュー コマンド: `pnpm wrangler preview`
+- Preview ブランチのビルド: 有効
+
+以前の `pnpm run db:migrate:preview && pnpm run preview:deploy` は使わないでください。プレビュー URL を確認し、異なる2ブランチが互いを上書きしないことを確認してください。新しい Preview URL の Cloudflare Access 保護も確認してください。
 
 ## ライセンス
 
