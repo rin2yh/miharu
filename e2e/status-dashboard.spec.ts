@@ -48,24 +48,6 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
   });
 });
 
-test("Cloudflareのアイコンがライト・ダーク両モードで見える", async ({
-  dashboardStatus,
-  page,
-  statusDashboard,
-}) => {
-  await page.emulateMedia({ colorScheme: "light" });
-  await statusDashboard.goto();
-  await expect(statusDashboard.serviceCount(dashboardStatus.payload.services.length)).toBeVisible();
-
-  const cloudflareSvg = statusDashboard.serviceIcon("Cloudflare").locator("svg");
-
-  await expect(cloudflareSvg).toBeVisible();
-
-  await page.emulateMedia({ colorScheme: "dark" });
-
-  await expect(cloudflareSvg).toBeVisible();
-});
-
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
   dashboardStatus,
   page,

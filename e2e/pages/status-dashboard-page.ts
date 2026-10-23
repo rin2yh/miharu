@@ -25,10 +25,6 @@ export class StatusDashboardPage {
     return this.page.getByRole("listitem", { name: `${name}のサービス状況` });
   }
 
-  serviceIcon(name: string): Locator {
-    return this.serviceCard(name).getByTestId("service-icon");
-  }
-
   recentUpdates(): Locator {
     return this.page.getByRole("region", { name: "最近の更新" });
   }
