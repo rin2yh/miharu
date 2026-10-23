@@ -3,6 +3,9 @@
   "name": "miharu",
   "main": "./src/index.ts",
   "compatibility_date": "2026-10-19",
+  "vars": {
+    "FRESHNESS_WARNING_SECONDS": "180",
+  },
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
@@ -31,6 +34,9 @@
   "env": {
     "preview": {
       "name": "miharu-preview",
+      "vars": {
+        "FRESHNESS_WARNING_SECONDS": "2700",
+      },
       "assets": {
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
@@ -45,7 +51,7 @@
         },
       ],
       "triggers": {
-        "crons": [],
+        "crons": ["*/15 * * * *"],
       },
     },
   },
