@@ -11,7 +11,7 @@ jobs:
   add-preview-url:
     if: >-
       github.event.issue.pull_request &&
-      github.event.comment.user.login == 'cloudflare-workers-and-pages' &&
+      github.event.comment.user.login == 'cloudflare-workers-and-pages[bot]' &&
       contains(github.event.comment.body, 'No Preview URL.') &&
       contains(github.event.comment.body, '<b>Build:</b> Success') &&
       contains(github.event.comment.body, '<!-- Preview Deployments -->')
@@ -33,7 +33,7 @@ jobs:
             "",
             "[Open the latest shared preview](https://miharu-preview.gtms.workers.dev)",
             "",
-            "This URL points to the latest successful preview deployment. It is shared across pull requests.",
+            "This is the shared `miharu-preview` Worker. Another pull request may have updated it, so this link does not confirm that this pull request's deployment succeeded.",
           ].join("\n");
           const headers = {
             Accept: "application/vnd.github+json",
