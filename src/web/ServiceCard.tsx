@@ -84,13 +84,13 @@ export function ServiceCard({ service }: { service: DashboardService }) {
 
   return (
     <li
-      className={`min-w-0 rounded-lg border border-line border-t-[3px] bg-surface px-[18px] pt-[14px] pb-[10px] shadow-[0_1px_2px_#20352b08] max-[480px]:px-[13px] max-[480px]:pt-3 max-[480px]:pb-[9px] ${statusBorders[service.status]}`}
+      className={`min-w-0 rounded-lg border border-line border-t-4 bg-surface px-5 pt-4 pb-2.5 shadow-sm max-sm:px-3 max-sm:pt-3 max-sm:pb-2 ${statusBorders[service.status]}`}
       id={`service-details-${service.id}`}
       aria-label={`${service.name}のサービス状況`}
     >
-      <header className="flex items-center gap-[9px] border-b border-line pb-[11px] max-[480px]:items-start">
+      <header className="flex items-center gap-2 border-b border-line pb-3 max-sm:items-start">
         <span
-          className="grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-[#e4ebe6] max-[480px]:h-[25px] max-[480px]:w-[25px] [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current dark:[&>svg]:invert"
+          className="grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-ink max-sm:h-6 max-sm:w-6 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current dark:[&>svg]:invert"
           style={{ color: iconColor }}
           aria-hidden="true"
         >
@@ -102,10 +102,10 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             service.name.slice(0, 1)
           )}
         </span>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-x-2.5 gap-y-[7px] max-[480px]:items-start">
-          <h2 className="m-0 min-w-0 text-[17px] font-bold leading-[1.35] max-[480px]:text-base">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-x-2.5 gap-y-2 max-sm:items-start">
+          <h2 className="m-0 min-w-0 text-lg font-bold leading-snug max-sm:text-base">
             <a
-              className="inline-flex items-baseline gap-[5px] text-ink underline-offset-[3px] hover:underline focus-visible:underline"
+              className="inline-flex items-baseline gap-1 text-ink underline-offset-2 hover:underline focus-visible:underline"
               href={service.statusPageUrl}
               target="_blank"
               rel="noreferrer noopener"
@@ -116,29 +116,29 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             </a>
           </h2>
           <span
-            className={`inline-flex min-h-[27px] items-center gap-[7px] whitespace-nowrap rounded-[4px] px-[9px] py-1 text-xs font-bold max-[480px]:text-[11px] ${statusColors[service.status]}`}
+            className={`inline-flex min-h-7 items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-xs font-bold ${statusColors[service.status]}`}
             aria-label={`公式全体ステータス: ${STATUS_LABELS[service.status]}`}
           >
-            <span className="h-[6px] w-[6px] rounded-full bg-current" aria-hidden="true" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
             {STATUS_LABELS[service.status]}
           </span>
         </div>
       </header>
 
       {service.status !== "operational" && service.summary && (
-        <p className="mt-[9px] mb-0 [overflow-wrap:anywhere] text-xs leading-[1.6] text-muted">
+        <p className="mt-2 mb-0 [overflow-wrap:anywhere] text-xs leading-relaxed text-muted">
           {service.summary}
         </p>
       )}
 
       {service.hasFetchError && (
-        <output className="mt-[15px] flex items-center gap-[7px] text-[11px] leading-[1.5] text-warning">
+        <output className="mt-4 flex items-center gap-2 text-xs leading-normal text-warning">
           <WarningIcon />
           このサービスの最新情報を取得できません。状態は前回取得時のものです。
         </output>
       )}
       {service.isStale && !service.hasFetchError && (
-        <output className="mt-[15px] flex items-center gap-[7px] text-[11px] leading-[1.5] text-stale">
+        <output className="mt-4 flex items-center gap-2 text-xs leading-normal text-stale">
           <WarningIcon />
           {service.lastSuccessAt
             ? `前回の情報更新から${relativeTime(service.lastSuccessAt)}経過しています。最新の状態と異なる可能性があります。`
@@ -147,8 +147,8 @@ export function ServiceCard({ service }: { service: DashboardService }) {
       )}
 
       {components.length > 0 && (
-        <section className="mt-[10px]" aria-label={`${service.name}のコンポーネント`}>
-          <h3 className="mt-0 mb-[5px] text-[10px] font-semibold text-muted">コンポーネント</h3>
+        <section className="mt-2.5" aria-label={`${service.name}のコンポーネント`}>
+          <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">コンポーネント</h3>
           <div>
             {visibleComponents.length > 0 && (
               <ul
@@ -167,14 +167,14 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             {healthyComponents.length > 0 && (
               <>
                 <button
-                  className="flex min-h-[43px] w-full items-center gap-[10px] border-0 border-b border-line bg-transparent px-[2px] py-[7px] text-left text-[11px] font-semibold text-healthy cursor-pointer hover:underline underline-offset-[3px]"
+                  className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 border-0 border-b border-line bg-transparent px-0.5 py-2 text-left text-xs font-semibold text-healthy underline-offset-2 hover:underline"
                   type="button"
                   aria-expanded={showHealthyComponents}
                   aria-controls={healthyComponentsId}
                   onClick={() => setShowHealthyComponents((visible) => !visible)}
                 >
                   <span
-                    className={`w-3 shrink-0 text-center text-[17px] leading-none text-quiet transition-transform duration-[120ms] ${showHealthyComponents ? "rotate-90" : ""}`}
+                    className={`w-3 shrink-0 text-center text-lg leading-none text-quiet transition-transform duration-150 ${showHealthyComponents ? "rotate-90" : ""}`}
                     aria-hidden="true"
                   >
                     ›
@@ -204,15 +204,15 @@ export function ServiceCard({ service }: { service: DashboardService }) {
       )}
 
       {unassigned.length > 0 && (
-        <section className="mt-[11px]" aria-label={`${service.name}の障害・メンテナンス情報`}>
-          <h3 className="mt-0 mb-[5px] text-[10px] font-semibold text-muted">
+        <section className="mt-3" aria-label={`${service.name}の障害・メンテナンス情報`}>
+          <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">
             その他の障害・メンテナンス情報
           </h3>
           <IncidentList incidents={unassigned} />
         </section>
       )}
 
-      <footer className="mt-2 flex justify-end text-[10px] tabular-nums text-quiet">
+      <footer className="mt-2 flex justify-end text-xs tabular-nums text-quiet">
         {service.lastSuccessAt ? (
           <span>
             最終取得{" "}
@@ -235,12 +235,12 @@ function ComponentItem({
 }) {
   return (
     <li className="border-b border-line" aria-label={`${component.name}コンポーネント`}>
-      <div className="flex min-h-[43px] flex-wrap items-center gap-x-[10px] gap-y-[7px] px-[2px] py-[7px] text-xs text-ink max-[480px]:gap-[6px]">
+      <div className="flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-2 px-0.5 py-2 text-xs text-ink max-sm:gap-1.5">
         <h4 className="m-0 min-w-0 [overflow-wrap:anywhere] font-semibold">{component.name}</h4>
         <span
-          className={`inline-flex min-h-[23px] items-center gap-[7px] whitespace-nowrap rounded-[4px] px-[7px] py-[3px] text-[10px] font-bold ${statusColors[component.status]}`}
+          className={`inline-flex min-h-6 items-center gap-2 whitespace-nowrap rounded px-2 py-0.5 text-xs font-bold ${statusColors[component.status]}`}
         >
-          <span className="h-[6px] w-[6px] rounded-full bg-current" aria-hidden="true" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
           {STATUS_LABELS[component.status]}
         </span>
       </div>
@@ -261,22 +261,22 @@ function IncidentList({
       {incidents.map((incident) => (
         <li className="border-b border-line" key={incident.id} aria-label={incident.title}>
           <details className="group">
-            <summary className="relative grid min-h-[43px] cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-[14px] gap-y-2 py-[7px] pr-[3px] pl-5 text-ink max-[480px]:grid-cols-[auto_minmax(0,1fr)_auto] max-[480px]:gap-x-[10px] max-[480px]:gap-y-[5px]">
+            <summary className="relative grid min-h-11 cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-3.5 gap-y-2 py-2 pr-1 pl-5 text-ink max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-x-2.5 max-sm:gap-y-1.5">
               <span
-                className="absolute left-[2px] text-[18px] leading-none text-quiet transition-transform duration-[120ms] group-open:rotate-90"
+                className="absolute left-0.5 text-lg leading-none text-quiet transition-transform duration-150 group-open:rotate-90"
                 aria-hidden="true"
               >
                 ›
               </span>
-              <span className="min-w-0 text-xs font-semibold leading-[1.5] [overflow-wrap:anywhere] max-[480px]:col-span-full">
+              <span className="min-w-0 text-xs font-semibold leading-normal [overflow-wrap:anywhere] max-sm:col-span-full">
                 {incident.title}
               </span>
               <span
-                className={`inline-flex min-h-5 items-center rounded-[3px] px-[6px] py-[2px] text-[10px] font-semibold ${incidentStateColors[incident.state]}`}
+                className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColors[incident.state]}`}
               >
                 {incidentStateLabel(incident.state)}
               </span>
-              <span className="whitespace-nowrap text-[10px] tabular-nums text-quiet">
+              <span className="whitespace-nowrap text-xs tabular-nums text-quiet">
                 更新{" "}
                 {incident.officialUpdatedAt ? (
                   <time dateTime={incident.officialUpdatedAt}>
@@ -286,39 +286,39 @@ function IncidentList({
                   "時刻不明"
                 )}
               </span>
-              <span className="whitespace-nowrap text-[10px] text-muted max-[480px]:justify-self-end">
+              <span className="whitespace-nowrap text-xs text-muted max-sm:justify-self-end">
                 詳細
               </span>
             </summary>
-            <div className="pr-[3px] pb-3 pl-5">
-              <div className="flex flex-wrap gap-[6px]">
+            <div className="pr-1 pb-3 pl-5">
+              <div className="flex flex-wrap gap-1.5">
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-[3px] px-[6px] py-[2px] text-[10px] font-bold ${incident.kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage"}`}
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incident.kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage"}`}
                 >
                   {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
                 </span>
                 {incident.severityStatus && (
                   <span
-                    className={`inline-flex min-h-5 items-center rounded-[3px] px-[6px] py-[2px] text-[10px] font-bold ${incidentImpactColors[incident.severityStatus]}`}
+                    className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentImpactColors[incident.severityStatus]}`}
                   >
                     {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
                   </span>
                 )}
               </div>
               {incident.body && (
-                <p className="mt-[6px] mb-0 max-h-48 max-w-[780px] overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-[1.7] text-incident-body [overflow-wrap:anywhere] max-[480px]:max-h-28 max-[480px]:text-[11px]">
+                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
                   {incident.body}
                 </p>
               )}
               {incident.components.length > 0 && (
                 <p
-                  className="mt-[7px] mb-0 text-[10px] leading-[1.5] text-muted"
+                  className="mt-2 mb-0 text-xs leading-normal text-muted"
                   aria-label="公式の影響対象"
                 >
                   影響対象: {incident.components.join("、")}
                 </p>
               )}
-              <div className="mt-[9px] flex flex-wrap gap-3 text-[10px] tabular-nums text-quiet">
+              <div className="mt-2 flex flex-wrap gap-3 text-xs tabular-nums text-quiet">
                 <span>
                   公式発生{" "}
                   {incident.officialCreatedAt ? (
@@ -332,7 +332,7 @@ function IncidentList({
               </div>
               {incident.url && (
                 <a
-                  className="mt-[9px] inline-flex items-center gap-[5px] text-[11px] font-semibold text-healthy decoration-[#b8c5bd] underline-offset-[3px] hover:underline"
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-healthy decoration-healthy/50 underline-offset-2 hover:underline"
                   href={incident.url}
                   target="_blank"
                   rel="noreferrer noopener"

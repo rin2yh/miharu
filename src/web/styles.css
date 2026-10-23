@@ -75,7 +75,7 @@
 }
 
 body {
-  @apply m-0 min-h-screen min-w-[320px] bg-page font-sans text-ink;
+  @apply m-0 min-h-screen min-w-80 bg-page font-sans text-ink;
   line-height: normal;
   -webkit-font-smoothing: antialiased;
 }

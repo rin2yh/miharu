@@ -9,20 +9,20 @@ export function EventRow({ event }: { event: DashboardEvent }) {
     resolved: event.kind === "maintenance" ? "メンテナンス完了" : "復旧",
   };
   return (
-    <li className="relative flex min-h-[82px] gap-[13px] border-b border-line py-[15px] pr-[6px] pl-[3px]">
+    <li className="relative flex min-h-20 gap-3 border-b border-line py-4 pr-1.5 pl-1">
       <span
-        className={`mt-1 h-[9px] w-[9px] shrink-0 rounded-full border-2 bg-page ${event.eventKind === "resolved" ? "border-healthy" : "border-event-mark"}`}
+        className={`mt-1 h-2 w-2 shrink-0 rounded-full border-2 bg-page ${event.eventKind === "resolved" ? "border-healthy" : "border-event-mark"}`}
         aria-hidden="true"
       />
       <div className="min-w-0">
-        <div className="flex flex-wrap gap-[9px] text-[10px] font-semibold text-muted">
+        <div className="flex flex-wrap gap-2 text-xs font-semibold text-muted">
           <span>{event.serviceName}</span>
-          <span className="border-l border-line-strong pl-[9px]">{labels[event.eventKind]}</span>
+          <span className="border-l border-line-strong pl-2">{labels[event.eventKind]}</span>
         </div>
-        <p className="mt-[4px] mb-[3px] text-xs leading-[1.55] text-ink [overflow-wrap:anywhere]">
+        <p className="mt-1 mb-1 text-xs leading-normal text-ink [overflow-wrap:anywhere]">
           {event.url ? (
             <a
-              className="ml-1 decoration-[#b8c5bd] underline-offset-[3px] hover:text-healthy"
+              className="ml-1 decoration-line-strong underline-offset-2 hover:text-healthy"
               href={event.url}
               target="_blank"
               rel="noreferrer noopener"
@@ -35,7 +35,7 @@ export function EventRow({ event }: { event: DashboardEvent }) {
           )}
         </p>
         {event.officialEventAt && (
-          <small className="text-[10px] tabular-nums text-quiet">
+          <small className="text-xs tabular-nums text-quiet">
             公式時刻 {formatDateTime(event.officialEventAt)}
           </small>
         )}
