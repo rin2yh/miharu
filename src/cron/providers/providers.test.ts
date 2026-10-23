@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { SERVICES } from "../../shared/config/services";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
@@ -35,9 +35,13 @@ type CloudflareSummaryFixture = {
 };
 
 // Captured from Cloudflare's official API on 2026-10-24; component rows are minimized.
-const cloudflareSummaryFixture = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/cloudflare-summary.json", "utf8"),
-) as CloudflareSummaryFixture;
+let cloudflareSummaryFixture: CloudflareSummaryFixture;
+
+function loadCloudflareSummaryFixture(): CloudflareSummaryFixture {
+  return JSON.parse(
+    readFileSync("src/cron/providers/fixtures/cloudflare-summary.json", "utf8"),
+  ) as CloudflareSummaryFixture;
+}
 
 const cloudflareServiceGroupId = "1km35smx8p41";
 const cloudflareWorkersId = "57srcl8zcn7c";
@@ -90,6 +94,10 @@ function fetchIncidentWithFallbackTitle(title: string) {
 }
 
 describe("Statuspage provider", () => {
+  beforeAll(() => {
+    cloudflareSummaryFixture = loadCloudflareSummaryFixture();
+  });
+
   it("normalizes overall status and keeps incident impact separate", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       github,
@@ -194,24 +202,25 @@ describe("Statuspage provider", () => {
   it.each([
     {
       scenario: "the captured official summary",
-      payload: cloudflareSummaryFixture,
+      getPayload: () => cloudflareSummaryFixture,
       expectedCount: 133,
       expectedStatus: "partial_outage",
       expectedSourceStatus: "major",
     },
     {
       scenario: "service components whose states differ from the official overall status",
-      payload: {
+      getPayload: () => ({
         ...cloudflareSummaryFixture,
         status: { indicator: "none", description: "All Systems Operational" },
-      },
+      }),
       expectedCount: 133,
       expectedStatus: "operational",
       expectedSourceStatus: "none",
     },
   ])(
     "filters Cloudflare components for $scenario",
-    async ({ payload, expectedCount, expectedStatus, expectedSourceStatus }) => {
+    async ({ getPayload, expectedCount, expectedStatus, expectedSourceStatus }) => {
+      const payload = getPayload();
       expect(payload.components).toHaveLength(482);
       const snapshot = await fetchStatuspageSnapshot(
         cloudflareStatuspage,
