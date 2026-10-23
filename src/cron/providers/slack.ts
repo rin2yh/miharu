@@ -18,12 +18,11 @@ import {
 type SlackService = Extract<ServiceConfig, { provider: "slack" }>;
 
 export async function fetchSlackSnapshot(
-  service: ServiceConfig,
+  service: SlackService,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  const slackService = service as SlackService;
   const { signal, fetcher } = context;
-  const data = asRecord(await fetchJson(slackService.currentUrl, signal, fetcher));
+  const data = asRecord(await fetchJson(service.currentUrl, signal, fetcher));
   if (!data || !Array.isArray(data.active_incidents)) {
     throw new ProviderError("invalid_payload", "Slack Status API response shape changed");
   }
@@ -32,7 +31,7 @@ export async function fetchSlackSnapshot(
   }
 
   const sourceStatus = requiredText(data.status, "Slack status", 100);
-  const incidents = data.active_incidents.map((value) => parseSlackIncident(value, slackService));
+  const incidents = data.active_incidents.map((value) => parseSlackIncident(value, service));
   const normalizedStatus = normalizeStatus(sourceStatus);
 
   return {

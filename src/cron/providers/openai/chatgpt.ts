@@ -1,28 +1,26 @@
 import type { ProviderSnapshot } from "../../../domain";
-import type { ServiceConfig } from "../../../shared/config/services";
 import { asRecord, fetchJson, ProviderError, type FetchLike } from "../shared";
 import type { ProviderContext } from "../../provider-context";
 import { parseChatGPTComponents, type OpenAIChatGPTService } from "./chatgpt-components";
 import { parseOpenAIChatGPTIncidents } from "./chatgpt-incidents";
 
 export async function fetchOpenAIChatGPTSnapshot(
-  service: ServiceConfig,
+  service: OpenAIChatGPTService,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  const chatgptService = service as OpenAIChatGPTService;
   const { signal, fetcher } = context;
-  const data = asRecord(await fetchJson(chatgptService.summaryUrl, signal, fetcher));
+  const data = asRecord(await fetchJson(service.summaryUrl, signal, fetcher));
   if (!data || !Array.isArray(data.components)) {
     throw new ProviderError("invalid_payload", "OpenAI summary component list is missing");
   }
 
-  const componentSnapshot = parseChatGPTComponents(chatgptService, data.components);
+  const componentSnapshot = parseChatGPTComponents(service, data.components);
   const incidents = Object.hasOwn(data, "incidents")
     ? parseSummaryIncidents(data.incidents)
-    : await fetchIncidentList(chatgptService, signal, fetcher);
+    : await fetchIncidentList(service, signal, fetcher);
   const knownActiveIncidents = await context.getActiveIncidents();
   const normalizedIncidents = await parseOpenAIChatGPTIncidents(
-    chatgptService,
+    service,
     incidents,
     knownActiveIncidents,
     signal,

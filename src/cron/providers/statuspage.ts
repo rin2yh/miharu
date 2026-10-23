@@ -91,12 +91,11 @@ function parseStatuspageComponent(value: unknown): NormalizedComponent {
 }
 
 export async function fetchStatuspageSnapshot(
-  service: ServiceConfig,
+  service: StatusPageService,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  const statuspageService = service as StatusPageService;
   const { signal, fetcher } = context;
-  const data = asRecord(await fetchJson(statuspageService.summaryUrl, signal, fetcher));
+  const data = asRecord(await fetchJson(service.summaryUrl, signal, fetcher));
   const status = asRecord(data?.status);
   const components = data?.components;
   const incidents = data?.incidents;
@@ -107,7 +106,7 @@ export async function fetchStatuspageSnapshot(
     !status ||
     !Array.isArray(components) ||
     !Array.isArray(incidents) ||
-    (statuspageService.scheduledMaintenances && !Array.isArray(maintenances))
+    (service.scheduledMaintenances && !Array.isArray(maintenances))
   ) {
     throw new ProviderError("invalid_payload", "Statuspage summary shape changed");
   }
@@ -119,8 +118,8 @@ export async function fetchStatuspageSnapshot(
     );
   }
 
-  const normalizedComponents = parseStatuspageComponents(components, statuspageService);
-  const componentIdFilter = statuspageService.componentGroupId
+  const normalizedComponents = parseStatuspageComponents(components, service);
+  const componentIdFilter = service.componentGroupId
     ? new Set(normalizedComponents.map((component) => component.id))
     : undefined;
   const componentNames = new Map(
@@ -129,10 +128,10 @@ export async function fetchStatuspageSnapshot(
 
   const sourceStatus = requiredText(status.indicator ?? status.status, "status indicator", 100);
   const normalizedIncidents = incidents.map((item) =>
-    parseStatuspageIncident(item, statuspageService, componentNames, false, componentIdFilter),
+    parseStatuspageIncident(item, service, componentNames, false, componentIdFilter),
   );
   const normalizedMaintenances = scheduledMaintenances.map((item) =>
-    parseStatuspageIncident(item, statuspageService, componentNames, true, componentIdFilter),
+    parseStatuspageIncident(item, service, componentNames, true, componentIdFilter),
   );
   const allIncidents = [...normalizedIncidents, ...normalizedMaintenances];
 
