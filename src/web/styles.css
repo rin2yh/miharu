@@ -87,8 +87,7 @@ input {
 }
 
 :focus-visible {
-  outline: 3px solid #3a8d68;
-  outline-offset: 3px;
+  @apply outline outline-2 outline-offset-2 outline-healthy;
 }
 
 summary::-webkit-details-marker {
