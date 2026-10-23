@@ -52,22 +52,30 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
   page,
   statusDashboard,
 }) => {
-  await page.setViewportSize({ width: 320, height: 800 });
-  await page.emulateMedia({ colorScheme: "dark" });
-  await statusDashboard.goto();
+  await test.step("320px幅のダークモードで画面を開く", async () => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await statusDashboard.goto();
+  });
 
-  const serviceList = page.getByRole("list", { name: "サービス一覧" });
-  await expect(serviceList).toBeVisible();
-  await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-  const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
-  const slackCard = await statusDashboard.serviceCard("Slack").boundingBox();
-  expect(githubCard).not.toBeNull();
-  expect(slackCard).not.toBeNull();
-  expect(slackCard!.y).toBeGreaterThan(githubCard!.y);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  );
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(
-    "dark",
-  );
+  await test.step("サービス一覧が縦並びで表示されることを確認する", async () => {
+    const serviceList = page.getByRole("list", { name: "サービス一覧" });
+    await expect(serviceList).toBeVisible();
+    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
+
+    const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
+    const slackCard = await statusDashboard.serviceCard("Slack").boundingBox();
+    expect(githubCard).not.toBeNull();
+    expect(slackCard).not.toBeNull();
+    expect(slackCard!.y).toBeGreaterThan(githubCard!.y);
+  });
+
+  await test.step("横スクロールがなくダークモードが適用されていることを確認する", async () => {
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(
+      "dark",
+    );
+  });
 });
