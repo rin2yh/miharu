@@ -87,10 +87,10 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     );
   }, [orderedServices, query]);
 
-  const filteredRecentEvents = useMemo(() => {
-    const serviceIds = new Set(filteredServices.map((service) => service.id));
-    return (payload?.recentEvents ?? []).filter((event) => serviceIds.has(event.serviceId));
-  }, [filteredServices, payload]);
+  const serviceIds = new Set(filteredServices.map((service) => service.id));
+  const filteredRecentEvents = (payload?.recentEvents ?? []).filter((event) =>
+    serviceIds.has(event.serviceId),
+  );
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 pt-8 pb-6 max-md:max-w-2xl max-md:px-4 max-md:pt-5 max-sm:max-w-md max-sm:px-3">
