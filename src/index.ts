@@ -3,6 +3,7 @@ import { createStatusRoutes } from "./web/routes/api/status";
 
 interface Env {
   DB: D1Database;
+  FRESHNESS_WARNING_SECONDS: string;
 }
 
 const app = createStatusRoutes();

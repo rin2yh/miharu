@@ -10,6 +10,58 @@
     "react/react-in-jsx-scope": "off",
     "vitest/require-test-timeout": "off"
   },
+  "overrides": [
+    {
+      "files": ["src/web/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "importNames": ["memo", "useCallback", "useMemo"],
+                "message": "React Compiler handles memoization in src/web; do not add manual memoization."
+              }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "property": "memo",
+            "message": "React Compiler handles memoization in src/web; do not use manual memoization."
+          },
+          {
+            "property": "useCallback",
+            "message": "React Compiler handles memoization in src/web; do not use manual memoization."
+          },
+          {
+            "property": "useMemo",
+            "message": "React Compiler handles memoization in src/web; do not use manual memoization."
+          }
+        ],
+        "react/rules-of-hooks": "error",
+        "react/hooks": "error",
+        "react/exhaustive-deps": "error",
+        "react/exhaustive-effect-dependencies": "error",
+        "react/error-boundaries": "error",
+        "react/globals": "error",
+        "react/immutability": "error",
+        "react/incompatible-library": "error",
+        "react/preserve-manual-memoization": "error",
+        "react/purity": "error",
+        "react/refs": "error",
+        "react/set-state-in-effect": "error",
+        "react/set-state-in-render": "error",
+        "react/static-components": "error",
+        "react/unsupported-syntax": "error",
+        "react/use-memo": "error",
+        "react/void-use-memo": "error",
+        "react/rule-suppression": "error"
+      }
+    }
+  ],
   "env": {
     "browser": true,
     "es2022": true,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
+import type { DashboardPayload } from "../domain";
 import { SERVICES } from "../shared/config/services";
 import { createStatusRoutes } from "./routes/api/status";
 
@@ -134,6 +135,36 @@ describe("status API", () => {
     expect(payload.recentEvents[0]).toMatchObject({ serviceName: "Slack", eventKind: "opened" });
     expect(payload.recentEvents[0]).not.toHaveProperty("body");
   });
+
+  it.each([
+    { environment: "production", seconds: 180, ageSeconds: 600, isStale: true },
+    { environment: "preview", seconds: 2_700, ageSeconds: 600, isStale: false },
+    { environment: "preview after 45 minutes", seconds: 2_700, ageSeconds: 2_701, isStale: true },
+  ])(
+    "uses the $environment freshness threshold in the API response and stale state",
+    async ({ seconds, ageSeconds, isStale }) => {
+      const checkedAt = new Date(Date.now() - ageSeconds * 1_000).toISOString();
+      const recentRows: DashboardRows = {
+        ...rows,
+        statusRows: rows.statusRows.map((row) => ({ ...row, lastSuccessAt: checkedAt })),
+      };
+      const reader = {
+        getDashboardRows: vi.fn<() => Promise<DashboardRows>>(async () => recentRows),
+      };
+      const app = createStatusRoutes(() => reader);
+      const response = await app.request(
+        "/api/status",
+        {},
+        { DB: {} as D1Database, FRESHNESS_WARNING_SECONDS: String(seconds) },
+      );
+      const payload = (await response.json()) as DashboardPayload;
+      const slack = payload.services.find((service) => service.id === slackService.id);
+
+      expect(response.status).toBe(200);
+      expect(payload.freshnessWarningSeconds).toBe(seconds);
+      expect(slack?.isStale).toBe(isStale);
+    },
+  );
 
   it("returns a generic unavailable response when D1 cannot be read", async () => {
     const reader = {

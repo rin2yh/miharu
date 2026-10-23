@@ -3,6 +3,9 @@
   "name": "miharu",
   "main": "./src/index.ts",
   "compatibility_date": "2026-10-19",
+  "vars": {
+    "FRESHNESS_WARNING_SECONDS": "180",
+  },
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
@@ -28,24 +31,29 @@
       "enabled": true,
     },
   },
-  "env": {
-    "preview": {
-      "name": "miharu-preview",
-      "assets": {
-        "binding": "ASSETS",
-        "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"],
+  "previews": {
+    "vars": {
+      "FRESHNESS_WARNING_SECONDS": "2700",
+    },
+    "assets": {
+      "binding": "ASSETS",
+      "not_found_handling": "single-page-application",
+      "run_worker_first": ["/api/*"],
+    },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "miharu-status-preview",
+        "database_id": "fe57c26a-0fac-40f1-b083-7167cd2c19f4",
       },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "miharu-status-preview",
-          "database_id": "fe57c26a-0fac-40f1-b083-7167cd2c19f4",
-          "migrations_dir": "db/migrations",
-        },
-      ],
-      "triggers": {
-        "crons": [],
+    ],
+    "observability": {
+      "enabled": true,
+      "traces": {
+        "enabled": true,
+      },
+      "issues": {
+        "enabled": true,
       },
     },
   },

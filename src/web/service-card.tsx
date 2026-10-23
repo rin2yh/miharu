@@ -253,11 +253,13 @@ function ComponentItem({
 
 function IncidentList({
   incidents,
-  nested = false,
+  nested: nestedProp,
 }: {
   incidents: DashboardIncident[];
   nested?: boolean;
 }) {
+  const nested = nestedProp ?? false;
+
   return (
     <ul className={`m-0 block list-none border-t border-line p-0 ${nested ? "mb-2 ml-5" : ""}`}>
       {incidents.map((incident) => (
