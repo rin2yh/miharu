@@ -197,7 +197,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           </button>
         </div>
         <ServiceSelector
-          locationSearch={locationSearch}
+          key={locationSearch}
           selectedServiceIds={selectedServiceIds}
           shareUrl={shareUrl}
           onApply={applyServiceSelection}
