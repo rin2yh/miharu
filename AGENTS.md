@@ -4,6 +4,11 @@
 
 ## 基本方針
 
+## ソースファイルの命名
+
+- 手書きのソースコードとテストのファイル名は kebab-case にする。設定ファイルと生成物は各ツールが要求する名称に従う。Reactコンポーネントのファイル名もPascalCaseにせず、export名はPascalCaseのままにする。
+  - 大文字小文字を区別する環境でimportの食い違いが起きるのを防ぎ、命名を統一する。
+
 ## プロジェクト概要
 
 Slack、Notion、GitHubなど複数サービスの公式ステータスを集約する。画面はReact、APIと収集処理はHono on Cloudflare Workers、最新状態とインシデント履歴はCloudflare D1で管理する。
