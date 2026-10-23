@@ -22,4 +22,4 @@ pnpm dev
 
 ## ライセンス
 
-未設定です。
+[MIT License](LICENSE)を適用しています。
