@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
 import { App } from "./app";
@@ -13,6 +13,10 @@ import {
 } from "./test-fixtures";
 
 describe("dashboard", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
   it("shows errors without replacing the last loaded snapshot", async () => {
     const load = vi
       .fn<() => Promise<DashboardPayload>>()
@@ -140,6 +144,124 @@ describe("dashboard", () => {
 
     expect(screen.getByText("検索条件に一致する最近の更新はありません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "GitHub update" })).not.toBeInTheDocument();
+  });
+
+  it("filters services and recent updates from the URL before applying the name search", async () => {
+    window.history.replaceState(null, "", "/?services=github,slack,github,unknown");
+    const slackEvent: DashboardEvent = {
+      id: "slack-event",
+      serviceId: "slack",
+      serviceName: "Slack",
+      incidentId: "slack-incident",
+      title: "Slack update",
+      kind: "incident",
+      eventKind: "opened",
+      sourceStatus: "investigating",
+      severityStatus: "partial_outage",
+      detectedAt: lastSuccessAt,
+      officialEventAt: lastSuccessAt,
+      url: "https://slack-status.com/incident/slack-incident",
+    };
+    const githubEvent: DashboardEvent = {
+      ...slackEvent,
+      id: "github-event",
+      serviceId: "github",
+      serviceName: "GitHub",
+      title: "GitHub update",
+      url: "https://www.githubstatus.com/incidents/github-incident",
+    };
+    render(<App load={async () => payload(basePayload.services, [slackEvent, githubEvent])} />);
+
+    const serviceList = await screen.findByRole("list", { name: "サービス一覧" });
+    const serviceLinks = within(serviceList)
+      .getAllByRole("link")
+      .filter((link) =>
+        [slackLinkName, githubLinkName].includes(link.getAttribute("aria-label") ?? ""),
+      );
+    expect(serviceLinks.map((link) => link.getAttribute("aria-label"))).toEqual([
+      slackLinkName,
+      githubLinkName,
+    ]);
+    expect(screen.getByRole("link", { name: "Slack update" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GitHub update" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
+      target: { value: "github" },
+    });
+
+    expect(screen.getByRole("link", { name: githubLinkName })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GitHub update" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Slack update" })).not.toBeInTheDocument();
+  });
+
+  it("keeps selection changes as a draft until apply and copies the applied URL", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    const previousClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    try {
+      render(<App load={async () => basePayload} />);
+      await screen.findByRole("link", { name: githubLinkName });
+      expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("表示サービスを選択"));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Slack" }));
+
+      expect(screen.getByText("未適用")).toBeInTheDocument();
+      expect(window.location.search).toBe("?services=github");
+      expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
+
+      expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
+      expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+      expect(screen.queryByText("未適用")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("現在の表示条件を共有")).toHaveValue(window.location.href);
+
+      fireEvent.click(screen.getByRole("button", { name: "URLをコピー" }));
+      expect(await screen.findByRole("status")).toHaveTextContent("URLをコピーしました");
+      expect(writeText).toHaveBeenCalledWith(window.location.href);
+    } finally {
+      if (previousClipboard) {
+        Object.defineProperty(navigator, "clipboard", previousClipboard);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    }
+  });
+
+  it("shows an empty state for unknown URL services and disables applying no selection", async () => {
+    window.history.replaceState(null, "", "/?services=missing,unknown");
+    render(<App load={async () => basePayload} />);
+
+    expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "この条件で表示" })).toBeDisabled();
+    expect(
+      screen.queryByRole("link", { name: /Messaging delays for some users/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("表示サービスを選択"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "すべて選択" }));
+    expect(screen.getByRole("button", { name: "この条件で表示" })).toBeEnabled();
+    expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
+    expect(new URL(window.location.href).searchParams.has("services")).toBe(false);
+    expect(await screen.findByRole("link", { name: githubLinkName })).toBeInTheDocument();
+  });
+
+  it("shows an empty data message when the selected service is missing from the response", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => payload([service({ id: "slack", name: "Slack" })])} />);
+
+    expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
+    expect(screen.queryByText("「」に一致するサービスはありません。")).not.toBeInTheDocument();
   });
 
   it("loads on entry and polls once per minute", async () => {

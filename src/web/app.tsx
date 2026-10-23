@@ -5,6 +5,8 @@ import { fetchDashboard } from "./api";
 import { EventRow } from "./event-row";
 import { RefreshIcon, SearchIcon } from "./icons";
 import { ServiceCard } from "./service-card";
+import { ServiceSelector } from "./service-selector";
+import { getSelectedServiceIds, getServiceSelectionUrl } from "./service-filter";
 import { servicePriority } from "./status-presentation";
 
 type DashboardLoader = () => Promise<DashboardPayload>;
@@ -12,9 +14,19 @@ type DashboardLoader = () => Promise<DashboardPayload>;
 export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [query, setQuery] = useState("");
+  const [locationSearch, setLocationSearch] = useState(() => window.location.search);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const inFlight = useRef(false);
+
+  useEffect(() => {
+    const syncSelectionFromUrl = () => {
+      setLocationSearch(window.location.search);
+    };
+
+    window.addEventListener("popstate", syncSelectionFromUrl);
+    return () => window.removeEventListener("popstate", syncSelectionFromUrl);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -79,18 +91,34 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     return services;
   }, [payload]);
 
+  const selectedServiceIds = useMemo(() => getSelectedServiceIds(locationSearch), [locationSearch]);
+  const activeServiceIds = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds]);
+
   const filteredServices = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ja");
-    if (!needle) return orderedServices;
-    return orderedServices.filter((service) =>
-      service.name.toLocaleLowerCase("ja").includes(needle),
+    return orderedServices.filter(
+      (service) =>
+        activeServiceIds.has(service.id) &&
+        (!needle || service.name.toLocaleLowerCase("ja").includes(needle)),
     );
-  }, [orderedServices, query]);
+  }, [activeServiceIds, orderedServices, query]);
 
-  const serviceIds = new Set(filteredServices.map((service) => service.id));
+  const visibleServiceIds = new Set(filteredServices.map((service) => service.id));
   const filteredRecentEvents = (payload?.recentEvents ?? []).filter((event) =>
-    serviceIds.has(event.serviceId),
+    visibleServiceIds.has(event.serviceId),
   );
+  const shareUrl = useMemo(() => {
+    const url = new URL(window.location.href);
+    url.search = locationSearch;
+    return url.toString();
+  }, [locationSearch]);
+
+  const applyServiceSelection = (selectedIds: string[]) => {
+    if (selectedIds.length === 0) return;
+    const nextUrl = getServiceSelectionUrl(window.location.href, selectedIds);
+    window.history.pushState(null, "", nextUrl);
+    setLocationSearch(window.location.search);
+  };
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 pt-8 pb-6 max-md:max-w-2xl max-md:px-4 max-md:pt-5 max-sm:max-w-md max-sm:px-3">
@@ -168,6 +196,12 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
             <span className="max-sm:sr-only">{refreshing ? "更新中" : "手動更新"}</span>
           </button>
         </div>
+        <ServiceSelector
+          key={locationSearch}
+          selectedServiceIds={selectedServiceIds}
+          shareUrl={shareUrl}
+          onApply={applyServiceSelection}
+        />
         {!payload && !loadError && (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
             サービス情報を読み込んでいます…
@@ -187,7 +221,7 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
         )}
         {payload && filteredServices.length === 0 && (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
-            「{query}」に一致するサービスはありません。
+            条件に一致するサービスはありません。
           </div>
         )}
         {payload && filteredServices.length > 0 && (
