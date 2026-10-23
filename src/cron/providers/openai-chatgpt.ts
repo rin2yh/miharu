@@ -5,6 +5,7 @@ import {
   type NormalizedStatus,
   type ProviderSnapshot,
 } from "../../domain";
+import { stableFallbackId } from "../../domain/id";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
@@ -191,13 +192,18 @@ function parseOpenAIIncident(
   const updatedAt =
     normalizeTimestamp(row.updated_at) ??
     normalizeTimestamp(latestUpdate?.display_at ?? latestUpdate?.created_at);
-  const id = rawId;
-  if (!id) throw new ProviderError("invalid_payload", "Missing OpenAI incident id");
   const rawUrl = row.url ?? row.shortlink ?? row.short_link;
-  const url = safeIncidentUrl(
-    rawUrl ?? new URL(`incidents/${encodeURIComponent(id)}`, service.statusPageUrl).toString(),
-    service,
-  );
+  const url = safeIncidentUrl(rawUrl, service);
+  const fallbackIdentity = createdAt || url ? [createdAt, url] : [title];
+  const id = rawId ?? stableFallbackId(service.id, fallbackIdentity);
+  const incidentUrl =
+    url ??
+    (rawId
+      ? safeIncidentUrl(
+          new URL(`incidents/${encodeURIComponent(rawId)}`, service.statusPageUrl).toString(),
+          service,
+        )
+      : null);
   const sourceImpact = boundedText(row.impact, 100);
 
   return {
@@ -214,7 +220,7 @@ function parseOpenAIIncident(
     components,
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
-    url,
+    url: incidentUrl,
     active: isIncidentActive(state),
   };
 }

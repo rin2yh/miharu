@@ -379,6 +379,49 @@ describe("OpenAI ChatGPT provider", () => {
     ]);
   });
 
+  it("uses stable fallback IDs when an incident has no official ID", async () => {
+    const conversationId = chatgpt.componentIds[0]!;
+    const fetchIncident = (incident: Record<string, unknown>) =>
+      fetchOpenAIChatGPTSnapshot(
+        chatgpt,
+        abortSignal,
+        routedJsonFetcher({
+          "/api/v2/summary.json": {
+            status: { indicator: "none" },
+            components: [{ id: conversationId, name: "Conversations", status: "operational" }],
+          },
+          "/api/v2/incidents.json": { incidents: [incident] },
+        }),
+      );
+
+    const firstWithUrl = await fetchIncident({
+      name: "ChatGPT conversation delays",
+      status: "investigating",
+      created_at: "2026-10-23T04:00:00Z",
+      url: "https://status.openai.com/incidents/shared-url",
+    });
+    const renamedWithUrl = await fetchIncident({
+      name: "ChatGPT conversation delays for some users",
+      status: "investigating",
+      created_at: "2026-10-23T04:00:00Z",
+      url: "https://status.openai.com/incidents/shared-url",
+    });
+    const firstWithTitle = await fetchIncident({
+      name: "ChatGPT file uploads are delayed",
+      status: "investigating",
+    });
+    const sameTitle = await fetchIncident({
+      name: "ChatGPT file uploads are delayed",
+      status: "investigating",
+    });
+
+    expect(firstWithUrl.incidents[0]?.id).toMatch(/^generated_/);
+    expect(firstWithUrl.incidents[0]?.id).toBe(renamedWithUrl.incidents[0]?.id);
+    expect(firstWithUrl.incidents[0]?.url).toBe("https://status.openai.com/incidents/shared-url");
+    expect(firstWithTitle.incidents[0]?.id).toMatch(/^generated_/);
+    expect(firstWithTitle.incidents[0]?.id).toBe(sameTitle.incidents[0]?.id);
+  });
+
   it("fails when OpenAI's separate incident list is missing instead of treating it as empty", async () => {
     await expect(
       fetchOpenAIChatGPTSnapshot(
