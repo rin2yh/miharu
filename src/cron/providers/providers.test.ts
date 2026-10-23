@@ -1,31 +1,30 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { SERVICES } from "../../shared/config/services";
+import { SERVICES, type ServiceConfig } from "../../shared/config/services";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
 
 const abortSignal = new AbortController().signal;
-const github = SERVICES.find((service) => service.id === "github");
-const notion = SERVICES.find((service) => service.id === "notion");
-const slack = SERVICES.find((service) => service.id === "slack");
-const cloudflare = SERVICES.find((service) => service.id === "cloudflare");
 
-if (
-  !github ||
-  github.provider !== "statuspage" ||
-  !notion ||
-  notion.provider !== "statuspage" ||
-  !slack ||
-  slack.provider !== "slack" ||
-  !cloudflare ||
-  cloudflare.provider !== "statuspage"
-) {
-  throw new Error("Service config is missing a provider fixture");
+function getService<P extends ServiceConfig["provider"]>(
+  id: string,
+  provider: P,
+): Extract<ServiceConfig, { provider: P }> {
+  const service = SERVICES.find((candidate) => candidate.id === id);
+
+  if (!service || service.provider !== provider) {
+    throw new Error(`Missing ${provider} service: ${id}`);
+  }
+
+  return service as Extract<ServiceConfig, { provider: P }>;
 }
 
+const github = getService("github", "statuspage");
+const notion = getService("notion", "statuspage");
+const slack = getService("slack", "slack");
+const cloudflareStatuspage = getService("cloudflare", "statuspage");
 const githubStatuspage = github;
-const cloudflareStatuspage = cloudflare;
 
 type CloudflareSummaryFixture = {
   status: { indicator: string; description: string };
