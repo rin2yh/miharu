@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siGithub, siNotion, type SimpleIcon } from "simple-icons";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type {
+  DashboardIncident,
   DashboardEvent,
   DashboardPayload,
+  DashboardComponent,
   DashboardService,
   NormalizedStatus,
 } from "../domain";
@@ -93,31 +95,24 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
     };
   }, [load]);
 
-  const sortedServices = useMemo(() => {
+  const orderedServices = useMemo(() => {
     const services = [...(payload?.services ?? [])];
     services.sort((left, right) => {
-      const leftActive = left.incidents.length > 0 ? 1 : 0;
-      const rightActive = right.incidents.length > 0 ? 1 : 0;
-      if (leftActive !== rightActive) return rightActive - leftActive;
+      const incidentDifference =
+        Number(right.incidents.length > 0) - Number(left.incidents.length > 0);
       const priorityDifference = servicePriority(right) - servicePriority(left);
-      return priorityDifference || left.name.localeCompare(right.name, "ja");
+      return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
     });
     return services;
   }, [payload]);
 
   const filteredServices = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ja");
-    if (!needle) return sortedServices;
-    return sortedServices.filter((service) =>
+    if (!needle) return orderedServices;
+    return orderedServices.filter((service) =>
       service.name.toLocaleLowerCase("ja").includes(needle),
     );
-  }, [query, sortedServices]);
-
-  const incidentCount =
-    payload?.services.reduce((count, service) => count + service.incidents.length, 0) ?? 0;
-  const affectedServiceCount =
-    payload?.services.filter((service) => isAffectedService(service)).length ?? 0;
-  const staleCount = payload?.services.filter((service) => service.isStale).length ?? 0;
+  }, [orderedServices, query]);
 
   return (
     <main className="page-shell">
@@ -133,30 +128,6 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
         <p className="header-note">公式情報を1分ごとに確認</p>
       </header>
 
-      <section className="overview" id="top" aria-live="polite">
-        <div className="overview-copy">
-          <p className="eyebrow">稼働状況</p>
-          <h1>{overviewTitle(payload, affectedServiceCount, incidentCount, staleCount)}</h1>
-          <p className="overview-description">
-            {payload
-              ? `${payload.services.length}サービスを監視中です。`
-              : "公式ステータスページから最新情報を取得しています。"}
-          </p>
-        </div>
-        {(affectedServiceCount > 0 || incidentCount > 0) && (
-          <dl className="overview-stats">
-            <div className="overview-stat">
-              <dt className="overview-count-label">影響サービス</dt>
-              <dd className="overview-number">{affectedServiceCount}</dd>
-            </div>
-            <div className="overview-stat">
-              <dt className="overview-count-label">インシデント</dt>
-              <dd className="overview-number">{incidentCount}</dd>
-            </div>
-          </dl>
-        )}
-      </section>
-
       {loadError && (
         <div className="global-alert" role="alert">
           <span className="alert-dot" aria-hidden="true" />
@@ -164,45 +135,51 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
         </div>
       )}
 
-      <section className="services-section" aria-labelledby="services-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="services-title">サービス一覧</h2>
-            <p>状態の変化が大きいサービスから表示します。</p>
-          </div>
-          <div className="toolbar">
-            <label className="search-box">
-              <SearchIcon />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="サービスを検索"
-                aria-label="サービスを検索"
-              />
-              {query && (
-                <button
-                  className="clear-search"
-                  type="button"
-                  aria-label="検索をクリア"
-                  onClick={() => setQuery("")}
-                >
-                  ×
-                </button>
-              )}
-            </label>
-            <button
-              className="refresh-button"
-              type="button"
-              onClick={() => void refreshManually()}
-              disabled={refreshing}
-            >
-              <RefreshIcon spinning={refreshing} />
-              <span>{refreshing ? "更新中" : "手動更新"}</span>
-            </button>
-          </div>
+      <section
+        className="service-overview"
+        id="top"
+        aria-labelledby="services-title"
+        aria-live="polite"
+      >
+        <div className="service-overview-heading">
+          <h1 id="services-title">サービス稼働状況</h1>
+          <span className="service-count">
+            {payload ? `${filteredServices.length}サービス` : "確認中"}
+          </span>
         </div>
-
+        <div className="service-overview-controls">
+          <label className="search-box">
+            <SearchIcon />
+            <input
+              id="service-search"
+              name="service"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="サービスを検索"
+              aria-label="サービスを検索"
+            />
+            {query && (
+              <button
+                className="clear-search"
+                type="button"
+                aria-label="検索をクリア"
+                onClick={() => setQuery("")}
+              >
+                ×
+              </button>
+            )}
+          </label>
+          <button
+            className="refresh-button"
+            type="button"
+            onClick={() => void refreshManually()}
+            disabled={refreshing}
+          >
+            <RefreshIcon spinning={refreshing} />
+            <span>{refreshing ? "更新中" : "手動更新"}</span>
+          </button>
+        </div>
         {!payload && !loadError && (
           <div className="empty-panel">公式ステータスを確認しています…</div>
         )}
@@ -218,11 +195,11 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
           <div className="empty-panel">「{query}」に一致するサービスはありません。</div>
         )}
         {payload && filteredServices.length > 0 && (
-          <div className="service-list">
+          <ul className="service-grid">
             {filteredServices.map((service) => (
-              <ServiceRow key={service.id} service={service} />
+              <ServiceCard key={service.id} service={service} />
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
@@ -253,70 +230,59 @@ export function App({ load = fetchDashboard }: { load?: DashboardLoader }) {
   );
 }
 
-function ServiceRow({ service }: { service: DashboardService }) {
-  const showDetails =
-    service.status !== "operational" ||
-    service.hasFetchError ||
-    service.isStale ||
-    service.incidents.length > 0;
+function ServiceCard({ service }: { service: DashboardService }) {
   const icon = serviceIcons[service.id];
   const iconColor = icon ? `#${icon.hex}` : "currentColor";
+  const { assigned, unassigned } = assignIncidents(service);
+  const components = service.components.toSorted((left, right) => {
+    const abnormalDifference = Number(isAbnormal(right.status)) - Number(isAbnormal(left.status));
+    const statusDifference = STATUS_RANK[right.status] - STATUS_RANK[left.status];
+    return (
+      abnormalDifference ||
+      statusDifference ||
+      left.name.localeCompare(right.name, "ja") ||
+      left.id.localeCompare(right.id)
+    );
+  });
 
   return (
-    <article
-      className={`service-row status-${service.status}${showDetails ? "" : " service-row-clear"}`}
-    >
-      <div className="service-main">
-        <div className="service-identity">
-          <span className="service-icon" style={{ color: iconColor }} aria-hidden="true">
-            {icon ? (
-              <svg viewBox="0 0 24 24">
-                <path d={icon.path} />
-              </svg>
-            ) : (
-              service.name.slice(0, 1)
-            )}
-          </span>
-          <div className="service-name-wrap">
-            <h3>{service.name}</h3>
-            <a
-              className="official-link"
-              href={service.statusPageUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              aria-label={`${service.name}の公式ステータスページを開く`}
-            >
-              公式
-              <ExternalIcon />
+    <li className={`service-card status-${service.status}`} id={`service-details-${service.id}`}>
+      <header className="service-card-header">
+        <span
+          className={`service-icon service-icon-${service.id}`}
+          style={{ color: iconColor }}
+          aria-hidden="true"
+        >
+          {icon ? (
+            <svg viewBox="0 0 24 24">
+              <path d={icon.path} />
+            </svg>
+          ) : (
+            service.name.slice(0, 1)
+          )}
+        </span>
+        <div className="service-card-title">
+          <h2>
+            <a href={service.statusPageUrl} target="_blank" rel="noreferrer noopener">
+              {service.name}
             </a>
-          </div>
-        </div>
-        <div className="service-status-block">
+          </h2>
           <span className={`status-pill status-pill-${service.status}`}>
             <span className="status-pip" aria-hidden="true" />
             {STATUS_LABELS[service.status]}
           </span>
         </div>
-        {showDetails && (
-          <div className="service-freshness">
-            {service.lastSuccessAt ? (
-              <>
-                <span className="freshness-label">最終取得成功</span>
-                <time dateTime={service.lastSuccessAt}>
-                  {formatDateTime(service.lastSuccessAt)}
-                </time>
-              </>
-            ) : (
-              <span className="freshness-label">取得成功なし</span>
-            )}
-          </div>
-        )}
-      </div>
+        <span className="service-source-label">公式サービス全体</span>
+      </header>
+
+      {service.status !== "operational" && service.summary && (
+        <p className="service-summary">{service.summary}</p>
+      )}
 
       {service.hasFetchError && (
         <output className="service-warning">
           <WarningIcon />
-          公式情報の取得に失敗しました。表示中の状態は最後に取得できた情報です。
+          取得に失敗しました。表示中の状態は最後に成功した取得結果です。
         </output>
       )}
       {service.isStale && !service.hasFetchError && (
@@ -328,60 +294,205 @@ function ServiceRow({ service }: { service: DashboardService }) {
         </output>
       )}
 
-      {service.incidents.length > 0 ? (
-        <ul className="incident-list" aria-label={`${service.name}の障害・メンテナンス`}>
-          {service.incidents.map((incident) => (
-            <li className="incident-item" key={incident.id}>
-              <div className="incident-topline">
-                <span className={`incident-kind incident-kind-${incident.kind}`}>
-                  {incident.kind === "maintenance"
-                    ? "メンテナンス"
-                    : incident.state === "monitoring"
-                      ? "監視中"
-                      : "障害情報"}
-                </span>
-                {incident.severityStatus && (
-                  <span className={`incident-impact impact-${incident.severityStatus}`}>
-                    {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
-                  </span>
-                )}
-                {incident.sourceImpact && incident.severityStatus && (
-                  <span className="incident-source-impact">
-                    公式重要度: {incident.sourceImpact}
-                  </span>
-                )}
-              </div>
-              <h4>
-                {incident.url ? (
-                  <a href={incident.url} target="_blank" rel="noreferrer noopener">
-                    {incident.title}
-                    <ExternalIcon />
-                  </a>
-                ) : (
-                  incident.title
-                )}
-              </h4>
-              {incident.body && <p className="incident-body">{incident.body}</p>}
-              {incident.components.length > 0 && (
-                <div className="component-list" aria-label="影響コンポーネント">
-                  {incident.components.map((component) => (
-                    <span key={component}>{component}</span>
-                  ))}
-                </div>
-              )}
-              <div className="incident-times">
-                {incident.officialCreatedAt && (
-                  <span>公式発生 {formatDateTime(incident.officialCreatedAt)}</span>
-                )}
-                {incident.officialUpdatedAt && (
-                  <span>公式更新 {formatDateTime(incident.officialUpdatedAt)}</span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </article>
+      {components.length > 0 ? (
+        <section className="component-section" aria-label={`${service.name}のコンポーネント`}>
+          <h3>コンポーネント</h3>
+          <ul className="component-accordion-list">
+            {components.map((component) => {
+              const incidents = assigned.get(component.id) ?? [];
+              return (
+                <ComponentAccordion
+                  key={component.id}
+                  component={component}
+                  incidents={incidents}
+                />
+              );
+            })}
+          </ul>
+        </section>
+      ) : (
+        <p className="component-unavailable">
+          独立したコンポーネント状態は公式APIから提供されていません。
+        </p>
+      )}
+
+      {unassigned.length > 0 && (
+        <section
+          className="service-direct-incidents"
+          aria-label={`${service.name}の関連コンポーネント不明の情報`}
+        >
+          <h3>
+            {components.length > 0
+              ? "コンポーネントに関連付けられていない情報"
+              : "障害・メンテナンス情報"}
+          </h3>
+          <IncidentList incidents={unassigned} />
+        </section>
+      )}
+
+      {components.length > 0 &&
+        service.incidents.length === 0 &&
+        components.every((component) => component.status === "operational") && (
+          <p className="service-all-clear">すべてのコンポーネントが正常です。</p>
+        )}
+
+      <footer className="service-freshness">
+        <span className="freshness-label">最終取得成功</span>
+        {service.lastSuccessAt ? (
+          <time dateTime={service.lastSuccessAt}>{formatDateTime(service.lastSuccessAt)}</time>
+        ) : (
+          <span>なし</span>
+        )}
+      </footer>
+    </li>
+  );
+}
+
+function ComponentAccordion({
+  component,
+  incidents,
+}: {
+  component: DashboardComponent;
+  incidents: DashboardIncident[];
+}) {
+  return (
+    <li className={`component-accordion status-${component.status}`}>
+      <details open={isAbnormal(component.status)}>
+        <summary>
+          <span className="component-summary-name">{component.name}</span>
+          <span className={`status-pill status-pill-${component.status}`}>
+            <span className="status-pip" aria-hidden="true" />
+            {STATUS_LABELS[component.status]}
+          </span>
+          {incidents.length > 0 && (
+            <span className="component-incident-count">障害情報 {incidents.length}件</span>
+          )}
+        </summary>
+        {incidents.length > 0 ? (
+          <IncidentList incidents={incidents} />
+        ) : (
+          <p className="component-detail-empty">
+            {isAbnormal(component.status)
+              ? "このコンポーネントに関連するインシデントはありません。"
+              : "関連する障害情報はありません。"}
+          </p>
+        )}
+      </details>
+    </li>
+  );
+}
+
+function IncidentList({ incidents }: { incidents: DashboardIncident[] }) {
+  return (
+    <ul className="incident-list">
+      {incidents.map((incident) => (
+        <li className="incident-item" key={incident.id}>
+          <div className="incident-topline">
+            <span className={`incident-kind incident-kind-${incident.kind}`}>
+              {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
+            </span>
+            <span className={`incident-state incident-state-${incident.state}`}>
+              {incidentStateLabel(incident.state)}
+            </span>
+            {incident.severityStatus && (
+              <span className={`incident-impact impact-${incident.severityStatus}`}>
+                {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
+              </span>
+            )}
+            {incident.sourceImpact && incident.severityStatus && (
+              <span className="incident-source-impact">公式重要度: {incident.sourceImpact}</span>
+            )}
+          </div>
+          <h4>
+            {incident.url ? (
+              <a href={incident.url} target="_blank" rel="noreferrer noopener">
+                {incident.title}
+                <ExternalIcon />
+              </a>
+            ) : (
+              incident.title
+            )}
+          </h4>
+          {incident.body && <p className="incident-body">{incident.body}</p>}
+          {incident.components.length > 0 && (
+            <div className="component-list" aria-label="公式の影響対象">
+              {incident.components.map((component) => (
+                <span key={component}>{component}</span>
+              ))}
+            </div>
+          )}
+          <div className="incident-times">
+            {incident.officialCreatedAt && (
+              <span>
+                公式発生{" "}
+                <time dateTime={incident.officialCreatedAt}>
+                  {formatDateTime(incident.officialCreatedAt)}
+                </time>
+              </span>
+            )}
+            {incident.officialUpdatedAt && (
+              <span>
+                公式更新{" "}
+                <time dateTime={incident.officialUpdatedAt}>
+                  {formatDateTime(incident.officialUpdatedAt)}
+                </time>
+              </span>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function assignIncidents(service: DashboardService): {
+  assigned: Map<string, DashboardIncident[]>;
+  unassigned: DashboardIncident[];
+} {
+  const assigned = new Map<string, DashboardIncident[]>();
+  const knownComponents = new Map(service.components.map((component) => [component.id, component]));
+  const unassigned: DashboardIncident[] = [];
+
+  for (const incident of service.incidents) {
+    const matchedIds = incident.componentIds.filter((id) => knownComponents.has(id));
+    const matchedComponents =
+      matchedIds.length > 0
+        ? matchedIds.map((id) => knownComponents.get(id)!)
+        : service.components.filter((component) => incident.components.includes(component.name));
+    if (matchedComponents.length === 0) {
+      unassigned.push(incident);
+      continue;
+    }
+    for (const component of matchedComponents) {
+      const list = assigned.get(component.id) ?? [];
+      list.push(incident);
+      assigned.set(component.id, list);
+    }
+  }
+
+  return { assigned, unassigned };
+}
+
+function incidentStateLabel(state: DashboardIncident["state"]): string {
+  switch (state) {
+    case "investigating":
+      return "調査中";
+    case "identified":
+      return "原因特定";
+    case "monitoring":
+      return "監視中";
+    case "scheduled":
+      return "予定・実施中";
+    case "resolved":
+      return "復旧";
+    default:
+      return "状態不明";
+  }
+}
+
+function isAbnormal(status: NormalizedStatus): boolean {
+  return ["degraded_performance", "partial_outage", "major_outage", "under_maintenance"].includes(
+    status,
   );
 }
 
@@ -419,35 +530,17 @@ function EventRow({ event }: { event: DashboardEvent }) {
 }
 
 function servicePriority(service: DashboardService): number {
-  return service.incidents.reduce(
-    (priority, incident) =>
-      incident.severityStatus ? Math.max(priority, STATUS_RANK[incident.severityStatus]) : priority,
-    STATUS_RANK[service.status],
+  return Math.max(
+    priorityRank(service.status),
+    ...service.components.map((component) => priorityRank(component.status)),
+    ...service.incidents.map((incident) =>
+      incident.severityStatus ? priorityRank(incident.severityStatus) : 0,
+    ),
   );
 }
 
-function isAffectedService(service: DashboardService): boolean {
-  return (
-    service.incidents.length > 0 ||
-    (service.status !== "operational" && service.status !== "unknown")
-  );
-}
-
-function overviewTitle(
-  payload: DashboardPayload | null,
-  affectedServiceCount: number,
-  incidentCount: number,
-  staleCount: number,
-): string {
-  if (!payload) return "サービスの状態を確認しています";
-  if (incidentCount > 0) return "障害・メンテナンス情報があります";
-  if (affectedServiceCount > 0) return "一部のサービスに影響があります";
-  if (staleCount > 0) return "一部の情報を更新できていません";
-  if (payload.services.every((service) => service.status === "operational"))
-    return "すべて正常に稼働中です";
-  if (payload.services.some((service) => service.status === "unknown"))
-    return "一部の状態を確認できません";
-  return "稼働状況を確認してください";
+function priorityRank(status: NormalizedStatus): number {
+  return status === "operational" || status === "unknown" ? 0 : STATUS_RANK[status];
 }
 
 function formatDateTime(value: string): string {

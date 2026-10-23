@@ -62,7 +62,7 @@ describe("Statuspage provider", () => {
             component_ids: ["actions"],
             incident_updates: [
               {
-                body: "Mitigation is in place.",
+                body: "Mitigation is in place.<br />Next line.",
                 created_at: "2026-10-23T01:14:00Z",
                 affected_components: [{ name: "Actions" }],
               },
@@ -76,6 +76,14 @@ describe("Statuspage provider", () => {
 
     expect(snapshot.status).toBe("partial_outage");
     expect(snapshot.sourceStatus).toBe("major");
+    expect(snapshot.components).toEqual([
+      {
+        id: "actions",
+        name: "Actions",
+        status: "partial_outage",
+        sourceStatus: "partial_outage",
+      },
+    ]);
     expect(snapshot.incidents).toHaveLength(1);
     expect(snapshot.incidents[0]).toMatchObject({
       id: "inc-1",
@@ -83,7 +91,8 @@ describe("Statuspage provider", () => {
       active: true,
       sourceImpact: "critical",
       severityStatus: "major_outage",
-      body: "Mitigation is in place.",
+      body: "Mitigation is in place.\nNext line.",
+      componentIds: ["actions"],
       components: ["Actions"],
       url: "https://www.githubstatus.com/incidents/inc-1",
     });
@@ -113,10 +122,12 @@ describe("Statuspage provider", () => {
     );
 
     expect(snapshot.status).toBe("operational");
+    expect(snapshot.components).toEqual([]);
     expect(snapshot.incidents[0]).toMatchObject({
       officialUpdatedAt: "2026-10-23T04:01:17.000Z",
       severityStatus: "major_outage",
       active: true,
+      componentIds: [],
     });
   });
 
@@ -197,10 +208,12 @@ describe("Slack provider", () => {
       state: "investigating",
       sourceType: "incident",
       severityStatus: null,
+      componentIds: [],
       officialUpdatedAt: "2026-10-23T01:05:00.000Z",
       body: "We are investigating.",
       components: ["Messaging"],
     });
+    expect(snapshot.components).toBeUndefined();
   });
 
   it("normalizes Slack's healthy response", async () => {

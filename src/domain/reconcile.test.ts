@@ -16,6 +16,7 @@ function incident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncide
     sourceType: null,
     sourceImpact: "major",
     severityStatus: "partial_outage",
+    componentIds: [],
     components: ["API"],
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T04:55:00.000Z",
@@ -75,6 +76,7 @@ describe("incident reconciliation", () => {
       sourceStatus: "identified",
       sourceImpact: "critical",
       severityStatus: "major_outage",
+      componentIds: ["component-actions"],
       components: ["API", "Actions"],
       officialUpdatedAt: "2026-10-23T05:04:00.000Z",
     });
@@ -82,6 +84,7 @@ describe("incident reconciliation", () => {
     expect(result.changedIncidents[0]).toMatchObject({
       revision: 2,
       title: changed.title,
+      componentIds: ["component-actions"],
       components: ["API", "Actions"],
     });
     expect(result.events).toHaveLength(1);

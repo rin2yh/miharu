@@ -16,6 +16,15 @@ export interface ServiceStatusRow {
   errorCode: string | null;
 }
 
+export interface ServiceComponentRow {
+  serviceId: string;
+  id: string;
+  name: string;
+  status: NormalizedStatus;
+  sourceStatus: string;
+  lastChangedAt: string;
+}
+
 export interface IncidentRow {
   serviceId: string;
   id: string;
@@ -27,6 +36,7 @@ export interface IncidentRow {
   sourceType: string | null;
   sourceImpact: string | null;
   severityStatus: NormalizedStatus | null;
+  componentIdsJson: string;
   componentsJson: string;
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
@@ -48,6 +58,7 @@ export interface IncidentEventRow {
   eventKind: IncidentEventKind;
   sourceStatus: string;
   severityStatus: NormalizedStatus | null;
+  componentIdsJson: string;
   detectedAt: string;
   officialEventAt: string | null;
   url: string | null;
@@ -57,6 +68,7 @@ export interface IncidentEventRow {
 
 export interface DashboardRows {
   statusRows: ServiceStatusRow[];
+  componentRows: ServiceComponentRow[];
   activeRows: IncidentRow[];
   eventRows: IncidentEventRow[];
 }

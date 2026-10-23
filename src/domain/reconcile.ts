@@ -9,6 +9,7 @@ import { stableFallbackId } from "./id";
 
 export interface IncidentRecord extends NormalizedIncident {
   serviceId: string;
+  componentIdsJson: string;
   componentsJson: string;
   firstSeenAt: string;
   resolvedDetectedAt: string | null;
@@ -30,6 +31,7 @@ export interface IncidentEventRecord {
   sourceType: string | null;
   sourceImpact: string | null;
   severityStatus: NormalizedStatus | null;
+  componentIdsJson: string;
   componentsJson: string;
   url: string | null;
   officialEventAt: string | null;
@@ -141,6 +143,8 @@ function makeRecord(
   return {
     ...snapshot,
     serviceId,
+    componentIds: [...snapshot.componentIds],
+    componentIdsJson: JSON.stringify(snapshot.componentIds),
     components: [...snapshot.components],
     componentsJson: JSON.stringify(snapshot.components),
     firstSeenAt,
@@ -170,6 +174,7 @@ function makeEvent(
     sourceType: record.sourceType,
     sourceImpact: record.sourceImpact,
     severityStatus: record.severityStatus,
+    componentIdsJson: record.componentIdsJson,
     componentsJson: record.componentsJson,
     url: record.url,
     officialEventAt,
@@ -187,6 +192,7 @@ function incidentFingerprint(incident: NormalizedIncident): string {
     incident.sourceType,
     incident.sourceImpact,
     incident.severityStatus,
+    [...incident.componentIds].toSorted().join("\u001e"),
     [...incident.components].toSorted().join("\u001e"),
     String(incident.active),
   ]);

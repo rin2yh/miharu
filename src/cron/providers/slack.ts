@@ -82,6 +82,7 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
     sourceImpact: null,
     // Slack documents issue types, not a universal severity scale; keep severity unknown.
     severityStatus: null,
+    componentIds: [],
     components: uniqueNames(services),
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,

@@ -2,6 +2,7 @@ import type {
   DashboardRows,
   IncidentEventRow,
   IncidentRow,
+  ServiceComponentRow,
   ServiceStatusRow,
 } from "../../db/schema";
 import {
@@ -73,6 +74,10 @@ export function createD1Store(database: D1Database): DashboardStore {
           ),
       ]);
 
+      if (snapshot.components !== undefined) {
+        await syncComponents(database, service.id, snapshot.components, observedAt);
+      }
+
       const eventsById = new Map(reconciled.events.map((event) => [event.id, event]));
       const groups = reconciled.changedIncidents.map((record) => {
         const eventId = JSON.stringify([record.serviceId, record.id, record.revision]);
@@ -101,7 +106,7 @@ export function createD1Store(database: D1Database): DashboardStore {
     },
 
     async getDashboardRows() {
-      const [statuses, active, events] = await Promise.all([
+      const [statuses, components, active, events] = await Promise.all([
         database
           .prepare(
             `SELECT
@@ -114,10 +119,20 @@ export function createD1Store(database: D1Database): DashboardStore {
         database
           .prepare(
             `SELECT
+              service_id AS serviceId, id, name, status,
+              source_status AS sourceStatus, last_changed_at AS lastChangedAt
+            FROM service_components
+            ORDER BY service_id, name COLLATE NOCASE, id`,
+          )
+          .all<ServiceComponentRow>(),
+        database
+          .prepare(
+            `SELECT
               service_id AS serviceId, id, title, body, kind, state,
               source_status AS sourceStatus, source_type AS sourceType,
               source_impact AS sourceImpact, severity_status AS severityStatus,
-              components_json AS componentsJson, official_created_at AS officialCreatedAt,
+              component_ids_json AS componentIdsJson, components_json AS componentsJson,
+              official_created_at AS officialCreatedAt,
               official_updated_at AS officialUpdatedAt, url, active,
               first_seen_at AS firstSeenAt, resolved_detected_at AS resolvedDetectedAt,
               fingerprint, revision, last_observed_at AS lastObservedAt
@@ -131,7 +146,8 @@ export function createD1Store(database: D1Database): DashboardStore {
             `SELECT
               id, service_id AS serviceId, incident_id AS incidentId, title, body,
               kind, event_kind AS eventKind, source_status AS sourceStatus,
-              severity_status AS severityStatus, components_json AS componentsJson,
+              severity_status AS severityStatus, component_ids_json AS componentIdsJson,
+              components_json AS componentsJson,
               detected_at AS detectedAt, official_event_at AS officialEventAt, url
             FROM incident_events
             ORDER BY detected_at DESC
@@ -142,6 +158,7 @@ export function createD1Store(database: D1Database): DashboardStore {
       ]);
       return {
         statusRows: statuses.results,
+        componentRows: components.results,
         activeRows: active.results,
         eventRows: events.results,
       };
@@ -166,10 +183,10 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
     .prepare(
       `INSERT INTO incidents (
         service_id, id, title, body, kind, state, source_status, source_type,
-        source_impact, severity_status, components_json, official_created_at,
+        source_impact, severity_status, component_ids_json, components_json, official_created_at,
         official_updated_at, url, active, first_seen_at, resolved_detected_at,
         fingerprint, revision, last_observed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(service_id, id) DO UPDATE SET
         title = excluded.title,
         body = excluded.body,
@@ -179,6 +196,7 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
         source_type = excluded.source_type,
         source_impact = excluded.source_impact,
         severity_status = excluded.severity_status,
+        component_ids_json = excluded.component_ids_json,
         components_json = excluded.components_json,
         official_created_at = excluded.official_created_at,
         official_updated_at = excluded.official_updated_at,
@@ -201,6 +219,7 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
       record.sourceType,
       record.sourceImpact,
       record.severityStatus,
+      record.componentIdsJson,
       record.componentsJson,
       record.officialCreatedAt,
       record.officialUpdatedAt,
@@ -220,8 +239,8 @@ function eventInsert(database: D1Database, event: IncidentEventRecord): D1Prepar
       `INSERT INTO incident_events (
         id, service_id, incident_id, kind, event_kind, title, body, state,
         source_status, source_type, source_impact, severity_status,
-        components_json, url, official_event_at, detected_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        component_ids_json, components_json, url, official_event_at, detected_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING`,
     )
     .bind(
@@ -237,6 +256,7 @@ function eventInsert(database: D1Database, event: IncidentEventRecord): D1Prepar
       event.sourceType,
       event.sourceImpact,
       event.severityStatus,
+      event.componentIdsJson,
       event.componentsJson,
       event.url,
       event.officialEventAt,
@@ -268,6 +288,8 @@ function toIncidentRecord(row: IncidentRow): IncidentRecord {
     sourceType: row.sourceType,
     sourceImpact: row.sourceImpact,
     severityStatus: row.severityStatus,
+    componentIds: parseComponents(row.componentIdsJson),
+    componentIdsJson: row.componentIdsJson,
     components: parseComponents(row.componentsJson),
     componentsJson: row.componentsJson,
     officialCreatedAt: row.officialCreatedAt,
@@ -280,6 +302,65 @@ function toIncidentRecord(row: IncidentRow): IncidentRecord {
     revision: row.revision,
     lastObservedAt: row.lastObservedAt,
   };
+}
+
+async function syncComponents(
+  database: D1Database,
+  serviceId: string,
+  components: NonNullable<ProviderSnapshot["components"]>,
+  observedAt: string,
+): Promise<void> {
+  const upserts = components.map((component) =>
+    database
+      .prepare(
+        `INSERT INTO service_components (
+          service_id, id, name, status, source_status, last_changed_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(service_id, id) DO UPDATE SET
+          name = excluded.name,
+          status = excluded.status,
+          source_status = excluded.source_status,
+          last_changed_at = excluded.last_changed_at
+        WHERE EXISTS (
+          SELECT 1 FROM service_status
+          WHERE service_id = excluded.service_id
+            AND last_checked_at <= excluded.last_changed_at
+        )
+        AND (
+          service_components.name <> excluded.name
+          OR service_components.status <> excluded.status
+          OR service_components.source_status <> excluded.source_status
+        )`,
+      )
+      .bind(
+        serviceId,
+        component.id,
+        component.name,
+        component.status,
+        component.sourceStatus,
+        observedAt,
+      ),
+  );
+  await runBatches(
+    database,
+    upserts.map((statement) => [statement]),
+  );
+
+  const componentIds = components.map((component) => component.id);
+  const notIn =
+    componentIds.length > 0 ? `AND id NOT IN (${componentIds.map(() => "?").join(",")})` : "";
+  await database
+    .prepare(
+      `DELETE FROM service_components
+      WHERE service_id = ? ${notIn}
+        AND EXISTS (
+          SELECT 1 FROM service_status
+          WHERE service_id = service_components.service_id
+            AND last_checked_at <= ?
+        )`,
+    )
+    .bind(serviceId, ...componentIds, observedAt)
+    .run();
 }
 
 export function parseComponents(value: string): string[] {

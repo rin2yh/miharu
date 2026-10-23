@@ -18,6 +18,13 @@ export type IncidentState =
 export type IncidentKind = "incident" | "maintenance";
 export type IncidentEventKind = "opened" | "updated" | "resolved";
 
+export interface NormalizedComponent {
+  id: string;
+  name: string;
+  status: NormalizedStatus;
+  sourceStatus: string;
+}
+
 export interface NormalizedIncident {
   id: string;
   title: string;
@@ -28,6 +35,7 @@ export interface NormalizedIncident {
   sourceType: string | null;
   sourceImpact: string | null;
   severityStatus: NormalizedStatus | null;
+  componentIds: string[];
   components: string[];
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
@@ -39,6 +47,7 @@ export interface ProviderSnapshot {
   status: NormalizedStatus;
   sourceStatus: string;
   summary: string | null;
+  components?: NormalizedComponent[];
   incidents: NormalizedIncident[];
 }
 
@@ -52,6 +61,7 @@ export interface DashboardIncident {
   sourceType: string | null;
   sourceImpact: string | null;
   severityStatus: NormalizedStatus | null;
+  componentIds: string[];
   components: string[];
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
@@ -68,7 +78,12 @@ export interface DashboardService {
   lastSuccessAt: string | null;
   hasFetchError: boolean;
   isStale: boolean;
+  components: DashboardComponent[];
   incidents: DashboardIncident[];
+}
+
+export interface DashboardComponent extends NormalizedComponent {
+  lastChangedAt: string;
 }
 
 export interface DashboardEvent {

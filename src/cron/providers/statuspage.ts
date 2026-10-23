@@ -1,6 +1,15 @@
-import { normalizeStatus, type NormalizedIncident, type ProviderSnapshot } from "../../domain";
+import {
+  normalizeStatus,
+  type NormalizedComponent,
+  type NormalizedIncident,
+  type ProviderSnapshot,
+} from "../../domain";
 import { stableFallbackId } from "../../domain/id";
-import { INCIDENTS_PER_SERVICE_LIMIT, type ServiceConfig } from "../../shared/config/services";
+import {
+  COMPONENTS_PER_SERVICE_LIMIT,
+  INCIDENTS_PER_SERVICE_LIMIT,
+  type ServiceConfig,
+} from "../../shared/config/services";
 import {
   asRecord,
   boundedText,
@@ -11,6 +20,7 @@ import {
   ProviderError,
   requiredText,
   safeIncidentUrl,
+  statusText,
   statusFromImpact,
   uniqueNames,
   type FetchLike,
@@ -39,6 +49,12 @@ export async function fetchStatuspageSnapshot(
     throw new ProviderError("invalid_payload", "Statuspage summary shape changed");
   }
   const scheduledMaintenances = Array.isArray(maintenances) ? maintenances : [];
+  if (components.length > COMPONENTS_PER_SERVICE_LIMIT) {
+    throw new ProviderError(
+      "invalid_payload",
+      "Statuspage component list exceeded the supported limit",
+    );
+  }
   if (incidents.length + scheduledMaintenances.length > INCIDENTS_PER_SERVICE_LIMIT) {
     throw new ProviderError(
       "invalid_payload",
@@ -46,14 +62,10 @@ export async function fetchStatuspageSnapshot(
     );
   }
 
-  const componentNames = new Map<string, string>();
-  for (const item of components) {
-    const component = asRecord(item);
-    if (!component) throw new ProviderError("invalid_payload", "Invalid Statuspage component");
-    const id = boundedText(component.id, 200);
-    const name = boundedText(component.name, 100);
-    if (id && name) componentNames.set(id, name);
-  }
+  const normalizedComponents = components.map(parseStatuspageComponent);
+  const componentNames = new Map(
+    normalizedComponents.map((component) => [component.id, component.name]),
+  );
 
   const sourceStatus = requiredText(status.indicator ?? status.status, "status indicator", 100);
   const normalizedIncidents = incidents.map((item) =>
@@ -66,8 +78,21 @@ export async function fetchStatuspageSnapshot(
   return {
     status: normalizeStatus(sourceStatus),
     sourceStatus,
-    summary: boundedText(status.description),
+    summary: statusText(status.description),
+    components: normalizedComponents,
     incidents: [...normalizedIncidents, ...normalizedMaintenances],
+  };
+}
+
+function parseStatuspageComponent(value: unknown): NormalizedComponent {
+  const row = asRecord(value);
+  if (!row) throw new ProviderError("invalid_payload", "Invalid Statuspage component");
+  const sourceStatus = requiredText(row.status, "component status", 100);
+  return {
+    id: requiredText(row.id, "component id", 200),
+    name: requiredText(row.name, "component name", 100),
+    status: normalizeStatus(sourceStatus),
+    sourceStatus,
   };
 }
 
@@ -119,6 +144,9 @@ function parseStatuspageIncident(
         .filter((name): name is string => Boolean(name))
     : [];
   const components = uniqueNames([...names, ...affected, ...directComponents]);
+  const componentIds = Array.isArray(row.component_ids)
+    ? uniqueNames(row.component_ids, COMPONENTS_PER_SERVICE_LIMIT)
+    : [];
   const rawId = boundedText(row.id, 200);
   const rawUrl = row.url ?? row.shortlink ?? row.short_link;
   const url = safeIncidentUrl(rawUrl, service);
@@ -127,8 +155,8 @@ function parseStatuspageIncident(
   const sourceImpact = boundedText(row.impact, 100);
   const rowType = asRecord(row.incident_type)?.name ?? row.type;
   const sourceType = boundedText(rowType, 100);
-  const explicitDescription = boundedText(row.description ?? row.body);
-  const updateBody = boundedText(latestUpdate?.body ?? latestUpdate?.update_text);
+  const explicitDescription = statusText(row.description ?? row.body);
+  const updateBody = statusText(latestUpdate?.body ?? latestUpdate?.update_text);
   const active = isIncidentActive(state);
 
   return {
@@ -141,6 +169,7 @@ function parseStatuspageIncident(
     sourceType,
     sourceImpact,
     severityStatus: maintenance ? "under_maintenance" : statusFromImpact(sourceImpact),
+    componentIds,
     components,
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,

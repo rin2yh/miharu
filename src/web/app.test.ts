@@ -15,18 +15,29 @@ const rows: DashboardRows = {
       errorCode: "private_parser_detail",
     },
   ],
+  componentRows: [
+    {
+      serviceId: "github",
+      id: "actions",
+      name: "Actions",
+      status: "degraded_performance",
+      sourceStatus: "partial_outage",
+      lastChangedAt: "2026-10-23T04:55:00.000Z",
+    },
+  ],
   activeRows: [
     {
       serviceId: "slack",
       id: "incident-1",
       title: "Message delivery delays",
-      body: "We are investigating.",
+      body: "<p>We are investigating.<br />Update &amp; details</p>",
       kind: "incident",
       state: "investigating",
       sourceStatus: "investigating",
       sourceType: "incident",
       sourceImpact: null,
       severityStatus: "partial_outage",
+      componentIdsJson: "[]",
       componentsJson: '["Messaging",4,null]',
       officialCreatedAt: "2026-10-23T04:50:00.000Z",
       officialUpdatedAt: "2026-10-23T04:55:00.000Z",
@@ -50,6 +61,7 @@ const rows: DashboardRows = {
       eventKind: "opened",
       sourceStatus: "investigating",
       severityStatus: "partial_outage",
+      componentIdsJson: "[]",
       componentsJson: '["Messaging"]',
       detectedAt: "2026-10-23T05:00:00.000Z",
       officialEventAt: "2026-10-23T04:50:00.000Z",
@@ -79,7 +91,24 @@ describe("status API", () => {
     expect(payload.services[0]).not.toHaveProperty("errorCode");
     expect(payload.services[0]).not.toHaveProperty("lastCheckedAt");
     expect(payload.services[0]).toMatchObject({
-      incidents: [{ title: "Message delivery delays", components: ["Messaging"] }],
+      incidents: [
+        {
+          title: "Message delivery delays",
+          components: ["Messaging"],
+          body: "We are investigating.\nUpdate & details",
+        },
+      ],
+    });
+    expect(payload.services[0]).toMatchObject({ components: [] });
+    expect(payload.services[2]).toMatchObject({
+      components: [
+        {
+          id: "actions",
+          name: "Actions",
+          status: "degraded_performance",
+          sourceStatus: "partial_outage",
+        },
+      ],
     });
     expect(payload.recentEvents[0]).toMatchObject({ serviceName: "Slack", eventKind: "opened" });
     expect(payload.recentEvents[0]).not.toHaveProperty("body");

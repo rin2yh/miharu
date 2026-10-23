@@ -45,3 +45,5 @@ export const INCIDENT_HISTORY_DISPLAY_LIMIT = 8;
 export const DASHBOARD_POLL_INTERVAL_MS = 60_000;
 export const INCIDENTS_PER_SERVICE_LIMIT = 100;
 export const PROVIDER_RESPONSE_LIMIT_BYTES = 1_000_000;
+// The component cleanup query binds two fixed values alongside each official ID.
+export const COMPONENTS_PER_SERVICE_LIMIT = 98;

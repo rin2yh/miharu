@@ -4,9 +4,15 @@ import {
   INCIDENT_HISTORY_DISPLAY_LIMIT,
   SERVICES,
 } from "../../../shared/config/services";
-import type { DashboardEvent, DashboardIncident, DashboardPayload } from "../../../domain";
+import type {
+  DashboardComponent,
+  DashboardEvent,
+  DashboardIncident,
+  DashboardPayload,
+} from "../../../domain";
 import type { DashboardRows } from "../../../../db/schema";
 import { createD1Store, parseComponents, type DashboardStore } from "../../../shared/store";
+import { toPlainText } from "../../../domain/text";
 
 export interface StatusBindings {
   DB: D1Database;
@@ -39,7 +45,21 @@ export function createStatusRoutes(storeFactory: StoreFactory = createD1Store) {
 
 export function buildDashboardPayload(rows: DashboardRows, now: Date): DashboardPayload {
   const statusById = new Map(rows.statusRows.map((row) => [row.serviceId, row]));
+  const componentsByService = new Map<string, DashboardComponent[]>();
   const incidentsByService = new Map<string, DashboardIncident[]>();
+
+  for (const row of rows.componentRows) {
+    if (!SERVICES.some((service) => service.id === row.serviceId)) continue;
+    const list = componentsByService.get(row.serviceId) ?? [];
+    list.push({
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      sourceStatus: row.sourceStatus,
+      lastChangedAt: row.lastChangedAt,
+    });
+    componentsByService.set(row.serviceId, list);
+  }
 
   for (const row of rows.activeRows) {
     if (!SERVICES.some((service) => service.id === row.serviceId)) continue;
@@ -47,13 +67,14 @@ export function buildDashboardPayload(rows: DashboardRows, now: Date): Dashboard
     list.push({
       id: row.id,
       title: row.title,
-      body: row.body,
+      body: toPlainText(row.body),
       kind: row.kind,
       state: row.state,
       sourceStatus: row.sourceStatus,
       sourceType: row.sourceType,
       sourceImpact: row.sourceImpact,
       severityStatus: row.severityStatus,
+      componentIds: parseComponents(row.componentIdsJson),
       components: parseComponents(row.componentsJson),
       officialCreatedAt: row.officialCreatedAt,
       officialUpdatedAt: row.officialUpdatedAt,
@@ -78,6 +99,7 @@ export function buildDashboardPayload(rows: DashboardRows, now: Date): Dashboard
       isStale:
         !Number.isFinite(checkedAt) ||
         now.getTime() - checkedAt > FRESHNESS_WARNING_SECONDS * 1_000,
+      components: componentsByService.get(service.id) ?? [],
       incidents: incidentsByService.get(service.id) ?? [],
     } satisfies DashboardPayload["services"][number];
   });

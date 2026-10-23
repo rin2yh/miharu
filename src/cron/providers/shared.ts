@@ -1,4 +1,5 @@
 import type { NormalizedIncident, NormalizedStatus } from "../../domain";
+import { toPlainText } from "../../domain/text";
 import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../../shared/config/services";
 
 export class ProviderError extends Error {
@@ -92,6 +93,10 @@ export function boundedText(value: unknown, maxLength = 3_000): string | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
   return text ? text.slice(0, maxLength) : null;
+}
+
+export function statusText(value: unknown, maxLength = 3_000): string | null {
+  return toPlainText(value, maxLength);
 }
 
 export function requiredText(value: unknown, label: string, maxLength = 300): string {

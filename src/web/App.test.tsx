@@ -1,188 +1,251 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
-import type { DashboardPayload } from "../domain";
+import type { DashboardPayload, DashboardService } from "../domain";
 import { App } from "./App";
 
-const firstPayload: DashboardPayload = {
-  generatedAt: "2026-10-23T05:00:00.000Z",
-  freshnessWarningSeconds: 180,
-  services: [
-    {
-      id: "slack",
-      name: "Slack",
-      statusPageUrl: "https://slack-status.com/",
-      status: "unknown",
-      sourceStatus: "active",
-      summary: null,
-      lastSuccessAt: "2026-10-23T05:00:00.000Z",
-      hasFetchError: false,
-      isStale: false,
-      incidents: [
-        {
-          id: "incident-1",
-          title: "Messaging delays for some users",
-          body: "We are investigating.",
-          kind: "incident",
-          state: "investigating",
-          sourceStatus: "investigating",
-          sourceType: "incident",
-          sourceImpact: null,
-          severityStatus: "partial_outage",
-          components: ["Messaging"],
-          officialCreatedAt: "2026-10-23T04:50:00.000Z",
-          officialUpdatedAt: "2026-10-23T04:55:00.000Z",
-          url: "https://slack-status.com/2026-10/incident-1",
-        },
-      ],
-    },
-    {
-      id: "github",
-      name: "GitHub",
-      statusPageUrl: "https://www.githubstatus.com/",
-      status: "operational",
-      sourceStatus: "none",
-      summary: null,
-      lastSuccessAt: "2026-10-23T05:00:00.000Z",
-      hasFetchError: false,
-      isStale: false,
-      incidents: [],
-    },
-  ],
-  recentEvents: [],
-};
+const lastSuccessAt = "2026-10-23T05:00:00.000Z";
+
+function service(overrides: Partial<DashboardService> = {}): DashboardService {
+  return {
+    id: "github",
+    name: "GitHub",
+    statusPageUrl: "https://www.githubstatus.com/",
+    status: "operational",
+    sourceStatus: "none",
+    summary: null,
+    lastSuccessAt,
+    hasFetchError: false,
+    isStale: false,
+    components: [],
+    incidents: [],
+    ...overrides,
+  };
+}
+
+function incident(overrides: Partial<DashboardService["incidents"][number]> = {}) {
+  return {
+    id: "incident-1",
+    title: "Messaging delays for some users",
+    body: "We are investigating.",
+    kind: "incident" as const,
+    state: "investigating" as const,
+    sourceStatus: "investigating",
+    sourceType: "incident",
+    sourceImpact: null,
+    severityStatus: "partial_outage" as const,
+    componentIds: [],
+    components: ["Messaging"],
+    officialCreatedAt: "2026-10-23T04:50:00.000Z",
+    officialUpdatedAt: "2026-10-23T04:55:00.000Z",
+    url: "https://www.githubstatus.com/incidents/incident-1",
+    ...overrides,
+  };
+}
+
+function payload(services: DashboardService[]): DashboardPayload {
+  return {
+    generatedAt: lastSuccessAt,
+    freshnessWarningSeconds: 180,
+    services,
+    recentEvents: [],
+  };
+}
+
+const basePayload = payload([
+  service({
+    id: "slack",
+    name: "Slack",
+    statusPageUrl: "https://slack-status.com/",
+    sourceStatus: "ok",
+    incidents: [incident()],
+  }),
+  service(),
+]);
 
 describe("dashboard", () => {
-  it("shows the service state, active incident, source link, and affected component", async () => {
-    render(<App load={async () => firstPayload} />);
+  it("links each service name to its official status page and shows incidents without a component catalogue", async () => {
+    render(<App load={async () => basePayload} />);
 
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
-    expect(screen.getByText("障害の重要度: 部分障害")).toBeInTheDocument();
-    expect(screen.getByText("Messaging")).toBeInTheDocument();
-    const slackCard = screen.getByRole("heading", { name: "Slack" }).closest("article");
-    expect(slackCard).not.toBeNull();
-    expect(within(slackCard!).getByText("状態不明")).toBeInTheDocument();
-    expect(within(slackCard!).getByRole("link", { name: /公式ステータスページ/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Slack" })).toHaveAttribute(
       "href",
       "https://slack-status.com/",
     );
-    expect(within(slackCard!).getByText("最終取得成功")).toBeInTheDocument();
-  });
-
-  it("keeps the official aggregate status separate from incident severity", async () => {
-    const officialOperationalPayload: DashboardPayload = {
-      ...firstPayload,
-      services: firstPayload.services.map((service) =>
-        service.id === "slack"
-          ? {
-              ...service,
-              status: "operational",
-              incidents: service.incidents.map((incident) => ({
-                ...incident,
-                severityStatus: "degraded_performance",
-              })),
-            }
-          : service,
-      ),
-    };
-    const { container } = render(<App load={async () => officialOperationalPayload} />);
-
-    const incidentTitle = await screen.findByText("Messaging delays for some users");
-    const slackCard = incidentTitle.closest("article");
+    const slackCard = screen.getByRole("link", { name: "Slack" }).closest("li");
     expect(slackCard).not.toBeNull();
     expect(within(slackCard!).getByText("正常")).toBeInTheDocument();
-    expect(within(slackCard!).getByText("障害の重要度: 性能低下")).toBeInTheDocument();
     expect(
-      Array.from(container.querySelectorAll(".service-row h3"), (heading) => heading.textContent),
-    ).toEqual(["Slack", "GitHub"]);
+      within(slackCard!).getByText("独立したコンポーネント状態は公式APIから提供されていません。"),
+    ).toBeInTheDocument();
+    expect(within(slackCard!).getByText("障害の重要度: 部分障害")).toBeInTheDocument();
+    expect(slackCard?.querySelector('time[datetime="2026-10-23T04:50:00.000Z"]')).not.toBeNull();
   });
 
-  it("keeps healthy rows compact and separates affected services from incidents", async () => {
-    const multiIncidentPayload: DashboardPayload = {
-      ...firstPayload,
-      services: firstPayload.services.map((service) =>
-        service.id === "slack"
-          ? {
-              ...service,
-              incidents: [
-                ...service.incidents,
-                { ...service.incidents[0], id: "incident-2", title: "File uploads delayed" },
-              ],
-            }
-          : service,
-      ),
-    };
-    render(<App load={async () => multiIncidentPayload} />);
+  it("keeps service status official and sorts components while grouping every incident once", async () => {
+    const github = service({
+      status: "operational",
+      components: [
+        {
+          id: "web",
+          name: "Web",
+          status: "degraded_performance",
+          sourceStatus: "minor",
+          lastChangedAt: lastSuccessAt,
+        },
+        {
+          id: "packages",
+          name: "Packages",
+          status: "operational",
+          sourceStatus: "operational",
+          lastChangedAt: lastSuccessAt,
+        },
+        {
+          id: "actions",
+          name: "Actions",
+          status: "degraded_performance",
+          sourceStatus: "minor",
+          lastChangedAt: lastSuccessAt,
+        },
+        {
+          id: "issues",
+          name: "Issues",
+          status: "major_outage",
+          sourceStatus: "major_outage",
+          lastChangedAt: lastSuccessAt,
+        },
+      ],
+      incidents: [
+        incident({ id: "actions-1", title: "Actions delay", componentIds: ["actions"] }),
+        incident({ id: "actions-2", title: "Workflow queue delay", componentIds: ["actions"] }),
+        incident({
+          id: "package-1",
+          title: "Package notice",
+          componentIds: [],
+          components: ["Packages"],
+        }),
+        incident({
+          id: "orphan-1",
+          title: "Unmatched incident",
+          componentIds: ["removed-id"],
+          components: ["Removed component"],
+        }),
+      ],
+    });
+    render(<App load={async () => payload([github])} />);
 
-    const incidentCount = await screen.findByText("インシデント");
-    expect(incidentCount.parentElement).toHaveTextContent("2");
-    expect(screen.getByText("影響サービス").parentElement).toHaveTextContent("1");
-    const githubCard = screen.getByRole("heading", { name: "GitHub" }).closest("article");
-    expect(githubCard).not.toBeNull();
+    const card = (await screen.findByRole("link", { name: "GitHub" })).closest("li");
+    expect(card).not.toBeNull();
+    expect(card?.querySelector(".service-card-title .status-pill")?.textContent).toContain("正常");
+    const componentRows = [...card!.querySelectorAll(".component-accordion")];
     expect(
-      within(githubCard!).getByRole("link", { name: "GitHubの公式ステータスページを開く" }),
-    ).toHaveAttribute("href", "https://www.githubstatus.com/");
-    expect(within(githubCard!).queryByText("最終取得成功")).not.toBeInTheDocument();
-    expect(within(githubCard!).queryByText(/公開中の障害情報はありません/)).not.toBeInTheDocument();
+      componentRows.map((row) => row.querySelector(".component-summary-name")?.textContent),
+    ).toEqual(["Issues", "Actions", "Web", "Packages"]);
+
+    const issueDetails = componentRows[0]?.querySelector("details");
+    const actionsDetails = componentRows[1]?.querySelector("details");
+    const packagesDetails = componentRows[3]?.querySelector("details");
+    expect(issueDetails?.open).toBe(true);
+    expect(actionsDetails?.open).toBe(true);
+    expect(packagesDetails?.open).toBe(false);
+    expect(within(componentRows[1]!).getByText("障害情報 2件")).toBeInTheDocument();
+    expect(within(componentRows[3]!).getByText("障害情報 1件")).toBeInTheDocument();
+    expect(within(componentRows[1]!).getByText("Actions delay")).toBeInTheDocument();
+    expect(within(componentRows[1]!).getByText("Workflow queue delay")).toBeInTheDocument();
+    expect(screen.getAllByText("Unmatched incident")).toHaveLength(1);
+    expect(screen.getByText("コンポーネントに関連付けられていない情報")).toBeInTheDocument();
+
+    fireEvent.click(componentRows[3]!.querySelector("summary")!);
+    expect(packagesDetails?.open).toBe(true);
+    expect(within(componentRows[3]!).getByText("Package notice")).toBeInTheDocument();
   });
 
-  it("filters services and can clear the search", async () => {
-    render(<App load={async () => firstPayload} />);
-    await screen.findByRole("heading", { name: "GitHub" });
-
-    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
-      target: { value: "Messaging delays" },
+  it("shows the official service outage separately from component outage", async () => {
+    const affected = service({
+      status: "major_outage",
+      sourceStatus: "major_outage",
+      components: [
+        {
+          id: "actions",
+          name: "Actions",
+          status: "major_outage",
+          sourceStatus: "major_outage",
+          lastChangedAt: lastSuccessAt,
+        },
+      ],
     });
-    expect(screen.queryByRole("heading", { name: "Slack" })).not.toBeInTheDocument();
-    expect(screen.getByText(/に一致するサービスはありません/)).toBeInTheDocument();
+    render(<App load={async () => payload([affected])} />);
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
-      target: { value: "slack" },
-    });
-    expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "GitHub" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
-    expect(screen.getByRole("heading", { name: "GitHub" })).toBeInTheDocument();
+    const card = (await screen.findByRole("link", { name: "GitHub" })).closest("li");
+    expect(card).not.toBeNull();
+    expect(within(card!).getAllByText("全面障害")).toHaveLength(2);
+    expect(within(card!).getByText("公式サービス全体")).toBeInTheDocument();
+    expect(within(card!).getByText("Actions")).toBeInTheDocument();
   });
 
-  it("keeps the previous data and lets the user update manually", async () => {
-    const nextPayload: DashboardPayload = {
-      ...firstPayload,
-      generatedAt: "2026-10-23T05:01:00.000Z",
-      services: firstPayload.services.map((service) => ({
-        ...service,
-        incidents: service.incidents.map((incident) => ({
-          ...incident,
-          title: "Messaging is recovering",
-        })),
-      })),
-    };
+  it("shows errors without replacing the last loaded snapshot", async () => {
     const load = vi
       .fn<() => Promise<DashboardPayload>>()
-      .mockResolvedValueOnce(firstPayload)
-      .mockResolvedValueOnce(nextPayload);
+      .mockResolvedValueOnce(basePayload)
+      .mockRejectedValueOnce(new Error("unavailable"));
     render(<App load={load} />);
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
-    await waitFor(() => expect(screen.getByText("Messaging is recovering")).toBeInTheDocument());
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("alert")).toHaveTextContent("表示中の情報は保持しています");
+    expect(screen.getByText("Messaging delays for some users")).toBeInTheDocument();
+  });
+
+  it("shows incident updates and removes the incident after recovery", async () => {
+    const updatedPayload = payload(
+      basePayload.services.map((item) => ({
+        ...item,
+        incidents: item.incidents.map((current) => ({
+          ...current,
+          title: "Messaging is recovering",
+        })),
+      })),
+    );
+    const recoveredPayload = payload(
+      basePayload.services.map((item) => ({ ...item, incidents: [] })),
+    );
+    const load = vi
+      .fn<() => Promise<DashboardPayload>>()
+      .mockResolvedValueOnce(basePayload)
+      .mockResolvedValueOnce(updatedPayload)
+      .mockResolvedValueOnce(recoveredPayload);
+    render(<App load={load} />);
+    expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+    expect(await screen.findByText("Messaging is recovering")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Messaging is recovering")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link", { name: "Slack" })).toBeInTheDocument();
+  });
+
+  it("filters services by name and clears the query", async () => {
+    render(<App load={async () => basePayload} />);
+    await screen.findByRole("link", { name: "GitHub" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
+      target: { value: "slack" },
+    });
+    expect(screen.getByRole("link", { name: "Slack" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "GitHub" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
+    expect(screen.getByRole("link", { name: "GitHub" })).toBeInTheDocument();
   });
 
   it("loads on entry and polls once per minute", async () => {
     vi.useFakeTimers();
     try {
-      const load = vi.fn<() => Promise<DashboardPayload>>(async () => firstPayload);
+      const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
       render(<App load={load} />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
+      await act(async () => await Promise.resolve());
       expect(load).toHaveBeenCalledTimes(1);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS);
-      });
+      await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
       expect(load).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
@@ -190,14 +253,7 @@ describe("dashboard", () => {
   });
 
   it("makes stale information visible", async () => {
-    const stalePayload: DashboardPayload = {
-      ...firstPayload,
-      services: firstPayload.services.map((service) => ({
-        ...service,
-        isStale: true,
-        incidents: [],
-      })),
-    };
+    const stalePayload = payload(basePayload.services.map((item) => ({ ...item, isStale: true })));
     render(<App load={async () => stalePayload} />);
     expect(await screen.findAllByText(/情報が古い可能性があります/)).toHaveLength(2);
   });
