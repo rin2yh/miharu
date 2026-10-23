@@ -102,3 +102,10 @@ Notionの公開ステータスページは `notion-status.com` に移行して�
 - 既存のmigration SQLは編集せず、`db/migrations/` に新しい連番SQLを追加する。
 - まずローカルでmigrationを適用し、アプリの動作を確認する。
 - スキーマ変更は旧Workerでも動くよう段階的に行う。列の追加とアプリ側の切り替えを分け、不要な列の削除は後続のmigrationにする。
+
+## Git hooksと必須チェック
+
+- `.githooks/pre-commit` と `.githooks/pre-push` は必ず有効にし、実行する。`--no-verify`、`core.hooksPath` の上書き、環境変数やラッパーなどによるhookの無効化・回避は禁止する。
+- PR作成・更新前のpushでは、pre-commitの型チェックとpre-pushの `pnpm test`、`pnpm e2e` をすべて通す。
+- hookが失敗した場合は原因を修正して再実行し、失敗したままpushしない。
+- miseが `.mise.toml` の信頼を求めた場合は、内容を確認してから `mise trust .mise.toml` を実行する。信頼エラーをhook回避の理由にしない。
