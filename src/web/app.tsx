@@ -98,9 +98,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
   const filteredRecentEvents = (payload?.recentEvents ?? []).filter((event) =>
     visibleServiceIds.has(event.serviceId),
   );
-  const shareUrlObject = new URL(window.location.href);
-  shareUrlObject.search = locationSearch;
-  const shareUrl = shareUrlObject.toString();
   const applyServiceSelection = (selectedIds: string[]) => {
     if (selectedIds.length === 0) return;
     const nextUrl = getServiceSelectionUrl(window.location.href, selectedIds);
@@ -187,7 +184,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
         <ServiceSelector
           key={locationSearch}
           selectedServiceIds={selectedServiceIds}
-          shareUrl={shareUrl}
           onApply={applyServiceSelection}
         />
         {!payload && !loadError && (

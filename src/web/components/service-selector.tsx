@@ -3,17 +3,11 @@ import { SERVICES } from "../../shared/config/services";
 
 type ServiceSelectorProps = {
   selectedServiceIds: string[];
-  shareUrl: string;
   onApply: (serviceIds: string[]) => void;
 };
 
-export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: ServiceSelectorProps) {
+export function ServiceSelector({ selectedServiceIds, onApply }: ServiceSelectorProps) {
   const [draftServiceIds, setDraftServiceIds] = useState(selectedServiceIds);
-  const [copyResult, setCopyResult] = useState<{
-    shareUrl: string;
-    status: "copied" | "error";
-  } | null>(null);
-  const copyStatus = copyResult?.shareUrl === shareUrl ? copyResult.status : "idle";
 
   const allDraftServicesSelected = draftServiceIds.length === SERVICES.length;
   const someDraftServicesSelected = draftServiceIds.length > 0 && !allDraftServicesSelected;
@@ -33,15 +27,6 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
     updateDraftSelection(
       SERVICES.filter((service) => selected.has(service.id)).map((service) => service.id),
     );
-  };
-
-  const copyShareUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopyResult({ shareUrl, status: "copied" });
-    } catch {
-      setCopyResult({ shareUrl, status: "error" });
-    }
   };
 
   return (
@@ -105,35 +90,6 @@ export function ServiceSelector({ selectedServiceIds, shareUrl, onApply }: Servi
           </button>
           {draftServiceIds.length === 0 && (
             <span className="text-xs text-muted">1件以上選択してください。</span>
-          )}
-        </div>
-        <div className="mt-4 border-t border-line pt-4 dark:border-line">
-          <label className="mb-2 block text-xs font-semibold text-ink" htmlFor="share-url">
-            現在の表示条件を共有
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              className="min-h-9 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy"
-              id="share-url"
-              readOnly
-              value={shareUrl}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <button
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-xs font-semibold text-ink transition-colors hover:bg-control-hover"
-              type="button"
-              onClick={() => void copyShareUrl()}
-            >
-              URLをコピー
-            </button>
-          </div>
-          {copyStatus === "copied" && (
-            <output className="mt-2 block text-xs text-healthy">URLをコピーしました。</output>
-          )}
-          {copyStatus === "error" && (
-            <output className="mt-2 block text-xs text-alert">
-              URLをコピーできませんでした。入力欄からコピーしてください。
-            </output>
           )}
         </div>
       </div>
