@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { siGithub, siNotion, type SimpleIcon } from "simple-icons";
+import { siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import type {
   DashboardIncident,
@@ -18,6 +18,7 @@ import {
 } from "./status-presentation";
 
 const serviceIcons: Record<string, SimpleIcon> = {
+  cloudflare: siCloudflare,
   notion: siNotion,
   github: siGithub,
 };
@@ -94,6 +95,7 @@ export function ServiceCard({ service }: { service: DashboardService }) {
           className="grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-ink max-sm:h-6 max-sm:w-6 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current dark:[&>svg]:invert"
           style={{ color: iconColor }}
           aria-hidden="true"
+          data-testid="service-icon"
         >
           {icon ? (
             <svg viewBox="0 0 24 24">

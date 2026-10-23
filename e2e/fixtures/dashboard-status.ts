@@ -80,6 +80,19 @@ export function createDashboardStatusFixture(): DashboardStatusFixture {
           components: [],
           incidents: [],
         },
+        {
+          id: "cloudflare",
+          name: "Cloudflare",
+          statusPageUrl: "https://www.cloudflarestatus.com/",
+          status: "operational",
+          sourceStatus: "none",
+          summary: null,
+          lastSuccessAt: checkedAt,
+          hasFetchError: false,
+          isStale: false,
+          components: [],
+          incidents: [],
+        },
       ],
       recentEvents: [
         {
