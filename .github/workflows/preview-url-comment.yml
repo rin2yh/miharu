@@ -3,11 +3,12 @@ name: Preview URL comment
 on:
   issue_comment:
     types: [created, edited]
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
 
 permissions:
   issues: write
+  pull-requests: write
 
 concurrency:
   group: shared-preview-url-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
@@ -86,6 +87,7 @@ jobs:
             body: JSON.stringify({ body }),
           });
           if (!response.ok) {
-            throw new Error(`Could not publish preview URL: ${response.status}`);
+            const details = await response.text();
+            throw new Error(`Could not publish preview URL: ${response.status} ${details}`);
           }
           NODE
