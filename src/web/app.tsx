@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
+import { AppSidebar } from "./components/app-sidebar";
 import { EventRow } from "./components/event-row";
 import { RefreshIcon } from "./components/icons";
 import { ServiceCard } from "./components/service-card";
 import { ServiceSearch } from "./components/service-search";
-import { ServiceSidebar } from "./components/service-sidebar";
 import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
 import { servicePriority } from "./presentation/status-presentation";
@@ -136,17 +136,12 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
         </div>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-[13rem_1px_minmax(0,1fr)] lg:gap-x-7">
-        <ServiceSidebar
-          selectedServiceIds={selectedServiceIds}
-          onSelect={applyServiceSelection}
-          query={query}
-          onQueryChange={setQuery}
-        />
-        <hr
-          aria-orientation="vertical"
-          className="m-0 hidden h-full w-px border-0 bg-line lg:block"
-        />
+      <AppSidebar
+        selectedServiceIds={selectedServiceIds}
+        onSelect={applyServiceSelection}
+        query={query}
+        onQueryChange={setQuery}
+      >
         <div className="min-w-0">
           <section id="top" aria-labelledby="services-title" aria-live="polite">
             <div className="mb-3.5 flex items-baseline justify-between gap-4">
@@ -231,7 +226,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
             )}
           </section>
         </div>
-      </div>
+      </AppSidebar>
     </main>
   );
 }
