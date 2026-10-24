@@ -3,8 +3,9 @@ import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
 import { EventRow } from "./components/event-row";
-import { RefreshIcon, SearchIcon } from "./components/icons";
+import { RefreshIcon } from "./components/icons";
 import { ServiceCard } from "./components/service-card";
+import { ServiceSearch } from "./components/service-search";
 import { ServiceSidebar } from "./components/service-sidebar";
 import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
@@ -136,7 +137,12 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
       )}
 
       <div className="grid gap-8 lg:grid-cols-[13rem_1px_minmax(0,1fr)] lg:gap-x-7">
-        <ServiceSidebar selectedServiceIds={selectedServiceIds} onSelect={applyServiceSelection} />
+        <ServiceSidebar
+          selectedServiceIds={selectedServiceIds}
+          onSelect={applyServiceSelection}
+          query={query}
+          onQueryChange={setQuery}
+        />
         <hr
           aria-orientation="vertical"
           className="m-0 hidden h-full w-px border-0 bg-line lg:block"
@@ -155,29 +161,9 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
               </span>
             </div>
             <div className="mb-3.5 flex justify-end gap-2 max-md:justify-start max-sm:gap-2">
-              <label className="flex h-10 w-56 items-center rounded-md border border-line-strong bg-surface px-2.5 text-muted focus-within:border-healthy focus-within:ring-2 focus-within:ring-healthy/20 max-md:w-auto max-md:flex-1">
-                <SearchIcon />
-                <input
-                  className="w-full min-w-0 border-0 bg-transparent px-2 text-xs text-ink placeholder:text-placeholder focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden"
-                  id="service-search"
-                  name="service"
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="サービスを検索"
-                  aria-label="サービスを検索"
-                />
-                {query && (
-                  <button
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded border-0 bg-transparent p-0 text-lg leading-none text-muted hover:bg-control-hover"
-                    type="button"
-                    aria-label="検索をクリア"
-                    onClick={() => setQuery("")}
-                  >
-                    ×
-                  </button>
-                )}
-              </label>
+              <div className="w-56 max-md:w-auto max-md:flex-1 lg:hidden">
+                <ServiceSearch query={query} onChange={setQuery} />
+              </div>
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-line-strong bg-surface px-3 text-xs font-semibold text-ink transition-colors duration-150 enabled:hover:border-line-strong enabled:hover:bg-control-hover disabled:cursor-wait disabled:opacity-70 max-sm:w-10 max-sm:px-0"
                 type="button"

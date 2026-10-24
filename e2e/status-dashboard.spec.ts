@@ -2,13 +2,19 @@ import { expect, test } from "./fixtures/test";
 
 test("サービス名で障害サービスを検索し、障害詳細と最近の更新を確認できる", async ({
   dashboardStatus,
+  page,
   statusDashboard,
 }) => {
   const { incidentTitle, incidentUrl } = dashboardStatus;
   await test.step("サービス名で検索する", async () => {
     await statusDashboard.goto();
+    await expect(
+      statusDashboard.serviceSidebar().getByRole("searchbox", { name: "サービス一覧を検索" }),
+    ).toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "サービスを検索" })).not.toBeVisible();
     await statusDashboard.searchService("GitHub");
 
+    await expect(statusDashboard.serviceSelection("Slack")).toHaveCount(0);
     await expect(statusDashboard.serviceCount(1)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toHaveCount(0);
@@ -141,6 +147,7 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
 
   await test.step("サービス一覧が縦並びで表示されることを確認する", async () => {
     await expect(statusDashboard.serviceSidebar()).not.toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
     await expect(serviceList).toBeVisible();
     await expect(

@@ -16,6 +16,11 @@ export class StatusDashboardPage {
   }
 
   async searchService(name: string) {
+    if (await this.serviceSidebar().isVisible()) {
+      await this.serviceSidebar().getByRole("searchbox", { name: "サービス一覧を検索" }).fill(name);
+      return;
+    }
+
     await this.page.getByRole("searchbox", { name: "サービスを検索" }).fill(name);
   }
 

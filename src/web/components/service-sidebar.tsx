@@ -1,14 +1,26 @@
 import { SERVICES } from "../../shared/config/services";
+import { ServiceSearch } from "./service-search";
 
 type ServiceSidebarProps = {
   selectedServiceIds: string[];
   onSelect: (serviceIds: string[]) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
 };
 
-export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarProps) {
+export function ServiceSidebar({
+  selectedServiceIds,
+  onSelect,
+  query,
+  onQueryChange,
+}: ServiceSidebarProps) {
   const selectedIds = new Set(selectedServiceIds);
   const allServicesSelected = selectedServiceIds.length === SERVICES.length;
   const someServicesSelected = selectedServiceIds.length > 0 && !allServicesSelected;
+  const needle = query.trim().toLocaleLowerCase("ja");
+  const visibleServices = SERVICES.filter((service) =>
+    service.name.toLocaleLowerCase("ja").includes(needle),
+  );
 
   const toggleService = (serviceId: string) => {
     const nextSelection = new Set(selectedIds);
@@ -34,6 +46,14 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
           {selectedServiceIds.length} / {SERVICES.length}サービス
         </p>
       </div>
+      <div className="mt-3">
+        <ServiceSearch
+          ariaLabel="サービス一覧を検索"
+          clearLabel="サービス一覧の検索をクリア"
+          query={query}
+          onChange={onQueryChange}
+        />
+      </div>
       <nav aria-label="表示サービス" className="pt-3">
         <ul className="m-0 list-none space-y-1 p-0">
           <li>
@@ -54,7 +74,7 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
               <span className="flex-1">すべて</span>
             </button>
           </li>
-          {SERVICES.map((service) => {
+          {visibleServices.map((service) => {
             const isSelected = selectedIds.has(service.id);
             const isLastSelected = isSelected && selectedServiceIds.length === 1;
             const serviceClassName = isSelected
@@ -83,6 +103,9 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
               </li>
             );
           })}
+          {visibleServices.length === 0 && (
+            <li className="px-2.5 py-2 text-xs text-muted">一致するサービスがありません。</li>
+          )}
         </ul>
       </nav>
     </aside>
