@@ -24,8 +24,8 @@ export class StatusDashboardPage {
     await this.page.getByRole("searchbox", { name: "サービスを検索" }).fill(name);
   }
 
-  serviceCount(count: number): Locator {
-    return this.page.getByText(`${count}サービス`, { exact: true });
+  selectedServiceCount(count: number): Locator {
+    return this.serviceSidebar().getByText(new RegExp(`^${count} / \\d+サービス$`));
   }
 
   serviceLink(name: string): Locator {

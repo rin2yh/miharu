@@ -15,7 +15,8 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
     await statusDashboard.searchService("GitHub");
 
     await expect(statusDashboard.serviceSelection("Slack")).toHaveCount(0);
-    await expect(statusDashboard.serviceCount(1)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(7)).toBeVisible();
+    await expect(page.getByText(/^\d+サービス$/)).toHaveCount(0);
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toHaveCount(0);
     await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
@@ -63,7 +64,7 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
 
   await test.step("共有URLを開いてSlackとGitHubの選択を確認する", async () => {
     await statusDashboard.goto("/?services=github,slack");
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
@@ -76,12 +77,12 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
 
   await test.step("Notionを追加してからGitHubを解除する", async () => {
     await statusDashboard.serviceSelection("Notion").click();
-    await expect(statusDashboard.serviceCount(3)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(3)).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
     await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
 
     await statusDashboard.serviceSelection("GitHub").click();
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
     await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
     await expect(page).toHaveURL(/services=slack%2Cnotion/);
@@ -90,7 +91,7 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   await test.step("再読み込み後も変更後の選択を表示する", async () => {
     await page.reload();
     expect(new URL(page.url()).searchParams.get("services")).toBe("slack,notion");
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
     await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute(
@@ -107,7 +108,7 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   await test.step("戻る操作でGitHubを含む一つ前の選択を復元する", async () => {
     await page.goBack();
     await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
-    await expect(statusDashboard.serviceCount(3)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(3)).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
     await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute(
       "aria-pressed",
@@ -117,11 +118,53 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
 
     await page.goBack();
     expect(new URL(page.url()).searchParams.get("services")).toBe("github,slack");
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
     await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+  });
+});
+
+test("サービス稼働状況の見出しと更新操作がPC・モバイルで崩れない", async ({
+  page,
+  statusDashboard,
+}) => {
+  const heading = page.getByRole("heading", { name: "サービス稼働状況" });
+  const refreshButton = page.getByRole("button", { name: "手動更新" });
+
+  await test.step("PCでは見出しとボタンの中心をそろえ、件数を重複表示しない", async () => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await statusDashboard.goto();
+    await expect(heading).toBeVisible();
+    await expect(refreshButton).toBeVisible();
+    await expect(page.getByText(/^\d+サービス$/)).toHaveCount(0);
+
+    const headingBox = await heading.boundingBox();
+    const buttonBox = await refreshButton.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    expect(
+      Math.abs(headingBox!.y + headingBox!.height / 2 - (buttonBox!.y + buttonBox!.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(buttonBox!.height).toBeLessThanOrEqual(40);
+  });
+
+  await test.step("モバイルでは検索と40pxの更新操作を保ち、重ねない", async () => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await expect(statusDashboard.serviceSidebar()).not.toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
+
+    const headingBox = await heading.boundingBox();
+    const buttonBox = await refreshButton.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    expect(buttonBox!.x).toBeGreaterThanOrEqual(headingBox!.x + headingBox!.width);
+    expect(buttonBox!.width).toBeGreaterThanOrEqual(40);
+    expect(buttonBox!.height).toBeGreaterThanOrEqual(40);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });
 });
 
@@ -161,9 +204,9 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
     await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
     await expect(serviceList).toBeVisible();
-    await expect(
-      statusDashboard.serviceCount(dashboardStatus.payload.services.length),
-    ).toBeVisible();
+    await expect(serviceList.getByRole("listitem")).toHaveCount(
+      dashboardStatus.payload.services.length,
+    );
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
 
     const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
