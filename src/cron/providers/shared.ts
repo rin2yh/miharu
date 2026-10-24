@@ -1,4 +1,4 @@
-import type { IncidentState, NormalizedIncident, NormalizedStatus } from "../../domain";
+import type { IncidentState, NormalizedStatus } from "../../domain";
 import { toPlainText } from "../../domain/text";
 import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../../shared/config/services";
 
@@ -190,14 +190,6 @@ const INCIDENT_STATES: Record<string, IncidentState> = {
 export function parseIncidentState(value: string): IncidentState {
   const normalized = value.toLowerCase().replaceAll(/[- ]/g, "_");
   return Object.hasOwn(INCIDENT_STATES, normalized) ? INCIDENT_STATES[normalized] : "unknown";
-}
-
-export function incidentLifecycleForState(
-  state: NormalizedIncident["state"],
-): NormalizedIncident["lifecycle"] {
-  if (state === "resolved") return "resolved";
-  if (state === "unknown") return "unverified";
-  return "active";
 }
 
 export function statusFromImpact(value: unknown): NormalizedStatus | null {

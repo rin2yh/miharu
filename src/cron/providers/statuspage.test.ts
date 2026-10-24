@@ -145,7 +145,6 @@ describe("Statuspage provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       id: "inc-1",
       state: "monitoring",
-      lifecycle: "active",
       sourceImpact: "critical",
       severityStatus: "major_outage",
       body: "Mitigation is in place.\nNext line.",
@@ -184,7 +183,6 @@ describe("Statuspage provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       officialUpdatedAt: "2026-10-23T04:01:17.000Z",
       severityStatus: "major_outage",
-      lifecycle: "active",
       componentIds: [],
     });
   });
@@ -261,7 +259,6 @@ describe("Cloudflare", () => {
       title: "Cloudflare has scheduled maintenance for our storage systems",
       kind: "maintenance",
       state: "scheduled",
-      lifecycle: "active",
       sourceImpact: "maintenance",
       severityStatus: "under_maintenance",
       components: expect.arrayContaining(["Custom Pages", "Log Explorer", "Workers Builds"]),
@@ -287,7 +284,6 @@ describe("Cloudflare", () => {
       id: "7fxwn5qkz3b7",
       kind: "maintenance",
       state: "in_progress",
-      lifecycle: "active",
       sourceStatus: "in_progress",
     });
   });

@@ -49,13 +49,6 @@ describe("status presentation", () => {
   });
 
   it.each([
-    { kind: "incident", label: "復旧済み" },
-    { kind: "maintenance", label: "完了" },
-  ] as const)("uses the resolved $kind lifecycle label", ({ kind, label }) => {
-    expect(incidentStateLabel(kind, "investigating", "resolved")).toBe(label);
-  });
-
-  it.each([
     { kind: "incident", label: "障害" },
     { kind: "maintenance", label: "メンテナンス" },
   ] as const)("labels the $kind kind separately", ({ kind, label }) => {
@@ -70,11 +63,15 @@ describe("status presentation", () => {
   });
 
   it.each([
-    { kind: "incident", label: "復旧未確認" },
-    { kind: "maintenance", label: "終了未確認" },
-  ] as const)("uses a lifecycle state for an unverified $kind", ({ kind, label }) => {
-    expect(incidentStateLabel(kind, "investigating", "unverified")).toBe(label);
-  });
+    { kind: "incident", state: "investigating", label: "調査中・再確認不能" },
+    { kind: "maintenance", state: "scheduled", label: "予定・再確認不能" },
+    { kind: "incident", state: "unknown", label: "状態不明・再確認不能" },
+  ] as const)(
+    "shows the last official $kind state beside a failed recheck",
+    ({ kind, state, label }) => {
+      expect(incidentStateLabel(kind, state, "unverified")).toBe(label);
+    },
+  );
 
   it("formats valid dates and identifies invalid dates", () => {
     expect(formatDateTime("2026-10-23T04:50:00.000Z")).not.toBe("時刻不明");

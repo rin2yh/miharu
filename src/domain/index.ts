@@ -16,9 +16,10 @@ export type IncidentState =
   | "in_progress"
   | "resolved"
   | "unknown";
-export type IncidentLifecycle = "active" | "resolved" | "unverified";
+export type IncidentLifecycle = "active" | "closed" | "unverified";
+export type IncidentClosureReason = "official_resolved" | "no_longer_listed";
 export type IncidentKind = "incident" | "maintenance";
-export type IncidentEventKind = "opened" | "updated" | "resolved";
+export type IncidentEventKind = "opened" | "updated" | "resolved" | "closed";
 export const INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS = "recheck_unavailable";
 
 export interface NormalizedComponent {
@@ -43,10 +44,11 @@ export interface NormalizedIncident {
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
   url: string | null;
-  lifecycle: IncidentLifecycle;
 }
 
 export interface KnownIncident extends NormalizedIncident {
+  lifecycle: IncidentLifecycle;
+  closureReason: IncidentClosureReason | null;
   lastObservedAt: string;
 }
 
@@ -56,26 +58,15 @@ export interface ProviderSnapshot {
   summary: string | null;
   components?: NormalizedComponent[];
   incidents: NormalizedIncident[];
+  /** Known incidents whose individual recheck failed; their last official state is retained. */
+  unverifiedIncidentIds?: string[];
   /** False when omitted incidents must not be treated as resolved. */
   incidentListComplete?: boolean;
 }
 
-export interface DashboardIncident {
-  id: string;
-  title: string;
-  body: string | null;
-  kind: IncidentKind;
-  state: IncidentState;
-  sourceStatus: string;
-  sourceType: string | null;
-  sourceImpact: string | null;
-  severityStatus: NormalizedStatus | null;
-  componentIds: string[];
-  components: string[];
-  officialCreatedAt: string | null;
-  officialUpdatedAt: string | null;
-  url: string | null;
+export interface DashboardIncident extends NormalizedIncident {
   lifecycle: IncidentLifecycle;
+  closureReason: IncidentClosureReason | null;
 }
 
 export interface DashboardService {
@@ -104,6 +95,7 @@ export interface DashboardEvent {
   title: string;
   kind: IncidentKind;
   eventKind: IncidentEventKind;
+  closureReason: IncidentClosureReason | null;
   sourceStatus: string;
   severityStatus: NormalizedStatus | null;
   detectedAt: string;

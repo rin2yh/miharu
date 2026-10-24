@@ -19,19 +19,15 @@ export async function fetchOpenAIChatGPTSnapshot(
     ? parseSummaryIncidents(data.incidents)
     : await fetchIncidentList(service, signal, fetcher);
   const knownActiveIncidents = await context.getUnresolvedIncidents();
-  const normalizedIncidents = await parseOpenAIChatGPTIncidents(
-    service,
-    incidents,
-    knownActiveIncidents,
-    signal,
-    fetcher,
-  );
+  const { incidents: normalizedIncidents, unverifiedIncidentIds } =
+    await parseOpenAIChatGPTIncidents(service, incidents, knownActiveIncidents, signal, fetcher);
 
   return {
     ...componentSnapshot,
     // The OpenAI page-level status describes more than ChatGPT, so it is omitted.
     summary: null,
     incidents: normalizedIncidents,
+    unverifiedIncidentIds,
     // OpenAI exposes only its 25 most recent incidents and ignores page parameters.
     incidentListComplete: false,
   };

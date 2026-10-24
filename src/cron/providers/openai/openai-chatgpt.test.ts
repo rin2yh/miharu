@@ -37,6 +37,7 @@ const capturedChatGPTIncident: KnownIncident = {
   officialUpdatedAt: "2026-10-22T02:18:32.000Z",
   url: "https://status.openai.com/incidents/01M5GPE9C4E19HE461P8JAMYXD",
   lifecycle: "active",
+  closureReason: null,
   lastObservedAt: "2026-10-22T02:18:32.000Z",
 };
 
@@ -158,7 +159,6 @@ describe("OpenAI ChatGPT provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       id: "chatgpt-incident",
       title: "Elevated ChatGPT conversation errors",
-      lifecycle: "active" as const,
       componentIds: [],
       components: [],
       url: "https://status.openai.com/incidents/chatgpt-incident",
@@ -244,7 +244,6 @@ describe("OpenAI ChatGPT provider", () => {
         id: capturedChatGPTIncident.id,
         state: "resolved",
         sourceStatus: "Resolved",
-        lifecycle: "resolved",
         officialUpdatedAt: "2026-10-22T08:50:43.000Z",
       },
     ]);
@@ -264,7 +263,6 @@ describe("OpenAI ChatGPT provider", () => {
         id: capturedChatGPTIncident.id,
         state: "resolved",
         sourceStatus: "Resolved",
-        lifecycle: "resolved",
       },
     ]);
   });
@@ -286,6 +284,7 @@ describe("OpenAI ChatGPT provider", () => {
       officialUpdatedAt: "2026-10-22T02:18:32.000Z",
       url: "https://status.openai.com/incidents/older-chatgpt-incident",
       lifecycle: "active" as const,
+      closureReason: null,
       lastObservedAt: "2026-10-22T02:18:32.000Z",
     };
     const snapshot = await fetchChatGPTSnapshot(
@@ -298,14 +297,8 @@ describe("OpenAI ChatGPT provider", () => {
       [oldIncident],
     );
 
-    expect(snapshot.incidents).toMatchObject([
-      {
-        id: oldIncident.id,
-        state: "investigating",
-        sourceStatus: "investigating",
-        lifecycle: "unverified",
-      },
-    ]);
+    expect(snapshot.incidents).toEqual([]);
+    expect(snapshot.unverifiedIncidentIds).toContain(oldIncident.id);
   });
 
   it("parses the official OpenAI incident feed shape missing from summary.json", async () => {
@@ -352,7 +345,6 @@ describe("OpenAI ChatGPT provider", () => {
         id: incidentId,
         title: "Elevated ChatGPT conversation and Responses API errors",
         state: "resolved",
-        lifecycle: "resolved",
         officialUpdatedAt: "2026-10-22T08:50:43.000Z",
       },
     ]);

@@ -1,6 +1,8 @@
 import type {
   IncidentEventKind,
+  IncidentClosureReason,
   IncidentKind,
+  IncidentLifecycle,
   IncidentState,
   NormalizedIncident,
   NormalizedStatus,
@@ -8,11 +10,13 @@ import type {
 import { stableFallbackId } from "./id";
 
 export interface IncidentRecord extends NormalizedIncident {
+  lifecycle: IncidentLifecycle;
+  closureReason: IncidentClosureReason | null;
   serviceId: string;
   componentIdsJson: string;
   componentsJson: string;
   firstSeenAt: string;
-  resolvedDetectedAt: string | null;
+  closedDetectedAt: string | null;
   fingerprint: string;
   revision: number;
   lastObservedAt: string;
@@ -24,6 +28,7 @@ export interface IncidentEventRecord {
   incidentId: string;
   kind: IncidentKind;
   eventKind: IncidentEventKind;
+  closureReason: IncidentClosureReason | null;
   title: string;
   body: string | null;
   state: IncidentState;
@@ -50,9 +55,11 @@ export function reconcileIncidents(
   detectedAt: string,
   // Some public APIs expose only a bounded recent list.
   incidentListComplete = true,
+  unverifiedIncidentIds: string[] = [],
 ): ReconcileResult {
   const previousById = new Map(previous.map((incident) => [incident.id, incident]));
   const incomingIds = new Set<string>();
+  const unverifiedIds = new Set(unverifiedIncidentIds);
   const changedIncidents: IncidentRecord[] = [];
   const events: IncidentEventRecord[] = [];
 
@@ -60,60 +67,89 @@ export function reconcileIncidents(
     incomingIds.add(snapshot.id);
     const old = previousById.get(snapshot.id);
     const fingerprint = incidentFingerprint(snapshot);
+    const lifecycle: IncidentLifecycle =
+      snapshot.state === "resolved"
+        ? "closed"
+        : unverifiedIds.has(snapshot.id)
+          ? "unverified"
+          : "active";
+    const closureReason: IncidentClosureReason | null =
+      lifecycle === "closed" ? "official_resolved" : null;
 
     if (!old) {
-      if (snapshot.lifecycle === "unverified") {
-        changedIncidents.push(makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint));
+      let record = makeRecord(
+        serviceId,
+        snapshot,
+        lifecycle,
+        closureReason,
+        detectedAt,
+        1,
+        fingerprint,
+        lifecycle === "closed" ? detectedAt : null,
+      );
+      if (lifecycle === "unverified") {
+        changedIncidents.push(record);
         continue;
       }
-      if (snapshot.lifecycle === "resolved" && !incidentListComplete) {
-        changedIncidents.push(
-          makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint, detectedAt),
-        );
+      if (lifecycle === "closed" && !incidentListComplete) {
+        changedIncidents.push(record);
         continue;
       }
-      let record = makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint);
       changedIncidents.push(record);
       events.push(makeEvent(record, "opened", 1, snapshot.officialCreatedAt));
-      if (snapshot.lifecycle === "resolved") {
+      if (lifecycle === "closed") {
         record = {
           ...record,
           revision: 2,
-          resolvedDetectedAt: detectedAt,
+          closedDetectedAt: detectedAt,
           lastObservedAt: detectedAt,
         };
         changedIncidents[changedIncidents.length - 1] = record;
-        events.push(makeEvent(record, "resolved", 2, snapshot.officialUpdatedAt));
+        events.push(
+          makeEvent(record, "resolved", 2, snapshot.officialUpdatedAt, "official_resolved"),
+        );
       }
       continue;
     }
 
     const contentChanged = fingerprint !== old.fingerprint;
-    const lifecycleChanged = snapshot.lifecycle !== old.lifecycle;
+    const lifecycleChanged = lifecycle !== old.lifecycle;
     const observationChanged =
       contentChanged ||
       lifecycleChanged ||
+      closureReason !== old.closureReason ||
       snapshot.officialCreatedAt !== old.officialCreatedAt ||
       snapshot.officialUpdatedAt !== old.officialUpdatedAt ||
       snapshot.url !== old.url;
     if (!observationChanged) continue;
 
-    const reopened = old.lifecycle === "resolved" && snapshot.lifecycle === "active";
-    const resolved = old.lifecycle !== "resolved" && snapshot.lifecycle === "resolved";
+    const reopened = old.lifecycle === "closed" && lifecycle === "active";
+    const officiallyResolved =
+      lifecycle === "closed" &&
+      closureReason === "official_resolved" &&
+      old.closureReason !== "official_resolved";
     const revision =
-      old.revision + (contentChanged || lifecycleChanged || reopened || resolved ? 1 : 0);
+      old.revision +
+      (contentChanged || lifecycleChanged || closureReason !== old.closureReason || reopened
+        ? 1
+        : 0);
     const record = makeRecord(
       serviceId,
       snapshot,
+      lifecycle,
+      closureReason,
       old.firstSeenAt,
       revision,
       fingerprint,
-      snapshot.lifecycle === "resolved" ? (old.resolvedDetectedAt ?? detectedAt) : null,
+      lifecycle === "closed" ? (old.closedDetectedAt ?? detectedAt) : null,
       detectedAt,
     );
     changedIncidents.push(record);
 
-    if (resolved) events.push(makeEvent(record, "resolved", revision, snapshot.officialUpdatedAt));
+    if (officiallyResolved)
+      events.push(
+        makeEvent(record, "resolved", revision, snapshot.officialUpdatedAt, "official_resolved"),
+      );
     else if (reopened)
       events.push(makeEvent(record, "opened", revision, snapshot.officialCreatedAt));
     else if (contentChanged)
@@ -121,19 +157,29 @@ export function reconcileIncidents(
   }
 
   for (const old of previous) {
-    if (old.lifecycle === "resolved" || incomingIds.has(old.id)) continue;
+    if (old.lifecycle === "closed" || incomingIds.has(old.id)) continue;
+    if (unverifiedIds.has(old.id)) {
+      if (old.lifecycle !== "unverified") {
+        changedIncidents.push({
+          ...old,
+          lifecycle: "unverified",
+          closureReason: null,
+          closedDetectedAt: null,
+          revision: old.revision + 1,
+          lastObservedAt: detectedAt,
+        });
+      }
+      continue;
+    }
     if (!incidentListComplete) continue;
-    const snapshot: NormalizedIncident = {
-      ...old,
-      lifecycle: "resolved",
-      state: "resolved",
-      sourceStatus: "not_listed",
-    };
+    const snapshot: NormalizedIncident = { ...old };
     const revision = old.revision + 1;
     const fingerprint = incidentFingerprint(snapshot);
     const record = makeRecord(
       serviceId,
       snapshot,
+      "closed",
+      "no_longer_listed",
       old.firstSeenAt,
       revision,
       fingerprint,
@@ -141,7 +187,7 @@ export function reconcileIncidents(
       detectedAt,
     );
     changedIncidents.push(record);
-    events.push(makeEvent(record, "resolved", revision, null));
+    events.push(makeEvent(record, "closed", revision, null, "no_longer_listed"));
   }
 
   return { changedIncidents, events };
@@ -150,21 +196,25 @@ export function reconcileIncidents(
 function makeRecord(
   serviceId: string,
   snapshot: NormalizedIncident,
+  lifecycle: IncidentLifecycle,
+  closureReason: IncidentClosureReason | null,
   firstSeenAt: string,
   revision: number,
   fingerprint: string,
-  resolvedDetectedAt: string | null = null,
+  closedDetectedAt: string | null = null,
   lastObservedAt = firstSeenAt,
 ): IncidentRecord {
   return {
     ...snapshot,
+    lifecycle,
+    closureReason,
     serviceId,
     componentIds: [...snapshot.componentIds],
     componentIdsJson: JSON.stringify(snapshot.componentIds),
     components: [...snapshot.components],
     componentsJson: JSON.stringify(snapshot.components),
     firstSeenAt,
-    resolvedDetectedAt,
+    closedDetectedAt,
     fingerprint,
     revision,
     lastObservedAt,
@@ -176,6 +226,7 @@ function makeEvent(
   eventKind: IncidentEventKind,
   revision: number,
   officialEventAt: string | null,
+  closureReason: IncidentClosureReason | null = null,
 ): IncidentEventRecord {
   return {
     id: JSON.stringify([record.serviceId, record.id, revision]),
@@ -183,6 +234,7 @@ function makeEvent(
     incidentId: record.id,
     kind: record.kind,
     eventKind,
+    closureReason,
     title: record.title,
     body: record.body,
     state: record.state,
@@ -210,6 +262,5 @@ export function incidentFingerprint(incident: NormalizedIncident): string {
     incident.severityStatus,
     [...incident.componentIds].toSorted().join("\u001e"),
     [...incident.components].toSorted().join("\u001e"),
-    String(incident.lifecycle !== "resolved"),
   ]);
 }

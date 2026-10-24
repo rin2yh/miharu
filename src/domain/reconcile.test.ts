@@ -21,7 +21,6 @@ function incident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncide
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T04:55:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
-    lifecycle: "active",
     ...overrides,
   };
 }
@@ -33,6 +32,7 @@ describe("incident reconciliation", () => {
     expect(result.changedIncidents[0]).toMatchObject({
       revision: 1,
       lifecycle: "active",
+      closureReason: null,
       firstSeenAt: observedAt,
     });
     expect(result.events).toHaveLength(1);
@@ -95,28 +95,46 @@ describe("incident reconciliation", () => {
     });
   });
 
-  it("records an explicit recovery with the official update time", () => {
+  it("keeps an unknown official status active instead of marking it unverified", () => {
+    const result = reconcileIncidents(
+      "github",
+      [],
+      [incident({ state: "unknown", sourceStatus: "future_status" })],
+      observedAt,
+    );
+
+    expect(result.changedIncidents[0]).toMatchObject({
+      state: "unknown",
+      sourceStatus: "future_status",
+      lifecycle: "active",
+      closureReason: null,
+    });
+  });
+
+  it("records an official recovery separately from tracking lifecycle", () => {
     const existing = reconcileIncidents("github", [], [incident()], observedAt).changedIncidents;
     const recovered = incident({
       state: "resolved",
       sourceStatus: "resolved",
-      lifecycle: "resolved",
       officialUpdatedAt: "2026-10-23T05:15:00.000Z",
       body: "The issue has been resolved.",
     });
     const result = reconcileIncidents("github", existing, [recovered], "2026-10-23T05:16:00.000Z");
     expect(result.changedIncidents[0]).toMatchObject({
-      lifecycle: "resolved",
-      resolvedDetectedAt: "2026-10-23T05:16:00.000Z",
+      state: "resolved",
+      lifecycle: "closed",
+      closureReason: "official_resolved",
+      closedDetectedAt: "2026-10-23T05:16:00.000Z",
     });
     expect(result.events[0]).toMatchObject({
       eventKind: "resolved",
+      closureReason: "official_resolved",
       officialEventAt: "2026-10-23T05:15:00.000Z",
       detectedAt: "2026-10-23T05:16:00.000Z",
     });
   });
 
-  it("detects recovery by disappearance without inventing an official time", () => {
+  it("closes a missing incident without rewriting its last official state", () => {
     const existing = reconcileIncidents(
       "slack",
       [],
@@ -126,12 +144,17 @@ describe("incident reconciliation", () => {
     const detectedAt = "2026-10-23T05:10:00.000Z";
     const result = reconcileIncidents("slack", existing, [], detectedAt);
     expect(result.changedIncidents[0]).toMatchObject({
-      lifecycle: "resolved",
-      sourceStatus: "not_listed",
-      resolvedDetectedAt: detectedAt,
+      state: "investigating",
+      sourceStatus: "investigating",
+      lifecycle: "closed",
+      closureReason: "no_longer_listed",
+      closedDetectedAt: detectedAt,
     });
     expect(result.events[0]).toMatchObject({
-      eventKind: "resolved",
+      eventKind: "closed",
+      closureReason: "no_longer_listed",
+      state: "investigating",
+      sourceStatus: "investigating",
       officialEventAt: null,
       detectedAt,
     });
@@ -145,7 +168,7 @@ describe("incident reconciliation", () => {
     expect(result.events).toEqual([]);
   });
 
-  it("keeps an unverified incident without recording a recovery", () => {
+  it("keeps the last official state when a recheck fails", () => {
     const active = reconcileIncidents(
       "google-workspace",
       [],
@@ -155,13 +178,21 @@ describe("incident reconciliation", () => {
     const result = reconcileIncidents(
       "google-workspace",
       active,
-      [incident({ lifecycle: "unverified" })],
+      [],
       "2026-10-23T05:05:00.000Z",
       false,
+      ["incident-1"],
     );
 
     expect(result.changedIncidents).toMatchObject([
-      { lifecycle: "unverified", resolvedDetectedAt: null, revision: 2 },
+      {
+        lifecycle: "unverified",
+        closureReason: null,
+        closedDetectedAt: null,
+        state: "investigating",
+        sourceStatus: "investigating",
+        revision: 2,
+      },
     ]);
     expect(result.events).toEqual([]);
   });
@@ -176,9 +207,10 @@ describe("incident reconciliation", () => {
     const unverified = reconcileIncidents(
       "google-workspace",
       active,
-      [incident({ lifecycle: "unverified" })],
+      [],
       "2026-10-23T05:05:00.000Z",
       false,
+      ["incident-1"],
     ).changedIncidents;
     const result = reconcileIncidents(
       "google-workspace",
@@ -188,7 +220,9 @@ describe("incident reconciliation", () => {
       false,
     );
 
-    expect(result.changedIncidents).toMatchObject([{ lifecycle: "active", revision: 3 }]);
+    expect(result.changedIncidents).toMatchObject([
+      { lifecycle: "active", closureReason: null, state: "investigating", revision: 3 },
+    ]);
     expect(result.events).toEqual([]);
   });
 
@@ -202,34 +236,44 @@ describe("incident reconciliation", () => {
     const unverified = reconcileIncidents(
       "google-workspace",
       active,
-      [incident({ lifecycle: "unverified" })],
+      [],
       "2026-10-23T05:05:00.000Z",
       false,
+      ["incident-1"],
     ).changedIncidents;
     const result = reconcileIncidents(
       "google-workspace",
       unverified,
-      [incident({ state: "resolved", sourceStatus: "resolved", lifecycle: "resolved" })],
+      [incident({ state: "resolved", sourceStatus: "resolved" })],
       "2026-10-23T05:10:00.000Z",
       false,
     );
 
     expect(result.changedIncidents).toMatchObject([
-      { lifecycle: "resolved", resolvedDetectedAt: "2026-10-23T05:10:00.000Z", revision: 3 },
+      {
+        lifecycle: "closed",
+        closureReason: "official_resolved",
+        closedDetectedAt: "2026-10-23T05:10:00.000Z",
+        revision: 3,
+      },
     ]);
-    expect(result.events).toMatchObject([{ eventKind: "resolved" }]);
+    expect(result.events).toMatchObject([
+      { eventKind: "resolved", closureReason: "official_resolved" },
+    ]);
   });
 
   it("does not add historical events for resolved incidents first seen in an incomplete list", () => {
     const result = reconcileIncidents(
       "chatgpt",
       [],
-      [incident({ state: "resolved", sourceStatus: "resolved", lifecycle: "resolved" })],
+      [incident({ state: "resolved", sourceStatus: "resolved" })],
       observedAt,
       false,
     );
 
-    expect(result.changedIncidents).toMatchObject([{ lifecycle: "resolved", revision: 1 }]);
+    expect(result.changedIncidents).toMatchObject([
+      { lifecycle: "closed", closureReason: "official_resolved", revision: 1 },
+    ]);
     expect(result.events).toEqual([]);
   });
 
@@ -238,7 +282,6 @@ describe("incident reconciliation", () => {
     const recovered = incident({
       state: "resolved",
       sourceStatus: "resolved",
-      lifecycle: "resolved",
       officialUpdatedAt: "2026-10-23T05:15:00.000Z",
       body: "The issue has been resolved.",
     });
@@ -251,7 +294,8 @@ describe("incident reconciliation", () => {
     );
 
     expect(result.changedIncidents[0]).toMatchObject({
-      lifecycle: "resolved",
+      lifecycle: "closed",
+      closureReason: "official_resolved",
       sourceStatus: "resolved",
     });
     expect(result.events[0]).toMatchObject({
@@ -260,21 +304,37 @@ describe("incident reconciliation", () => {
     });
   });
 
-  it("tracks a reopened incident as a new revision", () => {
-    const resolved = reconcileIncidents(
-      "github",
-      [],
-      [incident({ lifecycle: "resolved", state: "resolved" })],
-      observedAt,
-    ).changedIncidents;
+  it("reopens an incident closed by disappearance when it is listed again", () => {
+    const resolved = reconcileIncidents("github", [], [incident()], observedAt).changedIncidents;
+    const closed = reconcileIncidents("github", resolved, [], "2026-10-23T05:05:00.000Z");
     const reopened = reconcileIncidents(
       "github",
-      resolved,
+      closed.changedIncidents,
       [incident()],
       "2026-10-23T05:10:00.000Z",
     );
-    expect(reopened.changedIncidents[0]?.revision).toBe(resolved[0]!.revision + 1);
+    expect(reopened.changedIncidents[0]).toMatchObject({
+      lifecycle: "active",
+      closureReason: null,
+      revision: closed.changedIncidents[0]!.revision + 1,
+    });
     expect(reopened.events[0]?.eventKind).toBe("opened");
+  });
+
+  it("keeps officially resolved first-seen incidents closed without inventing an open event for incomplete history", () => {
+    const result = reconcileIncidents(
+      "chatgpt",
+      [],
+      [incident({ state: "resolved", sourceStatus: "resolved" })],
+      observedAt,
+      false,
+    );
+
+    expect(result.changedIncidents[0]).toMatchObject({
+      lifecycle: "closed",
+      closureReason: "official_resolved",
+    });
+    expect(result.events).toEqual([]);
   });
 
   it("deduplicates retries using the same incident revision key", () => {

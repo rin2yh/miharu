@@ -7,6 +7,7 @@ export function EventRow({ event }: { event: DashboardEvent }) {
     opened: event.kind === "maintenance" ? "メンテナンス予定" : "障害発生",
     updated: event.kind === "maintenance" ? "メンテナンス更新" : "障害更新",
     resolved: event.kind === "maintenance" ? "メンテナンス完了" : "復旧",
+    closed: "追跡終了",
   };
   return (
     <li className="relative flex min-h-20 gap-3 border-b border-line py-4 pr-1.5 pl-1">

@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../../domain";
 import { incident } from "../../test-fixtures";
 import { IncidentList } from "./incident-list";
 
@@ -14,7 +13,7 @@ describe("IncidentList", () => {
 
     const incidentItem = screen.getByRole("listitem", { name: "History entry missing" });
     expect(within(incidentItem).getByText("障害", { exact: true })).toBeVisible();
-    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
+    expect(within(incidentItem).getByText("調査中・再確認不能")).toBeVisible();
     expect(within(incidentItem).queryByText("復旧", { exact: true })).not.toBeInTheDocument();
   });
 
@@ -46,13 +45,13 @@ describe("IncidentList", () => {
     ).toEqual(["2026-10-23T04:55:00.000Z", "2026-10-23T04:50:00.000Z"]);
   });
 
-  it("shows an unverified incident with a recovery warning", () => {
+  it("shows an unknown official state separately from a failed recheck", () => {
     const unknownIncident = incident({
       id: "unknown-google-workspace-incident",
       title: "Earlier Gmail issue",
       body: null,
       state: "unknown",
-      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      sourceStatus: "future_status",
       lifecycle: "unverified",
       severityStatus: null,
       componentIds: ["gmail"],
@@ -63,10 +62,14 @@ describe("IncidentList", () => {
 
     const incidentItem = screen.getByRole("listitem", { name: unknownIncident.title });
     expect(within(incidentItem).getByText("障害", { exact: true })).toBeVisible();
-    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
+    expect(within(incidentItem).getByText("状態不明・再確認不能")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
-    expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
+    expect(
+      within(incidentItem).getByText(
+        "最後に確認した公式状態を表示しています。現在の状態を再確認できていません。",
+      ),
+    ).toBeVisible();
   });
 
   it("labels unverified maintenance as not yet confirmed ended", () => {
@@ -74,7 +77,7 @@ describe("IncidentList", () => {
       title: "Earlier maintenance status unavailable",
       kind: "maintenance",
       state: "unknown",
-      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      sourceStatus: "future_status",
       lifecycle: "unverified",
       severityStatus: null,
     });
@@ -85,7 +88,7 @@ describe("IncidentList", () => {
     expect(kindLabels).toHaveLength(2);
     expect(kindLabels[0]).toBeVisible();
     expect(kindLabels[1]).not.toBeVisible();
-    expect(within(incidentItem).getByText("終了未確認")).toBeVisible();
+    expect(within(incidentItem).getByText("状態不明・再確認不能")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unverifiedMaintenance.title));
     expect(within(incidentItem).getByRole("group")).toHaveTextContent("メンテナンス");
     const expandedKindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
@@ -159,7 +162,8 @@ describe("IncidentList", () => {
     {
       sourceStatus: "completed",
       state: "resolved" as const,
-      lifecycle: "resolved" as const,
+      lifecycle: "closed" as const,
+      closureReason: "official_resolved" as const,
       label: "完了",
     },
   ])("shows $sourceStatus maintenance state before opening its details", (status) => {
@@ -188,7 +192,8 @@ describe("IncidentList", () => {
       kind: "incident",
       state: "resolved",
       sourceStatus: "resolved",
-      lifecycle: "resolved",
+      lifecycle: "closed",
+      closureReason: "official_resolved",
     });
     render(<IncidentList incidents={[resolvedIncident]} />);
 

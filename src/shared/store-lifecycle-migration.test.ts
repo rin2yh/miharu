@@ -72,114 +72,258 @@ function insertLegacyIncident(
     .run();
 }
 
-describe("D1 incident lifecycle persistence", () => {
-  it("backfills legacy states and round-trips unverified incidents to the dashboard API", async () => {
+function insertLegacyEvent(
+  database: SqliteD1Adapter,
+  event: { id: string; incidentId: string; eventKind: string; state: string; sourceStatus: string },
+) {
+  database
+    .prepare(
+      `INSERT INTO incident_events (
+        id, service_id, incident_id, kind, event_kind, title, body, state,
+        source_status, source_type, source_impact, severity_status, components_json,
+        url, official_event_at, detected_at
+      ) VALUES (?, 'google-workspace', ?, 'incident', ?, ?, NULL, ?, ?, NULL, NULL, NULL,
+        '[]', NULL, NULL, '2026-10-23T04:00:00.000Z')`,
+    )
+    .bind(
+      event.id,
+      event.incidentId,
+      event.eventKind,
+      event.incidentId,
+      event.state,
+      event.sourceStatus,
+    )
+    .run();
+}
+
+describe("D1 incident lifecycle migration", () => {
+  it("translates legacy Worker writes into explicit tracking closure data", () => {
     const database = new SqliteD1Adapter();
     database.migrate("db/migrations/0001_initial.sql");
     database.migrate("db/migrations/0002_service_components.sql");
+    database.migrate("db/migrations/0003_incident_lifecycle.sql");
+    database.migrate("db/migrations/0004_incident_tracking_closure.sql");
+    insertLegacyEvent(database, {
+      id: "compat-opened",
+      incidentId: "compat-disappeared",
+      eventKind: "opened",
+      state: "investigating",
+      sourceStatus: "investigating",
+    });
     insertLegacyIncident(database, {
-      id: "legacy-active",
+      id: "compat-disappeared",
       state: "investigating",
       sourceStatus: "investigating",
       active: 1,
     });
-    insertLegacyIncident(database, {
-      id: "legacy-unverified",
-      state: "unknown",
-      sourceStatus: "recheck_unavailable",
-      active: 0,
-    });
-    insertLegacyIncident(database, {
-      id: "legacy-resolved",
+
+    database
+      .prepare(
+        `UPDATE incidents SET
+          state = 'resolved', source_status = 'not_listed', active = 0,
+          lifecycle = 'resolved', resolved_detected_at = '2026-10-23T05:00:00.000Z'
+        WHERE id = 'compat-disappeared'`,
+      )
+      .run();
+    insertLegacyEvent(database, {
+      id: "compat-closed",
+      incidentId: "compat-disappeared",
+      eventKind: "resolved",
       state: "resolved",
-      sourceStatus: "resolved",
-      active: 0,
+      sourceStatus: "not_listed",
     });
-    database.migrate("db/migrations/0003_incident_lifecycle.sql");
 
-    const store = createD1Store(database as unknown as D1Database);
-    const known = await store.getUnresolvedIncidents("google-workspace");
-    expect(known.map(({ id, lifecycle }) => [id, lifecycle])).toEqual([
-      ["legacy-active", "active"],
-      ["legacy-unverified", "unverified"],
-    ]);
-    expect(
-      database.sqlite.prepare("SELECT active FROM incidents WHERE id = 'legacy-unverified'").get(),
-    ).toMatchObject({ active: 1 });
-    await database.prepare("UPDATE incidents SET active = 0 WHERE id = 'legacy-unverified'").run();
     expect(
       database.sqlite
-        .prepare("SELECT active, lifecycle FROM incidents WHERE id = 'legacy-unverified'")
+        .prepare(
+          `SELECT state, source_status AS sourceStatus, lifecycle,
+            closure_reason AS closureReason FROM incidents WHERE id = 'compat-disappeared'`,
+        )
         .get(),
-    ).toMatchObject({ active: 1, lifecycle: "unverified" });
-    await database
-      .prepare(
-        "UPDATE incidents SET active = 1, state = 'investigating', source_status = 'SERVICE_DISRUPTION' WHERE id = 'legacy-unverified'",
-      )
-      .run();
-    expect(
-      database.sqlite
-        .prepare("SELECT active, lifecycle FROM incidents WHERE id = 'legacy-unverified'")
-        .get(),
-    ).toMatchObject({ active: 1, lifecycle: "active" });
-    await database
-      .prepare(
-        "UPDATE incidents SET active = 0, state = 'resolved', source_status = 'resolved' WHERE id = 'legacy-unverified'",
-      )
-      .run();
-    expect(
-      database.sqlite
-        .prepare("SELECT active, lifecycle FROM incidents WHERE id = 'legacy-unverified'")
-        .get(),
-    ).toMatchObject({ active: 0, lifecycle: "resolved" });
-
-    const service = SERVICES.find(({ id }) => id === "google-workspace");
-    if (!service) throw new Error("Google Workspace service config is missing");
-    const incident = {
-      id: "new-unverified",
-      title: "Workspace API interruption",
-      body: "The official history no longer lists the incident.",
-      kind: "incident" as const,
-      state: "investigating" as const,
-      sourceStatus: "SERVICE_DISRUPTION",
-      sourceType: "incident",
-      sourceImpact: "SERVICE_DISRUPTION",
-      severityStatus: "degraded_performance" as const,
-      componentIds: [],
-      components: [],
-      officialCreatedAt: "2026-10-23T04:00:00.000Z",
-      officialUpdatedAt: "2026-10-23T04:00:00.000Z",
-      url: "https://www.google.com/appsstatus/dashboard/incidents/new-unverified",
-      lifecycle: "active" as const,
-    };
-    const save = (lifecycle: "active" | "unverified"): Promise<void> => {
-      const snapshot: ProviderSnapshot = {
-        status: "unknown",
-        sourceStatus: "no_active_incidents",
-        summary: null,
-        incidentListComplete: false,
-        incidents: [{ ...incident, lifecycle }],
-      };
-      return store.saveSuccess(service, snapshot, "2026-10-23T05:00:00.000Z");
-    };
-
-    await save("active");
-    await save("unverified");
-
-    const rows = await store.getDashboardRows();
-    const payload = buildDashboardPayload(rows, new Date("2026-10-23T05:01:00.000Z"));
-    const workspace = payload.services.find(({ id }) => id === "google-workspace");
-    expect(workspace?.incidents.find(({ id }) => id === "new-unverified")).toMatchObject({
-      lifecycle: "unverified",
-      title: "Workspace API interruption",
+    ).toEqual({
+      state: "investigating",
+      sourceStatus: "investigating",
+      lifecycle: "resolved",
+      closureReason: "no_longer_listed",
     });
     expect(
       database.sqlite
         .prepare(
-          "SELECT event_kind AS eventKind FROM incident_events WHERE incident_id = 'new-unverified'",
+          `SELECT event_kind AS eventKind, state, source_status AS sourceStatus,
+            closure_reason AS closureReason FROM incident_events WHERE id = 'compat-closed'`,
         )
-        .all(),
-    ).toEqual([{ eventKind: "opened" }]);
+        .get(),
+    ).toEqual({
+      eventKind: "closed",
+      state: "investigating",
+      sourceStatus: "investigating",
+      closureReason: "no_longer_listed",
+    });
+    database.sqlite.close();
+  });
+
+  it("separates official recovery, list disappearance, official unknown state, and failed rechecks", async () => {
+    const database = new SqliteD1Adapter();
+    database.migrate("db/migrations/0001_initial.sql");
+    database.migrate("db/migrations/0002_service_components.sql");
+    insertLegacyEvent(database, {
+      id: "missing-opened",
+      incidentId: "legacy-missing",
+      eventKind: "opened",
+      state: "investigating",
+      sourceStatus: "investigating",
+    });
+    insertLegacyEvent(database, {
+      id: "missing-resolved",
+      incidentId: "legacy-missing",
+      eventKind: "resolved",
+      state: "resolved",
+      sourceStatus: "not_listed",
+    });
+    insertLegacyEvent(database, {
+      id: "recheck-opened",
+      incidentId: "legacy-recheck",
+      eventKind: "opened",
+      state: "investigating",
+      sourceStatus: "SERVICE_DISRUPTION",
+    });
+    insertLegacyIncident(database, {
+      id: "legacy-missing",
+      state: "resolved",
+      sourceStatus: "not_listed",
+      active: 0,
+    });
+    insertLegacyIncident(database, {
+      id: "legacy-recheck",
+      state: "unknown",
+      sourceStatus: "recheck_unavailable",
+      active: 1,
+    });
+    insertLegacyIncident(database, {
+      id: "legacy-official-resolved",
+      state: "resolved",
+      sourceStatus: "resolved",
+      active: 0,
+    });
+    insertLegacyIncident(database, {
+      id: "legacy-official-unknown",
+      state: "unknown",
+      sourceStatus: "future_status",
+      active: 1,
+    });
+    database.migrate("db/migrations/0003_incident_lifecycle.sql");
+    database.migrate("db/migrations/0004_incident_tracking_closure.sql");
+
+    const migrated = database.sqlite
+      .prepare(
+        `SELECT id, state, source_status AS sourceStatus, lifecycle,
+          closure_reason AS closureReason, recheck_unavailable AS recheckUnavailable
+        FROM incidents ORDER BY id`,
+      )
+      .all();
+    expect(migrated).toEqual([
+      {
+        id: "legacy-missing",
+        state: "investigating",
+        sourceStatus: "investigating",
+        lifecycle: "resolved",
+        closureReason: "no_longer_listed",
+        recheckUnavailable: 0,
+      },
+      {
+        id: "legacy-official-resolved",
+        state: "resolved",
+        sourceStatus: "resolved",
+        lifecycle: "resolved",
+        closureReason: "official_resolved",
+        recheckUnavailable: 0,
+      },
+      {
+        id: "legacy-official-unknown",
+        state: "unknown",
+        sourceStatus: "future_status",
+        lifecycle: "active",
+        closureReason: null,
+        recheckUnavailable: 0,
+      },
+      {
+        id: "legacy-recheck",
+        state: "investigating",
+        sourceStatus: "SERVICE_DISRUPTION",
+        lifecycle: "unverified",
+        closureReason: null,
+        recheckUnavailable: 1,
+      },
+    ]);
+
+    expect(
+      database.sqlite
+        .prepare(
+          "SELECT event_kind AS eventKind, state, source_status AS sourceStatus, closure_reason AS closureReason FROM incident_events WHERE id = 'missing-resolved'",
+        )
+        .get(),
+    ).toEqual({
+      eventKind: "closed",
+      state: "investigating",
+      sourceStatus: "investigating",
+      closureReason: "no_longer_listed",
+    });
+
+    const store = createD1Store(database as unknown as D1Database);
+    const known = await store.getUnresolvedIncidents("google-workspace");
+    expect(known.map(({ id, state, lifecycle }) => [id, state, lifecycle])).toEqual([
+      ["legacy-official-unknown", "unknown", "active"],
+      ["legacy-recheck", "investigating", "unverified"],
+    ]);
+
+    const service = SERVICES.find(({ id }) => id === "google-workspace");
+    if (!service) throw new Error("Google Workspace service config is missing");
+    const unknownIncident = {
+      id: "legacy-official-unknown",
+      title: "legacy-official-unknown",
+      body: null,
+      kind: "incident" as const,
+      state: "unknown" as const,
+      sourceStatus: "future_status",
+      sourceType: null,
+      sourceImpact: null,
+      severityStatus: null,
+      componentIds: [],
+      components: [],
+      officialCreatedAt: null,
+      officialUpdatedAt: null,
+      url: null,
+    };
+    const snapshot: ProviderSnapshot = {
+      status: "unknown",
+      sourceStatus: "future_status",
+      summary: null,
+      incidents: [unknownIncident],
+      incidentListComplete: false,
+      unverifiedIncidentIds: ["legacy-recheck"],
+    };
+    await store.saveSuccess(service, snapshot, "2026-10-23T05:00:00.000Z");
+
+    const rows = await store.getDashboardRows();
+    const payload = buildDashboardPayload(rows, new Date("2026-10-23T05:01:00.000Z"));
+    const workspace = payload.services.find(({ id }) => id === "google-workspace");
+    expect(workspace?.incidents.find(({ id }) => id === "legacy-official-unknown")).toMatchObject({
+      state: "unknown",
+      sourceStatus: "future_status",
+      lifecycle: "active",
+      closureReason: null,
+    });
+    expect(workspace?.incidents.find(({ id }) => id === "legacy-recheck")).toMatchObject({
+      state: "investigating",
+      sourceStatus: "SERVICE_DISRUPTION",
+      lifecycle: "unverified",
+      closureReason: null,
+    });
+    expect(workspace?.incidents.some(({ id }) => id === "legacy-missing")).toBe(false);
+    expect(payload.recentEvents.find(({ id }) => id === "missing-resolved")).toMatchObject({
+      eventKind: "closed",
+      closureReason: "no_longer_listed",
+    });
     database.sqlite.close();
   });
 });

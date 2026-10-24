@@ -88,6 +88,7 @@ export function buildDashboardPayload(
       officialUpdatedAt: row.officialUpdatedAt,
       url: row.url,
       lifecycle: row.lifecycle,
+      closureReason: row.closureReason,
     });
     incidentsByService.set(row.serviceId, list);
   }
@@ -126,6 +127,7 @@ export function buildDashboardPayload(
       title: row.title,
       kind: row.kind,
       eventKind: row.eventKind,
+      closureReason: row.closureReason,
       sourceStatus: row.sourceStatus,
       severityStatus: row.severityStatus,
       detectedAt: row.detectedAt,
