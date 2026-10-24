@@ -13,7 +13,8 @@ describe("IncidentList", () => {
     );
 
     const incidentItem = screen.getByRole("listitem", { name: "History entry missing" });
-    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("障害", { exact: true })).toBeVisible();
+    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
     expect(within(incidentItem).queryByText("復旧", { exact: true })).not.toBeInTheDocument();
   });
 
@@ -25,6 +26,10 @@ describe("IncidentList", () => {
     });
     const incidentBody = within(incidentItem).getByText("We are investigating.");
     expect(incidentBody).not.toBeVisible();
+    const kindBadge = within(incidentItem).getByText("障害", { exact: true });
+    const stateBadge = within(incidentItem).getByText("調査中", { exact: true });
+    expect(kindBadge).toBeVisible();
+    expect(stateBadge).toBeVisible();
 
     fireEvent.click(within(incidentItem).getByText("Messaging delays for some users"));
 
@@ -57,10 +62,36 @@ describe("IncidentList", () => {
     render(<IncidentList incidents={[unknownIncident]} />);
 
     const incidentItem = screen.getByRole("listitem", { name: unknownIncident.title });
-    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("障害", { exact: true })).toBeVisible();
+    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
+  });
+
+  it("labels unverified maintenance as not yet confirmed ended", () => {
+    const unverifiedMaintenance = incident({
+      title: "Earlier maintenance status unavailable",
+      kind: "maintenance",
+      state: "unknown",
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      lifecycle: "unverified",
+      severityStatus: null,
+    });
+    render(<IncidentList incidents={[unverifiedMaintenance]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: unverifiedMaintenance.title });
+    const kindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
+    expect(kindLabels).toHaveLength(2);
+    expect(kindLabels[0]).toBeVisible();
+    expect(kindLabels[1]).not.toBeVisible();
+    expect(within(incidentItem).getByText("終了未確認")).toBeVisible();
+    fireEvent.click(within(incidentItem).getByText(unverifiedMaintenance.title));
+    expect(within(incidentItem).getByRole("group")).toHaveTextContent("メンテナンス");
+    const expandedKindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
+    expect(expandedKindLabels).toHaveLength(2);
+    expect(expandedKindLabels[0]).toBeVisible();
+    expect(expandedKindLabels[1]).toBeVisible();
   });
 
   it("expands one incident without opening its sibling", () => {
@@ -86,5 +117,89 @@ describe("IncidentList", () => {
 
     expect(within(selectedIncident).getByText("Actions are delayed.")).toBeVisible();
     expect(within(siblingIncident).getByText("The workflow queue is delayed.")).not.toBeVisible();
+  });
+
+  it("shows scheduled maintenance kind and state before opening its details", () => {
+    const scheduledMaintenance = incident({
+      title: "Cloudflare has scheduled maintenance for our storage systems",
+      kind: "maintenance",
+      state: "scheduled",
+      sourceStatus: "scheduled",
+      sourceType: "maintenance",
+      sourceImpact: "maintenance",
+      severityStatus: "under_maintenance",
+    });
+    render(<IncidentList incidents={[scheduledMaintenance]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: scheduledMaintenance.title });
+    const kindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
+    expect(kindLabels).toHaveLength(2);
+    expect(kindLabels[0]).toBeVisible();
+    expect(kindLabels[1]).not.toBeVisible();
+    const stateBadge = within(incidentItem).getByText("予定", { exact: true });
+    expect(stateBadge).toBeVisible();
+
+    fireEvent.click(within(incidentItem).getByText(scheduledMaintenance.title));
+
+    expect(within(incidentItem).getByRole("group")).toHaveTextContent("メンテナンス");
+    expect(within(incidentItem).getByText("メンテナンス状態: メンテナンス")).toBeVisible();
+    const expandedKindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
+    expect(expandedKindLabels).toHaveLength(2);
+    expect(expandedKindLabels[0]).toBeVisible();
+    expect(expandedKindLabels[1]).toBeVisible();
+  });
+
+  it.each([
+    {
+      sourceStatus: "in_progress",
+      state: "in_progress" as const,
+      lifecycle: "active" as const,
+      label: "実施中",
+    },
+    {
+      sourceStatus: "completed",
+      state: "resolved" as const,
+      lifecycle: "resolved" as const,
+      label: "完了",
+    },
+  ])("shows $sourceStatus maintenance state before opening its details", (status) => {
+    const maintenance = incident({
+      title: `${status.sourceStatus} maintenance`,
+      kind: "maintenance",
+      state: status.state,
+      lifecycle: status.lifecycle,
+      sourceStatus: status.sourceStatus,
+      sourceType: "maintenance",
+      sourceImpact: "maintenance",
+      severityStatus: "under_maintenance",
+    });
+    render(<IncidentList incidents={[maintenance]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: maintenance.title });
+    const kindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
+    expect(kindLabels[0]).toBeVisible();
+    expect(kindLabels[1]).not.toBeVisible();
+    expect(within(incidentItem).getByText(status.label)).toBeVisible();
+  });
+
+  it("labels a resolved incident as recovered while retaining its incident kind", () => {
+    const resolvedIncident = incident({
+      title: "Messaging delays have been resolved",
+      kind: "incident",
+      state: "resolved",
+      sourceStatus: "resolved",
+      lifecycle: "resolved",
+    });
+    render(<IncidentList incidents={[resolvedIncident]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: resolvedIncident.title });
+    const kindBadge = within(incidentItem).getByText("障害", { exact: true });
+    const stateBadge = within(incidentItem).getByText("復旧済み", { exact: true });
+    expect(kindBadge).toBeVisible();
+    expect(stateBadge).toBeVisible();
+
+    fireEvent.click(within(incidentItem).getByText(resolvedIncident.title));
+
+    expect(within(incidentItem).getByText("障害情報")).toBeVisible();
   });
 });

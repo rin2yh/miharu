@@ -1,4 +1,4 @@
-import type { NormalizedIncident, NormalizedStatus } from "../../domain";
+import type { IncidentState, NormalizedIncident, NormalizedStatus } from "../../domain";
 import { toPlainText } from "../../domain/text";
 import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../../shared/config/services";
 
@@ -169,20 +169,27 @@ export function normalizeTimestamp(value: unknown): string | null {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
-export function parseIncidentState(value: string): NormalizedIncident["state"] {
-  const raw = value.toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
-  if (
-    ["resolved", "closed", "complete", "completed", "cancelled", "canceled", "postmortem"].includes(
-      raw,
-    )
-  ) {
-    return "resolved";
-  }
-  if (["scheduled", "in_progress", "in_progress_maintenance"].includes(raw)) return "scheduled";
-  if (raw.includes("monitor")) return "monitoring";
-  if (raw.includes("identif")) return "identified";
-  if (raw.includes("investigat") || raw === "active" || raw === "open") return "investigating";
-  return "unknown";
+const INCIDENT_STATES: Record<string, IncidentState> = {
+  resolved: "resolved",
+  closed: "resolved",
+  complete: "resolved",
+  completed: "resolved",
+  cancelled: "resolved",
+  canceled: "resolved",
+  postmortem: "resolved",
+  scheduled: "scheduled",
+  in_progress: "in_progress",
+  in_progress_maintenance: "in_progress",
+  monitoring: "monitoring",
+  identified: "identified",
+  investigating: "investigating",
+  active: "investigating",
+  open: "investigating",
+};
+
+export function parseIncidentState(value: string): IncidentState {
+  const normalized = value.toLowerCase().replaceAll(/[- ]/g, "_");
+  return Object.hasOwn(INCIDENT_STATES, normalized) ? INCIDENT_STATES[normalized] : "unknown";
 }
 
 export function incidentLifecycleForState(

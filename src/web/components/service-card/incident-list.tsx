@@ -2,19 +2,30 @@ import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../../domain";
 import type { DashboardIncident, NormalizedStatus } from "../../../domain";
 import {
   formatDateTime,
+  incidentKindLabel,
   incidentStateLabel,
   STATUS_LABELS,
 } from "../../presentation/status-presentation";
 import { ExternalIcon } from "../icons";
 
-const incidentStateColors: Record<DashboardIncident["state"], string> = {
-  investigating: "bg-partial-bg text-partial",
-  identified: "bg-partial-bg text-partial",
-  scheduled: "bg-partial-bg text-partial",
-  monitoring: "bg-degraded-bg text-degraded",
-  resolved: "bg-healthy-bg text-healthy",
-  unknown: "bg-unknown-bg text-unknown",
-};
+function incidentKindColor(kind: DashboardIncident["kind"]): string {
+  return kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage";
+}
+
+function incidentStateColor(incident: DashboardIncident): string {
+  if (incident.lifecycle === "unverified" || incident.state === "unknown") {
+    return "bg-unknown-bg text-unknown";
+  }
+  if (incident.lifecycle === "resolved" || incident.state === "resolved") {
+    return "bg-healthy-bg text-healthy";
+  }
+  switch (incident.state) {
+    case "monitoring":
+      return "bg-degraded-bg text-degraded";
+    default:
+      return "bg-partial-bg text-partial";
+  }
+}
 
 const incidentImpactColors: Record<NormalizedStatus, string> = {
   operational: "bg-unknown-bg text-unknown",
@@ -51,10 +62,17 @@ export function IncidentList({
               <span className="min-w-0 text-xs font-semibold leading-normal [overflow-wrap:anywhere] max-sm:col-span-full">
                 {incident.title}
               </span>
-              <span
-                className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incident.lifecycle === "unverified" ? "bg-unknown-bg text-unknown" : incidentStateColors[incident.state]}`}
-              >
-                {incidentStateLabel(incident.state, incident.lifecycle)}
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentKindColor(incident.kind)}`}
+                >
+                  {incidentKindLabel(incident.kind)}
+                </span>
+                <span
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColor(incident)}`}
+                >
+                  {incidentStateLabel(incident.kind, incident.state, incident.lifecycle)}
+                </span>
               </span>
               <span className="whitespace-nowrap text-xs tabular-nums text-quiet">
                 更新{" "}

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NORMALIZED_STATUSES } from "../../domain";
-import type { DashboardIncident, NormalizedStatus } from "../../domain";
+import type { IncidentState, NormalizedStatus } from "../../domain";
 import {
   formatDateTime,
+  incidentKindLabel,
   incidentStateLabel,
   isAbnormal,
   relativeTime,
@@ -21,23 +22,58 @@ describe("status presentation", () => {
   });
 
   it.each([
-    ["investigating", "調査中"],
-    ["identified", "原因特定"],
-    ["monitoring", "復旧確認中"],
-    ["scheduled", "予定・実施中"],
-    ["resolved", "復旧"],
-  ] as const)("labels incident state %s", (state, label) => {
-    expect(incidentStateLabel(state, "active")).toBe(label);
+    { kind: "incident", state: "investigating", lifecycle: "active", label: "調査中" },
+    { kind: "incident", state: "identified", lifecycle: "active", label: "対応中" },
+    { kind: "incident", state: "monitoring", lifecycle: "active", label: "監視中" },
+    { kind: "incident", state: "scheduled", lifecycle: "active", label: "予定" },
+    { kind: "incident", state: "in_progress", lifecycle: "active", label: "対応中" },
+    { kind: "incident", state: "resolved", lifecycle: "active", label: "復旧済み" },
+    {
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+      label: "予定",
+    },
+    {
+      kind: "maintenance",
+      state: "in_progress",
+      lifecycle: "active",
+      label: "実施中",
+    },
+    { kind: "maintenance", state: "investigating", lifecycle: "active", label: "実施中" },
+    { kind: "maintenance", state: "identified", lifecycle: "active", label: "実施中" },
+    { kind: "maintenance", state: "monitoring", lifecycle: "active", label: "実施中" },
+    { kind: "maintenance", state: "resolved", lifecycle: "active", label: "完了" },
+  ] as const)("labels $kind $state as $label", ({ kind, state, lifecycle, label }) => {
+    expect(incidentStateLabel(kind, state as IncidentState, lifecycle)).toBe(label);
   });
 
-  it("uses a fallback label for an unrecognized incident state", () => {
-    expect(incidentStateLabel("unrecognized" as DashboardIncident["state"], "active")).toBe(
-      "状態不明",
-    );
+  it.each([
+    { kind: "incident", label: "復旧済み" },
+    { kind: "maintenance", label: "完了" },
+  ] as const)("uses the resolved $kind lifecycle label", ({ kind, label }) => {
+    expect(incidentStateLabel(kind, "investigating", "resolved")).toBe(label);
   });
 
-  it("labels an unverified incident as unverifiable", () => {
-    expect(incidentStateLabel("investigating", "unverified")).toBe("確認不能");
+  it.each([
+    { kind: "incident", label: "障害" },
+    { kind: "maintenance", label: "メンテナンス" },
+  ] as const)("labels the $kind kind separately", ({ kind, label }) => {
+    expect(incidentKindLabel(kind)).toBe(label);
+  });
+
+  it.each([
+    { kind: "incident", label: "状態不明" },
+    { kind: "maintenance", label: "状態不明" },
+  ] as const)("labels an unknown $kind state independently", ({ kind, label }) => {
+    expect(incidentStateLabel(kind, "unrecognized" as IncidentState, "active")).toBe(label);
+  });
+
+  it.each([
+    { kind: "incident", label: "復旧未確認" },
+    { kind: "maintenance", label: "終了未確認" },
+  ] as const)("uses a lifecycle state for an unverified $kind", ({ kind, label }) => {
+    expect(incidentStateLabel(kind, "investigating", "unverified")).toBe(label);
   });
 
   it("formats valid dates and identifies invalid dates", () => {
