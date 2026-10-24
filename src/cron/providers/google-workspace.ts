@@ -171,7 +171,7 @@ interface StatusObservation {
 }
 
 function parseCurrentDashboard(html: string, products: GoogleProduct[]): GoogleProductStatus[] {
-  const updatedText = html.match(/Last updated:\s*([^<]+)/i)?.[1];
+  const updatedText = html.match(/Last updated time:\s*([^<]+)/i)?.[1];
   const updatedAt = updatedText ? Date.parse(decodeHtmlText(updatedText)) : Number.NaN;
   const ageMs = Date.now() - updatedAt;
   if (

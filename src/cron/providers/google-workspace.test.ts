@@ -285,6 +285,13 @@ describe("Google Workspace provider", () => {
     expect(snapshot.components?.map(({ name }) => name)).not.toContain("Currents");
   });
 
+  it("accepts the current dashboard timestamp at the four-minute freshness limit", async () => {
+    const atLimit = dashboardHtml.replace("6:07", "6:04");
+    const snapshot = await fetchSnapshot([], [], false, productCatalog, atLimit).result;
+
+    expect(snapshot.status).toBe("operational");
+  });
+
   it("reports a current product outage even when history has no incident", async () => {
     const currentDashboard = dashboardWithStatus("Google Drive", "Service outage status");
     const snapshot = await fetchSnapshot([], [], false, productCatalog, currentDashboard).result;
@@ -323,11 +330,20 @@ describe("Google Workspace provider", () => {
       expectedCode: "upstream_http_error",
     },
     {
-      name: "dashboard status is stale",
+      name: "dashboard status timestamp is stale while the footer timestamp is current",
       history: [],
       failHistory: false,
       catalogPayload: productCatalog,
       currentDashboard: dashboardHtml.replace("6:07", "5:00"),
+      failDashboard: false,
+      expectedCode: "invalid_payload",
+    },
+    {
+      name: "dashboard status timestamp is missing while the footer timestamp is current",
+      history: [],
+      failHistory: false,
+      catalogPayload: productCatalog,
+      currentDashboard: dashboardHtml.replace(/Last updated time:[^<]+/, ""),
       failDashboard: false,
       expectedCode: "invalid_payload",
     },
