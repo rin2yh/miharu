@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-26.04
+    runs-on: &ubuntu-runner ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -26,7 +26,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-26.04
+    runs-on: *ubuntu-runner
     timeout-minutes: 15
     permissions:
       contents: read
@@ -44,7 +44,7 @@ jobs:
 
   e2e:
     name: E2E
-    runs-on: ubuntu-26.04
+    runs-on: *ubuntu-runner
     timeout-minutes: 20
     permissions:
       contents: read
