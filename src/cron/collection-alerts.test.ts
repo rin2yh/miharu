@@ -101,7 +101,7 @@ describe("Discord collection alerts with KV state", () => {
       "production",
     );
 
-    expect(store.put).toHaveBeenCalledTimes(3);
+    expect(store.put).toHaveBeenCalledTimes(4);
     expect(store.states.get(service.id)).toMatchObject({
       consecutiveFailures: 3,
       firstFailedAt: "2026-10-24T05:00:00.000Z",
@@ -190,7 +190,7 @@ describe("Discord collection alerts with KV state", () => {
     expect(store.states.get(service.id)?.consecutiveFailures).toBe(1);
   });
 
-  it("does not retry a failed webhook after recording the notification guard", async () => {
+  it("retries a failed webhook on later collection failures", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
@@ -220,9 +220,48 @@ describe("Discord collection alerts with KV state", () => {
       log.mockRestore();
     }
 
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(store.put).toHaveBeenCalledTimes(3);
-    expect(store.states.get(service.id)?.notified).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(store.put).toHaveBeenCalledTimes(4);
+    expect(store.states.get(service.id)).toMatchObject({
+      consecutiveFailures: 4,
+      lastFailedAt: "2026-10-24T05:03:00.000Z",
+      notified: false,
+      notificationSuppressed: false,
+    });
+  });
+
+  it("marks the notification guard only after a later webhook attempt succeeds", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      enabled: true,
+      environment: "production",
+      fetcher,
+    });
+    const store = stateStore();
+
+    for (const minute of [0, 1, 2, 3, 4]) {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "timeout",
+        "TimeoutError",
+        "production",
+      );
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(store.states.get(service.id)).toMatchObject({
+      consecutiveFailures: 4,
+      lastFailedAt: "2026-10-24T05:03:00.000Z",
+      notified: true,
+      notificationSuppressed: false,
+    });
   });
 
   it("keeps service failure counts isolated", async () => {
@@ -266,6 +305,9 @@ describe("Discord collection alerts with KV state", () => {
     }
 
     expect(fetcher).not.toHaveBeenCalled();
-    expect(store.states.get(service.id)?.notified).toBe(true);
+    expect(store.states.get(service.id)).toMatchObject({
+      notified: false,
+      notificationSuppressed: true,
+    });
   });
 });

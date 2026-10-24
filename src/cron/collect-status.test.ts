@@ -113,7 +113,7 @@ describe("scheduled status collection alerts", () => {
       }
 
       expect(alertSender.send).toHaveBeenCalledTimes(1);
-      expect(alertState.put).toHaveBeenCalledTimes(3);
+      expect(alertState.put).toHaveBeenCalledTimes(4);
 
       await collectAtScheduledTime({} as D1Database, Date.parse("2026-10-24T05:05:00.000Z"), {
         sender: alertSender,

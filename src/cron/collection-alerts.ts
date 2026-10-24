@@ -11,6 +11,7 @@ export type CollectionAlert = {
   errorCode: string;
   errorType: string;
   firstFailedAt: string;
+  lastFailedAt?: string;
   failureCount: number;
 };
 
@@ -82,7 +83,16 @@ export async function notifyCollectionFailure(
     return;
   }
 
-  if (alert) await sendCollectionAlert(sender, alert, environment);
+  if (!alert) return;
+
+  if (!sender?.enabled) {
+    await saveCollectionAlertDeliveryState(stateStore, alert, false, true, environment);
+    return;
+  }
+
+  if (await sendCollectionAlert(sender, alert, environment)) {
+    await saveCollectionAlertDeliveryState(stateStore, alert, true, false, environment);
+  }
 }
 
 export async function notifyCollectionRecovery(
@@ -149,7 +159,13 @@ export async function recordCollectionFailure(
   errorType: string,
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
-  if (previous?.notified || (previous && previous.lastFailedAt >= occurredAt)) return undefined;
+  if (
+    previous?.notified ||
+    previous?.notificationSuppressed ||
+    (previous && previous.lastFailedAt >= occurredAt)
+  ) {
+    return undefined;
+  }
 
   const state: CollectionAlertState = {
     consecutiveFailures: (previous?.consecutiveFailures ?? 0) + 1,
@@ -157,12 +173,12 @@ export async function recordCollectionFailure(
     lastFailedAt: occurredAt,
     errorCode,
     errorType,
-    notified: (previous?.consecutiveFailures ?? 0) + 1 >= 3,
+    notified: false,
+    notificationSuppressed: false,
   };
-  // Save the guard before sending so a webhook outage does not cause a write and send every minute.
   await stateStore.put(service.id, state);
 
-  if (!state.notified) return undefined;
+  if (state.consecutiveFailures < 3) return undefined;
   return {
     kind: "failure",
     serviceId: service.id,
@@ -170,8 +186,38 @@ export async function recordCollectionFailure(
     errorCode: state.errorCode,
     errorType: state.errorType,
     firstFailedAt: state.firstFailedAt,
+    lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
   };
+}
+
+async function saveCollectionAlertDeliveryState(
+  stateStore: CollectionAlertStateStore,
+  alert: CollectionAlert,
+  notified: boolean,
+  notificationSuppressed: boolean,
+  environment: string,
+): Promise<void> {
+  try {
+    await stateStore.put(alert.serviceId, {
+      consecutiveFailures: alert.failureCount,
+      firstFailedAt: alert.firstFailedAt,
+      lastFailedAt: alert.lastFailedAt ?? alert.firstFailedAt,
+      errorCode: alert.errorCode,
+      errorType: alert.errorType,
+      notified,
+      notificationSuppressed,
+    });
+  } catch (error) {
+    reportLog("collection_alert_state_failed", {
+      kind: "failure",
+      serviceId: alert.serviceId,
+      serviceName: alert.serviceName,
+      errorCode: "kv_state_error",
+      errorType: getErrorType(error),
+      environment,
+    });
+  }
 }
 
 export async function recordCollectionRecovery(
@@ -200,10 +246,11 @@ async function sendCollectionAlert(
   sender: CollectionAlertSender | undefined,
   alert: CollectionAlert,
   environment: string,
-): Promise<void> {
-  if (!sender?.enabled) return;
+): Promise<boolean> {
+  if (!sender?.enabled) return false;
   try {
     await sender.send(alert);
+    return true;
   } catch (error) {
     reportLog("discord_notification_failed", {
       kind: alert.kind,
@@ -212,6 +259,7 @@ async function sendCollectionAlert(
       errorType: getErrorType(error),
       environment,
     });
+    return false;
   }
 }
 
