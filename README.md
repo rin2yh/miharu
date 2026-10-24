@@ -20,6 +20,16 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
+## D1の実DB結合テスト
+
+Cloudflare Workersのローカルランタイム上で、既存のD1マイグレーションを適用した実DBに対してストアの結合テストを実行します。テスト用DBは実行ごとに初期化されます。
+
+```sh
+pnpm test:d1
+```
+
+CIでも通常の単体テストに続けて実行します。
+
 ## ライセンス
 
 [MIT License](LICENSE)を適用しています。

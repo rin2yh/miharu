@@ -8,14 +8,16 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node", "@cloudflare/vitest-plugin/types"]
   },
   "include": [
     "worker-configuration.d.ts",
     "src",
     "e2e",
+    "integration-tests",
     "playwright.config.ts",
     "vite.config.mts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.d1.config.ts"
   ]
 }
