@@ -45,6 +45,21 @@ describe("dashboard", () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it("renders the shared brand in the mobile header and desktop sidebar with a home link", () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => basePayload} />);
+
+    const brandLinks = screen.getAllByRole("link", { name: "miharu ホーム" });
+    expect(brandLinks).toHaveLength(2);
+    expect(brandLinks.map((link) => link.getAttribute("href"))).toEqual(["/", "/"]);
+
+    const mobileHeader = brandLinks.find((link) => link.closest("header"));
+    expect(mobileHeader?.parentElement).toHaveClass("lg:hidden");
+
+    const desktopLink = brandLinks.find((link) => link.closest("aside"));
+    expect(desktopLink?.closest("aside")).toHaveClass("hidden", "lg:flex");
+  });
+
   it("uses official event times and concise labels in the recent updates", async () => {
     const event: DashboardEvent = {
       id: "event-1",
