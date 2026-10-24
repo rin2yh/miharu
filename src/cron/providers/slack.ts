@@ -38,8 +38,50 @@ export async function fetchSlackSnapshot(
     status: sourceStatus.toLowerCase() === "ok" ? "operational" : normalizedStatus,
     sourceStatus,
     summary: null,
+    components: normalizeSlackComponents(service, incidents),
     incidents,
   };
+}
+
+function normalizeSlackComponents(
+  service: SlackService,
+  incidents: NormalizedIncident[],
+): ProviderSnapshot["components"] {
+  const reportedByName = new Map<string, "affected" | "scheduled">();
+
+  for (const incident of incidents) {
+    if (incident.state === "resolved") continue;
+
+    for (const name of incident.components) {
+      const component = service.components.find(
+        ({ name: featureName }) => normalizeServiceName(featureName) === normalizeServiceName(name),
+      );
+      if (!component) continue;
+
+      const current = reportedByName.get(normalizeServiceName(component.name));
+      const status = incident.state === "scheduled" ? "scheduled" : "affected";
+      // An active issue takes precedence when the same feature has multiple entries.
+      if (current !== "affected" || status === "affected") {
+        reportedByName.set(normalizeServiceName(component.name), status);
+      }
+    }
+  }
+
+  return service.components.map(({ id, name }) => {
+    const report = reportedByName.get(normalizeServiceName(name));
+    if (report === "scheduled") {
+      return { id, name, status: "under_maintenance", sourceStatus: "scheduled" };
+    }
+    if (report === "affected") {
+      // Slack identifies affected features but does not return a per-feature impact level.
+      return { id, name, status: "unknown", sourceStatus: "affected" };
+    }
+    return { id, name, status: "unknown", sourceStatus: "not_reported" };
+  });
+}
+
+function normalizeServiceName(value: string): string {
+  return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
 }
 
 function parseSlackIncident(value: unknown, service: SlackService): NormalizedIncident {
@@ -68,7 +110,15 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
   const fallbackIdentity = createdAt || url ? [createdAt, url] : [title];
   const id = rawId ?? stableFallbackId(service.id, fallbackIdentity);
   const sourceType = boundedText(row.type, 100);
-  const services = Array.isArray(row.services) ? row.services : [];
+  const services = Array.isArray(row.services)
+    ? uniqueNames(row.services).map(
+        (name) =>
+          service.components.find(
+            ({ name: featureName }) =>
+              normalizeServiceName(featureName) === normalizeServiceName(name),
+          )?.name ?? name,
+      )
+    : [];
 
   return {
     id,
@@ -82,7 +132,7 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
     // Slack documents issue types, not a universal severity scale; keep severity unknown.
     severityStatus: null,
     componentIds: [],
-    components: uniqueNames(services),
+    components: services,
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url,

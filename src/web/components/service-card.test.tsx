@@ -60,16 +60,80 @@ describe("ServiceCard", () => {
     );
   });
 
-  it("shows incidents when the service has no component catalogue", () => {
+  it("shows a shared empty-state message when no component catalogue is available", () => {
     render(<ServiceCard service={service({ incidents: [incident()] })} />);
 
     const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
+    expect(
+      within(card).getByText("コンポーネント単位の状態情報は提供されていません。"),
+    ).toBeInTheDocument();
     expect(
       within(card).getByRole("listitem", { name: "Messaging delays for some users" }),
     ).toBeInTheDocument();
     expect(
       within(card).queryByRole("list", { name: "表示中のコンポーネント" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps all unknown feature statuses collapsed and never labels them healthy", () => {
+    render(
+      <ServiceCard
+        service={service({
+          id: "slack",
+          name: "Slack",
+          components: [
+            { ...component("messaging", "Messaging", "unknown"), sourceStatus: "not_reported" },
+            { ...component("huddles", "Huddles", "unknown"), sourceStatus: "not_reported" },
+          ],
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("listitem", { name: "Slackのサービス状況" });
+    const button = within(card).getByRole("button", {
+      name: "状態不明のコンポーネント 2件を表示",
+    });
+    const unknownList = document.getElementById(button.getAttribute("aria-controls")!)!;
+    expect(unknownList).toHaveAttribute("hidden");
+    expect(within(card).queryByText("正常なコンポーネント 2件を表示")).not.toBeInTheDocument();
+
+    fireEvent.click(button);
+
+    expect(
+      within(unknownList)
+        .getAllByRole("heading", { level: 4 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Huddles", "Messaging"]);
+    expect(within(unknownList).getAllByText("状態不明")).toHaveLength(2);
+  });
+
+  it("shows reported Slack feature impact and folds other unknown features", () => {
+    render(
+      <ServiceCard
+        service={service({
+          id: "slack",
+          name: "Slack",
+          components: [
+            { ...component("messaging", "Messaging", "unknown"), sourceStatus: "affected" },
+            { ...component("huddles", "Huddles", "unknown"), sourceStatus: "not_reported" },
+          ],
+          incidents: [incident({ components: ["Messaging"] })],
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("listitem", { name: "Slackのサービス状況" });
+    const messaging = within(card).getByRole("listitem", { name: "Messagingコンポーネント" });
+    expect(within(messaging).getByText("影響あり・程度不明")).toBeVisible();
+    expect(
+      within(messaging).getByRole("listitem", { name: "Messaging delays for some users" }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: "状態不明のコンポーネント 1件を表示" }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole("listitem", { name: "Huddlesコンポーネント", hidden: true }),
+    ).not.toBeVisible();
   });
 
   it("labels an unverified incident without presenting it as recovered", () => {
@@ -173,7 +237,7 @@ describe("ServiceCard", () => {
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
   });
 
-  it("sorts affected components by severity and keeps healthy ones behind a toggle", () => {
+  it("sorts affected components and folds healthy and unknown ones", () => {
     const github = service({
       components: [
         component("issues", "Issues", "major_outage"),
@@ -191,9 +255,12 @@ describe("ServiceCard", () => {
       within(visibleList)
         .getAllByRole("heading", { level: 4 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Issues", "API Requests", "Actions", "Web"]);
+    ).toEqual(["Issues", "API Requests", "Actions"]);
     expect(
       within(card).getByRole("button", { name: "正常なコンポーネント 1件を表示" }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: "状態不明のコンポーネント 1件を表示" }),
     ).toBeInTheDocument();
   });
 

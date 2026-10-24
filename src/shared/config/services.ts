@@ -22,7 +22,11 @@ export type ServiceConfig = {
       productsUrl: string;
       incidentsUrl: string;
     }
-  | { provider: "slack"; currentUrl: string }
+  | {
+      provider: "slack";
+      currentUrl: string;
+      components: Array<{ id: string; name: string }>;
+    }
 );
 
 // Service changes are intentionally managed in code and take effect on deploy.
@@ -34,6 +38,22 @@ export const SERVICES = [
     currentUrl: "https://slack-status.com/api/v2.0.0/current",
     statusPageUrl: "https://slack-status.com/",
     allowedLinkHosts: ["slack-status.com", "www.slack-status.com"],
+    // Slack's status page lists these feature categories, while its API only
+    // reports which categories an active incident affects. See
+    // https://docs.slack.dev/reference/slack-status-api/ and https://slack-status.com/.
+    components: [
+      { id: "login-sso", name: "Login/SSO" },
+      { id: "connectivity", name: "Connectivity" },
+      { id: "messaging", name: "Messaging" },
+      { id: "files", name: "Files" },
+      { id: "notifications", name: "Notifications" },
+      { id: "huddles", name: "Huddles" },
+      { id: "search", name: "Search" },
+      { id: "apps-integrations-apis", name: "Apps/Integrations/APIs" },
+      { id: "workspace-org-administration", name: "Workspace/Org Administration" },
+      { id: "workflows", name: "Workflows" },
+      { id: "canvases", name: "Canvases" },
+    ],
   },
   {
     id: "notion" as const,
