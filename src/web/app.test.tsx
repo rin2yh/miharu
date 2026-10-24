@@ -30,6 +30,21 @@ describe("dashboard", () => {
     expect(screen.getByText("Messaging delays for some users")).toBeInTheDocument();
   });
 
+  it("retries after the initial load fails", async () => {
+    const load = vi
+      .fn<() => Promise<DashboardPayload>>()
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce(basePayload);
+    render(<App load={load} />);
+
+    expect(await screen.findByText("一覧を読み込めませんでした。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "もう一度取得する" }));
+
+    expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("uses official event times and concise labels in the recent updates", async () => {
     const event: DashboardEvent = {
       id: "event-1",
@@ -264,6 +279,68 @@ describe("dashboard", () => {
       expect(load).toHaveBeenCalledTimes(1);
       await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
       expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not duplicate a manual refresh when a polling interval overlaps", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishManualRequest: ((result: DashboardPayload) => void) | undefined;
+      const load = vi
+        .fn<() => Promise<DashboardPayload>>()
+        .mockResolvedValueOnce(basePayload)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishManualRequest = resolve;
+            }),
+        );
+      render(<App load={load} />);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+      expect(load).toHaveBeenCalledTimes(2);
+      await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
+      expect(load).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        finishManualRequest?.(payload([service({ name: "Updated GitHub" })]));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText("Updated GitHub")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not update after an in-flight request finishes following unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishRequest: ((result: DashboardPayload) => void) | undefined;
+      const load = vi.fn<() => Promise<DashboardPayload>>(
+        () =>
+          new Promise((resolve) => {
+            finishRequest = resolve;
+          }),
+      );
+      const { unmount } = render(<App load={load} />);
+      expect(load).toHaveBeenCalledTimes(1);
+      unmount();
+
+      await act(async () => {
+        finishRequest?.(basePayload);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

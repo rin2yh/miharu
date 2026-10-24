@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y", "import", "vitest"],
+  "jsPlugins": [
+    {
+      "name": "miharu",
+      "specifier": "./tools/oxlint/plugin.mjs"
+    }
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -8,7 +14,8 @@
   "rules": {
     "import/no-unassigned-import": "off",
     "react/react-in-jsx-scope": "off",
-    "vitest/require-test-timeout": "off"
+    "vitest/require-test-timeout": "off",
+    "miharu/prefer-table-driven-tests": "warn"
   },
   "overrides": [
     {
