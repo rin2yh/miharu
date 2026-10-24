@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
+import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import type {
   DashboardIncident,
@@ -17,10 +17,29 @@ import {
   STATUS_RANK,
 } from "../presentation/status-presentation";
 
-const serviceIcons: Record<string, SimpleIcon> = {
+type ServiceIcon = { path: string; hex?: string };
+
+const chatgptIcon: ServiceIcon = {
+  // OpenAI's official monoblossom mark, scaled from a 721x721 viewBox to 24x24.
+  // https://cdn.openai.com/brand/OpenAI-Logos-2025.zip
+  path: `
+    M 10.127467 9.806746 V 8.28942 C 10.127467 8.161631 10.175434 8.065764 10.287179 8.001953 L 13.337875 6.24506 C 13.753132 6.005492 14.248277 5.893748 14.759301 5.893748 C 16.675872 5.893748 17.88982 7.379151 17.88982 8.960288 C 17.88982 9.072067 17.88982 9.199856 17.873809 9.327645 L 14.711368 7.474885 C 14.519734 7.36314 14.328 7.36314 14.136366 7.474885 L 10.127467 9.806746 Z
+    M 17.250874 15.716338 V 12.090674 C 17.250874 11.867018 17.154974 11.707307 16.963373 11.595528 L 12.954474 9.263667 L 14.264155 8.512943 C 14.375933 8.449132 14.4718 8.449132 14.583578 8.512943 L 17.634241 10.269836 C 18.512755 10.780993 19.103634 11.867018 19.103634 12.921087 C 19.103634 14.134902 18.384965 15.252982 17.250874 15.716205 V 15.716338 Z
+    M 9.185143 12.522008 L 7.875462 11.755406 C 7.763717 11.691595 7.71575 11.595695 7.71575 11.467906 V 7.954153 C 7.71575 6.245226 9.025431 4.951423 10.798336 4.951423 C 11.469237 4.951423 12.092006 5.175079 12.619207 5.574358 L 9.472777 7.395196 C 9.281176 7.50694 9.185309 7.666652 9.185309 7.890341 V 12.522141 L 9.185143 12.522008 Z
+    M 12.004194 14.151079 L 10.127467 13.096976 V 10.861015 L 12.004194 9.806913 L 13.880788 10.861015 V 13.096976 L 12.004194 14.151079 Z
+    M 13.210053 19.006569 C 12.539184 19.006569 11.916416 18.782913 11.389215 18.383667 L 14.535612 16.562796 C 14.727245 16.451051 14.823112 16.29134 14.823112 16.06765 V 11.43585 L 16.148838 12.202452 C 16.260583 12.266264 16.308549 12.36213 16.308549 12.489953 V 16.003706 C 16.308549 17.712632 14.982824 19.006436 13.210053 19.006436 V 19.006569 Z
+    M 9.42471 15.444882 L 6.374014 13.688022 C 5.495501 13.176832 4.904621 12.09084 4.904621 11.036738 C 4.904621 9.806913 5.639334 8.704877 6.773259 8.241653 V 11.883196 C 6.773259 12.106852 6.86916 12.266563 7.06076 12.378341 L 11.053781 14.694158 L 9.7441 15.444882 C 9.632355 15.508693 9.536455 15.508693 9.42471 15.444882 Z
+    M 9.249121 18.064244 C 7.444294 18.064244 6.118602 16.70663 6.118602 15.029592 C 6.118602 14.901803 6.134613 14.774014 6.150491 14.646225 L 9.296921 16.467062 C 9.488521 16.57884 9.680288 16.57884 9.871889 16.467062 L 13.880788 14.151245 V 15.668571 C 13.880788 15.796361 13.832854 15.892227 13.721076 15.956039 L 10.670413 17.712932 C 10.255123 17.952499 9.759978 18.064244 9.248954 18.064244 H 9.249121 Z
+    M 13.210053 19.964804 C 15.142669 19.964804 16.755728 18.591279 17.123218 16.770441 C 18.912033 16.307218 20.062003 14.63018 20.062003 12.921254 C 20.062003 11.803173 19.582902 10.717182 18.720399 9.934535 C 18.800255 9.599101 18.848189 9.263667 18.848189 8.928399 C 18.848189 6.644472 16.995429 4.935379 14.855168 4.935379 C 14.424033 4.935379 14.008743 4.99919 13.593454 5.143024 C 12.874619 4.440233 11.884361 3.993054 10.798336 3.993054 C 8.865753 3.993054 7.252693 5.366546 6.885204 7.187384 C 5.096388 7.650607 3.946419 9.327645 3.946419 11.036571 C 3.946419 12.154652 4.42552 13.240644 5.288022 14.02329 C 5.208166 14.358724 5.160233 14.694158 5.160233 15.029459 C 5.160233 17.313387 7.012993 19.022447 9.153221 19.022447 C 9.584388 19.022447 9.999678 18.958635 10.414968 18.814802 C 11.133637 19.517592 12.123895 19.964804 13.210053 19.964804 Z
+  `.trim(),
+};
+
+const serviceIcons: Record<string, ServiceIcon> = {
   cloudflare: siCloudflare,
   notion: siNotion,
   github: siGithub,
+  claude: siClaude,
+  chatgpt: chatgptIcon,
 };
 
 const statusColors: Record<NormalizedStatus, string> = {
@@ -62,7 +81,8 @@ const incidentImpactColors: Record<NormalizedStatus, string> = {
 export function ServiceCard({ service }: { service: DashboardService }) {
   const [showHealthyComponents, setShowHealthyComponents] = useState(false);
   const icon = serviceIcons[service.id];
-  const iconColor = icon ? `#${icon.hex}` : "currentColor";
+  const iconColor = icon?.hex ? `#${icon.hex}` : undefined;
+  const invertMonochromeIconInDark = service.id === "github" || service.id === "notion";
   const { assigned, unassigned } = assignIncidents(service);
   const components = service.components.toSorted((left, right) => {
     const abnormalDifference = Number(isAbnormal(right.status)) - Number(isAbnormal(left.status));
@@ -92,7 +112,7 @@ export function ServiceCard({ service }: { service: DashboardService }) {
     >
       <header className="flex items-center gap-2 border-b border-line pb-3 max-sm:items-start">
         <span
-          className="grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-ink max-sm:h-6 max-sm:w-6 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current dark:[&>svg]:invert"
+          className={`grid h-7 w-7 shrink-0 place-items-center text-muted dark:text-ink max-sm:h-6 max-sm:w-6 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:fill-current ${invertMonochromeIconInDark ? "dark:[&>svg]:invert" : ""}`}
           style={{ color: iconColor }}
           aria-hidden="true"
         >
