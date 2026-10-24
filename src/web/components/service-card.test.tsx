@@ -111,17 +111,69 @@ describe("service card incidents", () => {
     ).toEqual(["2026-10-23T04:55:00.000Z", "2026-10-23T04:50:00.000Z"]);
   });
 
-  it("explains why an incident with an unknown recovery state remains visible", async () => {
+  it("shows Google Workspace as unknown when its history has no active incidents", async () => {
+    const summary =
+      "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。";
+    render(
+      <App
+        load={async () =>
+          payload([
+            service({
+              id: "google-workspace",
+              name: "Google Workspace",
+              statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+              status: "unknown",
+              sourceStatus: "no_active_incidents",
+              summary,
+              components: [component("gmail", "Gmail", "unknown")],
+            }),
+          ])
+        }
+      />,
+    );
+
+    const card = await screen.findByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
+    expect(within(card).getByText(summary)).toBeVisible();
+  });
+
+  it("shows a missing Google Workspace incident as unknown with its recovery warning", async () => {
     const unknownIncident = incident({
-      id: "unknown-chatgpt-incident",
-      title: "Earlier ChatGPT issue",
+      id: "unknown-google-workspace-incident",
+      title: "Earlier Gmail issue",
       body: null,
       state: "unknown",
       sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
       severityStatus: null,
+      componentIds: ["gmail"],
+      components: ["Gmail"],
+      url: "https://www.google.com/appsstatus/dashboard/incidents/unknown-google-workspace-incident",
     });
-    render(<App load={async () => payload([service({ incidents: [unknownIncident] })])} />);
+    const summary = "公式の履歴フィードから現在の状態を判断できません。";
+    render(
+      <App
+        load={async () =>
+          payload([
+            service({
+              id: "google-workspace",
+              name: "Google Workspace",
+              statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+              status: "unknown",
+              sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+              summary,
+              components: [component("gmail", "Gmail", "unknown")],
+              incidents: [unknownIncident],
+            }),
+          ])
+        }
+      />,
+    );
 
+    const card = await screen.findByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
+    expect(within(card).getByText(summary)).toBeVisible();
+    const gmail = within(card).getByRole("listitem", { name: "Gmailコンポーネント" });
+    expect(within(gmail).getAllByText("状態不明")).toHaveLength(2);
     const incidentItem = await screen.findByRole("listitem", {
       name: unknownIncident.title,
     });
