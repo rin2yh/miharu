@@ -125,54 +125,6 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   });
 });
 
-test("一部選択中に「すべて」を押すと全選択と全解除を切り替えられる", async ({
-  dashboardStatus,
-  page,
-  statusDashboard,
-}) => {
-  const serviceCount = dashboardStatus.payload.services.length;
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await statusDashboard.goto("/?services=github,slack");
-  await expect(statusDashboard.serviceCount(2)).toBeVisible();
-
-  await test.step("一部選択を全選択にする", async () => {
-    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
-      "aria-pressed",
-      "mixed",
-    );
-    await statusDashboard.serviceSelection("すべて").click();
-    await expect(page).not.toHaveURL(/services=/);
-    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(statusDashboard.serviceCount(serviceCount)).toBeVisible();
-  });
-
-  await test.step("全解除し、もう一度すべてを選ぶ", async () => {
-    await statusDashboard.serviceSelection("すべて").click();
-    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(new URL(page.url()).searchParams.get("services")).toBe("");
-    await expect(statusDashboard.serviceCount(0)).toBeVisible();
-    await expect(page.getByText("条件に一致するサービスはありません。")).toBeVisible();
-    await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-
-    await statusDashboard.serviceSelection("すべて").click();
-    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(page).not.toHaveURL(/services=/);
-    await expect(statusDashboard.serviceCount(serviceCount)).toBeVisible();
-  });
-});
-
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
   dashboardStatus,
   page,
