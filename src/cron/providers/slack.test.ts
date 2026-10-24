@@ -127,7 +127,7 @@ describe("Slack provider", () => {
     ).toBe(true);
   });
 
-  it("marks a reported scheduled feature as under maintenance", async () => {
+  it("keeps a scheduled feature unknown before the maintenance start time", async () => {
     const snapshot = await fetchSlackSnapshot(
       slack,
       providerContext(
@@ -136,6 +136,72 @@ describe("Slack provider", () => {
           active_incidents: [
             {
               id: "slack-maintenance",
+              title: "Scheduled maintenance for Huddles",
+              status: "scheduled",
+              type: "notice",
+              date_created: "2999-01-01T00:00:00Z",
+              services: ["Huddles"],
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(snapshot.components).toContainEqual({
+      id: "huddles",
+      name: "Huddles",
+      status: "unknown",
+      sourceStatus: "scheduled",
+    });
+    expect(snapshot.incidents[0]).toMatchObject({
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+    });
+  });
+
+  it("marks a scheduled feature as under maintenance after its documented start time", async () => {
+    const snapshot = await fetchSlackSnapshot(
+      slack,
+      providerContext(
+        jsonFetcher({
+          status: "active",
+          active_incidents: [
+            {
+              id: "slack-maintenance-started",
+              title: "Scheduled maintenance for Huddles",
+              status: "scheduled",
+              type: "notice",
+              date_created: "2000-01-01T00:00:00Z",
+              services: ["Huddles"],
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(snapshot.components).toContainEqual({
+      id: "huddles",
+      name: "Huddles",
+      status: "under_maintenance",
+      sourceStatus: "scheduled",
+    });
+    expect(snapshot.incidents[0]).toMatchObject({
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+    });
+  });
+
+  it("keeps the current component state unknown when scheduled maintenance has no start time", async () => {
+    const snapshot = await fetchSlackSnapshot(
+      slack,
+      providerContext(
+        jsonFetcher({
+          status: "active",
+          active_incidents: [
+            {
+              id: "slack-maintenance-without-start",
               title: "Scheduled maintenance for Huddles",
               status: "scheduled",
               type: "notice",
@@ -149,7 +215,7 @@ describe("Slack provider", () => {
     expect(snapshot.components).toContainEqual({
       id: "huddles",
       name: "Huddles",
-      status: "under_maintenance",
+      status: "unknown",
       sourceStatus: "scheduled",
     });
   });

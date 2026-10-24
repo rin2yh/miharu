@@ -47,37 +47,75 @@ function normalizeSlackComponents(
   service: SlackService,
   incidents: NormalizedIncident[],
 ): ProviderSnapshot["components"] {
-  const reportedByName = new Map<string, "affected" | "scheduled">();
+  const reportByComponentId = new Map<string, "affected" | "scheduled" | "under_maintenance">();
+  const now = Date.now();
 
   for (const incident of incidents) {
     if (incident.state === "resolved") continue;
 
     for (const name of incident.components) {
-      const component = service.components.find(
-        ({ name: featureName }) => normalizeServiceName(featureName) === normalizeServiceName(name),
-      );
+      const component = findSlackComponent(service, name);
       if (!component) continue;
 
-      const current = reportedByName.get(normalizeServiceName(component.name));
-      const status = incident.state === "scheduled" ? "scheduled" : "affected";
-      // An active issue takes precedence when the same feature has multiple entries.
-      if (current !== "affected" || status === "affected") {
-        reportedByName.set(normalizeServiceName(component.name), status);
+      const status = slackComponentReport(incident, now);
+      const current = reportByComponentId.get(component.id);
+      if (slackComponentReportPriority(status) > slackComponentReportPriority(current)) {
+        reportByComponentId.set(component.id, status);
       }
     }
   }
 
   return service.components.map(({ id, name }) => {
-    const report = reportedByName.get(normalizeServiceName(name));
-    if (report === "scheduled") {
+    const report = reportByComponentId.get(id);
+    if (report === "under_maintenance") {
       return { id, name, status: "under_maintenance", sourceStatus: "scheduled" };
     }
     if (report === "affected") {
       // Slack identifies affected features but does not return a per-feature impact level.
       return { id, name, status: "unknown", sourceStatus: "affected" };
     }
+    if (report === "scheduled") {
+      // The scheduled maintenance is shown on its incident; its current feature state is unknown.
+      return { id, name, status: "unknown", sourceStatus: "scheduled" };
+    }
     return { id, name, status: "unknown", sourceStatus: "not_reported" };
   });
+}
+
+function slackComponentReport(
+  incident: NormalizedIncident,
+  now: number,
+): "affected" | "scheduled" | "under_maintenance" {
+  if (incident.state !== "scheduled") return "affected";
+
+  // Slack defines date_created as when maintenance begins; a future or missing time is not active yet.
+  const startsAt = incident.officialCreatedAt ? Date.parse(incident.officialCreatedAt) : Number.NaN;
+  return Number.isFinite(startsAt) && startsAt <= now ? "under_maintenance" : "scheduled";
+}
+
+function slackComponentReportPriority(
+  report: "affected" | "scheduled" | "under_maintenance" | undefined,
+): number {
+  switch (report) {
+    case "affected":
+      return 3;
+    case "under_maintenance":
+      return 2;
+    case "scheduled":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function findSlackComponent(
+  service: SlackService,
+  name: string,
+): SlackService["components"][number] | undefined {
+  const normalizedName = normalizeServiceName(name);
+  return service.components.find(
+    ({ name: featureName }) => normalizeServiceName(featureName) === normalizedName,
+  );
 }
 
 function normalizeServiceName(value: string): string {
@@ -111,13 +149,7 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
   const id = rawId ?? stableFallbackId(service.id, fallbackIdentity);
   const sourceType = boundedText(row.type, 100);
   const services = Array.isArray(row.services)
-    ? uniqueNames(row.services).map(
-        (name) =>
-          service.components.find(
-            ({ name: featureName }) =>
-              normalizeServiceName(featureName) === normalizeServiceName(name),
-          )?.name ?? name,
-      )
+    ? uniqueNames(row.services).map((name) => findSlackComponent(service, name)?.name ?? name)
     : [];
 
   return {
