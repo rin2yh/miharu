@@ -1,16 +1,30 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
+import { DASHBOARD_POLL_INTERVAL_MS, SERVICES } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
 import { App } from "./app";
 import {
   basePayload,
   githubLinkName,
+  incident,
   lastSuccessAt,
   payload,
   service,
   slackLinkName,
 } from "./test-fixtures";
+
+function getSidebarOrder() {
+  return within(screen.getByRole("complementary", { name: "サービス選択" }))
+    .getAllByRole("button")
+    .map((button) => button.lastElementChild?.textContent?.trim() ?? "")
+    .filter((name) => name !== "すべて");
+}
+
+function getMainOrder() {
+  return Array.from(
+    screen.getByRole("list", { name: "サービス一覧" }).querySelectorAll(":scope > li[aria-label]"),
+  ).map((item) => item.getAttribute("aria-label")?.replace(/のサービス状況$/, ""));
+}
 
 describe("dashboard", () => {
   beforeEach(() => {
@@ -148,6 +162,53 @@ describe("dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
     expect(screen.getByRole("link", { name: githubLinkName })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GitHub update" })).toBeInTheDocument();
+  });
+
+  it("shares the main service order with the sidebar while loading and after updates", async () => {
+    let resolveInitialLoad: ((result: DashboardPayload) => void) | undefined;
+    const initialPayload = payload([
+      service({ id: "github", name: "GitHub", status: "degraded_performance" }),
+      service({ id: "slack", name: "Slack", status: "operational" }),
+      service({ id: "notion", name: "Notion", status: "partial_outage" }),
+    ]);
+    const updatedPayload = payload([
+      service({ id: "notion", name: "Notion", status: "partial_outage" }),
+      service({ id: "github", name: "GitHub", status: "major_outage" }),
+      service({
+        id: "slack",
+        name: "Slack",
+        status: "operational",
+        incidents: [incident({ id: "slack-incident", title: "Slack issue" })],
+      }),
+    ]);
+    const load = vi
+      .fn<() => Promise<DashboardPayload>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveInitialLoad = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(updatedPayload);
+    render(<App load={load} />);
+
+    expect(getSidebarOrder()).toEqual(SERVICES.map(({ name }) => name));
+
+    await act(async () => {
+      resolveInitialLoad?.(initialPayload);
+    });
+    await screen.findByRole("list", { name: "サービス一覧" });
+
+    const missingServiceNames = SERVICES.filter(
+      ({ id }) => !initialPayload.services.some((dashboardService) => dashboardService.id === id),
+    ).map(({ name }) => name);
+    const initialOrder = ["Notion", "GitHub", "Slack"];
+    expect(getMainOrder()).toEqual(initialOrder);
+    expect(getSidebarOrder()).toEqual([...initialOrder, ...missingServiceNames]);
+
+    fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+    await waitFor(() => expect(getMainOrder()).toEqual(["Slack", "GitHub", "Notion"]));
+    expect(getSidebarOrder()).toEqual(["Slack", "GitHub", "Notion", ...missingServiceNames]);
   });
 
   it("shows an empty message when a service search has no matching recent events", async () => {

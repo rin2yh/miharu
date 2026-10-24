@@ -10,6 +10,7 @@ describe("ServiceSidebar", () => {
     const allServiceIds = SERVICES.map(({ id }) => id);
     const { rerender } = render(
       <ServiceSidebar
+        orderedServices={[]}
         selectedServiceIds={["github", "slack"]}
         onSelect={onSelect}
         query=""
@@ -24,6 +25,7 @@ describe("ServiceSidebar", () => {
 
     rerender(
       <ServiceSidebar
+        orderedServices={[]}
         selectedServiceIds={allServiceIds}
         onSelect={onSelect}
         query=""
@@ -36,6 +38,7 @@ describe("ServiceSidebar", () => {
 
     rerender(
       <ServiceSidebar
+        orderedServices={[]}
         selectedServiceIds={[]}
         onSelect={onSelect}
         query=""
@@ -51,6 +54,7 @@ describe("ServiceSidebar", () => {
   it("gives selected services a background and leaves unselected services clear", () => {
     render(
       <ServiceSidebar
+        orderedServices={[]}
         selectedServiceIds={["github"]}
         onSelect={vi.fn<(serviceIds: string[]) => void>()}
         query=""
