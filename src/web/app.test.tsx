@@ -479,6 +479,31 @@ describe("dashboard", () => {
     }
   });
 
+  it("pauses polling in a background tab and refreshes when the tab returns", async () => {
+    vi.useFakeTimers();
+    try {
+      const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
+      renderDashboard(load);
+      await act(async () => await Promise.resolve());
+      expect(load).toHaveBeenCalledTimes(1);
+
+      const visibility = vi.spyOn(document, "visibilityState", "get");
+      visibility.mockReturnValue("hidden");
+      fireEvent(window, new Event("visibilitychange"));
+      await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
+      expect(load).toHaveBeenCalledTimes(1);
+
+      visibility.mockReturnValue("visible");
+      await act(async () => {
+        fireEvent(window, new Event("visibilitychange"));
+        await Promise.resolve();
+      });
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not duplicate a manual refresh when a polling interval overlaps", async () => {
     vi.useFakeTimers();
     try {

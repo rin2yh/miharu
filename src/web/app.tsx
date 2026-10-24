@@ -30,7 +30,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     queryFn: ({ signal }) => load(selectedServiceIds, signal),
     enabled: selectedServiceIds.length > 0,
     refetchInterval: DASHBOARD_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
   const payload = dashboard.data ?? null;
   const loadError = dashboard.isError;

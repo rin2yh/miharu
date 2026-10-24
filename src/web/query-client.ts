@@ -6,7 +6,7 @@ export function createQueryClient(options: { gcTime?: number } = {}) {
       queries: {
         ...(options.gcTime === undefined ? {} : { gcTime: options.gcTime }),
         refetchOnReconnect: false,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
         retry: false,
       },
     },
