@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      coverage: ${{ steps.coverage.outputs.summary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,6 +36,95 @@ jobs:
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - name: Export coverage summary
+        id: coverage
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+
+          const summary = JSON.parse(readFileSync("coverage/coverage-summary.json", "utf8")).total;
+          const metrics = ["statements", "branches", "functions", "lines"];
+          const report = Object.fromEntries(metrics.map((metric) => {
+            const value = summary[metric];
+            if (!Number.isSafeInteger(value.covered) || !Number.isSafeInteger(value.total) || !Number.isFinite(value.pct)) {
+              throw new Error(`Invalid coverage metric: ${metric}`);
+            }
+            return [metric, { covered: value.covered, total: value.total, pct: value.pct }];
+          }));
+
+          appendFileSync(process.env.GITHUB_OUTPUT, `summary=${JSON.stringify(report)}\n`);
+          NODE
+
+  coverage-comment:
+    name: Coverage comment
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: test
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Create or update coverage comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COVERAGE_SUMMARY: ${{ needs.test.outputs.coverage }}
+        run: |
+          node --input-type=module <<'NODE'
+          const summary = JSON.parse(process.env.COVERAGE_SUMMARY);
+          const metrics = ["statements", "branches", "functions", "lines"];
+          const labels = { statements: "Statements", branches: "Branches", functions: "Functions", lines: "Lines" };
+          const rows = metrics.map((metric) => {
+            const value = summary[metric];
+            if (!Number.isSafeInteger(value?.covered) || !Number.isSafeInteger(value?.total) ||
+                value.covered < 0 || value.total < value.covered || !Number.isFinite(value.pct) ||
+                value.pct < 0 || value.pct > 100) {
+              throw new Error(`Invalid coverage metric: ${metric}`);
+            }
+            return `| ${labels[metric]} | ${value.covered} / ${value.total} | ${value.pct.toFixed(2)}% |`;
+          });
+          const marker = "<!-- miharu-coverage-report -->";
+          const body = [
+            marker,
+            "## Coverage",
+            "",
+            "| Metric | Covered | Coverage |",
+            "| --- | ---: | ---: |",
+            ...rows,
+            "",
+            "Thresholds: Statements 85%, Branches 70%, Functions 85%, Lines 85%.",
+          ].join("\n");
+
+          const repository = process.env.GITHUB_REPOSITORY;
+          const pullRequest = process.env.PR_NUMBER;
+          const token = process.env.GH_TOKEN;
+          const headers = {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          };
+          const comments = [];
+          let nextPage = `https://api.github.com/repos/${repository}/issues/${pullRequest}/comments?per_page=100`;
+          while (nextPage) {
+            const commentsResponse = await fetch(nextPage, { headers });
+            if (!commentsResponse.ok) throw new Error(`Could not read PR comments: ${commentsResponse.status}`);
+            comments.push(...await commentsResponse.json());
+            const nextLink = commentsResponse.headers.get("link")?.split(",").find((link) => link.includes('rel="next"'));
+            nextPage = nextLink?.match(/<([^>]+)>/)?.[1] ?? null;
+          }
+          const existing = comments.find((comment) =>
+            comment.user?.login === "github-actions[bot]" && comment.body?.includes(marker),
+          );
+          const url = existing
+            ? `https://api.github.com/repos/${repository}/issues/comments/${existing.id}`
+            : `https://api.github.com/repos/${repository}/issues/${pullRequest}/comments`;
+          const response = await fetch(url, {
+            method: existing ? "PATCH" : "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ body }),
+          });
+          if (!response.ok) throw new Error(`Could not post coverage comment: ${response.status}`);
+          NODE
 
   e2e:
     name: E2E

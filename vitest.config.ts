@@ -9,6 +9,7 @@ export default defineConfig({
     clearMocks: true,
     coverage: {
       provider: "v8",
+      reporter: ["text", "json-summary"],
       include: [
         "src/domain/**/*.ts",
         "src/shared/**/*.ts",
