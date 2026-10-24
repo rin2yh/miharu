@@ -22,7 +22,11 @@ export function isAbnormal(status: NormalizedStatus): boolean {
   return status !== "operational";
 }
 
-export function incidentStateLabel(state: DashboardIncident["state"]): string {
+export function incidentStateLabel(
+  state: DashboardIncident["state"],
+  lifecycle: DashboardIncident["lifecycle"],
+): string {
+  if (lifecycle === "unverified") return "確認不能";
   switch (state) {
     case "investigating":
       return "調査中";

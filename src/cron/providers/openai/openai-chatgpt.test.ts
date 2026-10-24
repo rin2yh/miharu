@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../../domain";
+import type { KnownIncident } from "../../../domain";
 import { SERVICES } from "../../../shared/config/services";
 import { fetchOpenAIChatGPTSnapshot } from "./chatgpt";
 import type { ProviderContext } from "../../provider-context";
@@ -36,7 +36,7 @@ const capturedChatGPTIncident: KnownIncident = {
   officialCreatedAt: "2026-10-22T02:18:32.000Z",
   officialUpdatedAt: "2026-10-22T02:18:32.000Z",
   url: "https://status.openai.com/incidents/01M5GPE9C4E19HE461P8JAMYXD",
-  active: true,
+  lifecycle: "active",
   lastObservedAt: "2026-10-22T02:18:32.000Z",
 };
 
@@ -60,7 +60,7 @@ function fetchChatGPTSnapshot(fetcher: FetchLike, knownActiveIncidents: KnownInc
   const context: ProviderContext = {
     signal: abortSignal,
     fetcher,
-    getActiveIncidents: async () => knownActiveIncidents,
+    getUnresolvedIncidents: async () => knownActiveIncidents,
   };
   return fetchOpenAIChatGPTSnapshot(configuredChatGPTService, context);
 }
@@ -158,7 +158,7 @@ describe("OpenAI ChatGPT provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       id: "chatgpt-incident",
       title: "Elevated ChatGPT conversation errors",
-      active: true,
+      lifecycle: "active" as const,
       componentIds: [],
       components: [],
       url: "https://status.openai.com/incidents/chatgpt-incident",
@@ -244,7 +244,7 @@ describe("OpenAI ChatGPT provider", () => {
         id: capturedChatGPTIncident.id,
         state: "resolved",
         sourceStatus: "Resolved",
-        active: false,
+        lifecycle: "resolved",
         officialUpdatedAt: "2026-10-22T08:50:43.000Z",
       },
     ]);
@@ -264,12 +264,12 @@ describe("OpenAI ChatGPT provider", () => {
         id: capturedChatGPTIncident.id,
         state: "resolved",
         sourceStatus: "Resolved",
-        active: false,
+        lifecycle: "resolved",
       },
     ]);
   });
 
-  it("keeps an omitted incident visible as unknown when its official feed is unavailable", async () => {
+  it("keeps an omitted incident unverified when its official feed is unavailable", async () => {
     const oldIncident = {
       id: "older-chatgpt-incident",
       title: "Elevated ChatGPT conversation errors",
@@ -285,7 +285,7 @@ describe("OpenAI ChatGPT provider", () => {
       officialCreatedAt: "2026-10-22T02:18:32.000Z",
       officialUpdatedAt: "2026-10-22T02:18:32.000Z",
       url: "https://status.openai.com/incidents/older-chatgpt-incident",
-      active: true,
+      lifecycle: "active" as const,
       lastObservedAt: "2026-10-22T02:18:32.000Z",
     };
     const snapshot = await fetchChatGPTSnapshot(
@@ -301,9 +301,9 @@ describe("OpenAI ChatGPT provider", () => {
     expect(snapshot.incidents).toMatchObject([
       {
         id: oldIncident.id,
-        state: "unknown",
-        sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-        active: true,
+        state: "investigating",
+        sourceStatus: "investigating",
+        lifecycle: "unverified",
       },
     ]);
   });
@@ -352,7 +352,7 @@ describe("OpenAI ChatGPT provider", () => {
         id: incidentId,
         title: "Elevated ChatGPT conversation and Responses API errors",
         state: "resolved",
-        active: false,
+        lifecycle: "resolved",
         officialUpdatedAt: "2026-10-22T08:50:43.000Z",
       },
     ]);

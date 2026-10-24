@@ -185,8 +185,12 @@ export function parseIncidentState(value: string): NormalizedIncident["state"] {
   return "unknown";
 }
 
-export function isIncidentActive(state: NormalizedIncident["state"]): boolean {
-  return state !== "resolved";
+export function incidentLifecycleForState(
+  state: NormalizedIncident["state"],
+): NormalizedIncident["lifecycle"] {
+  if (state === "resolved") return "resolved";
+  if (state === "unknown") return "unverified";
+  return "active";
 }
 
 export function statusFromImpact(value: unknown): NormalizedStatus | null {

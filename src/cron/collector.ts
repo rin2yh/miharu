@@ -24,7 +24,7 @@ export async function collectService(
     const context: ProviderContext = {
       signal: controller.signal,
       fetcher: fetch,
-      getActiveIncidents: () => store.getActiveIncidents(service.id),
+      getUnresolvedIncidents: () => store.getUnresolvedIncidents(service.id),
     };
     snapshot = await fetcher(service, context);
   } catch (error) {

@@ -72,6 +72,20 @@ describe("ServiceCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("labels an unverified incident without presenting it as recovered", () => {
+    render(
+      <ServiceCard
+        service={service({
+          incidents: [incident({ title: "History entry missing", lifecycle: "unverified" })],
+        })}
+      />,
+    );
+
+    const incidentItem = screen.getByRole("listitem", { name: "History entry missing" });
+    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).queryByText("復旧", { exact: true })).not.toBeInTheDocument();
+  });
+
   it("reveals official incident details when its summary is opened", () => {
     render(<ServiceCard service={service({ incidents: [incident()] })} />);
 
@@ -128,6 +142,7 @@ describe("ServiceCard", () => {
       body: null,
       state: "unknown",
       sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      lifecycle: "unverified",
       severityStatus: null,
       componentIds: ["gmail"],
       components: ["Gmail"],
@@ -153,9 +168,9 @@ describe("ServiceCard", () => {
     expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
     expect(within(card).getByText(summary)).toBeVisible();
     const gmail = within(card).getByRole("listitem", { name: "Gmailコンポーネント" });
-    expect(within(gmail).getAllByText("状態不明")).toHaveLength(2);
+    expect(within(gmail).getAllByText("状態不明")).toHaveLength(1);
     const incidentItem = within(gmail).getByRole("listitem", { name: unknownIncident.title });
-    expect(within(incidentItem).getByText("状態不明")).toBeVisible();
+    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();

@@ -33,15 +33,15 @@ function providerContext(payload: unknown) {
         headers: { "content-type": "application/json" },
       }),
   );
-  const getActiveIncidents = vi.fn<ProviderContext["getActiveIncidents"]>(async () => []);
-  const context: ProviderContext = { signal, fetcher, getActiveIncidents };
-  return { context, fetcher, getActiveIncidents };
+  const getUnresolvedIncidents = vi.fn<ProviderContext["getUnresolvedIncidents"]>(async () => []);
+  const context: ProviderContext = { signal, fetcher, getUnresolvedIncidents };
+  return { context, fetcher, getUnresolvedIncidents };
 }
 
 describe("provider dispatch", () => {
   it("dispatches Slack through its configured endpoint", async () => {
     const service = getService("slack");
-    const { context, fetcher, getActiveIncidents } = providerContext({
+    const { context, fetcher, getUnresolvedIncidents } = providerContext({
       status: "ok",
       active_incidents: [],
     });
@@ -50,12 +50,12 @@ describe("provider dispatch", () => {
 
     expect(snapshot.sourceStatus).toBe("ok");
     expect(fetcher).toHaveBeenCalledWith(service.currentUrl, expect.any(Object));
-    expect(getActiveIncidents).not.toHaveBeenCalled();
+    expect(getUnresolvedIncidents).not.toHaveBeenCalled();
   });
 
   it("dispatches Statuspage through its configured endpoint", async () => {
     const service = getService("notion");
-    const { context, fetcher, getActiveIncidents } = providerContext({
+    const { context, fetcher, getUnresolvedIncidents } = providerContext({
       status: { indicator: "none" },
       components: [],
       incidents: [],
@@ -65,12 +65,12 @@ describe("provider dispatch", () => {
 
     expect(snapshot.status).toBe("operational");
     expect(fetcher).toHaveBeenCalledWith(service.summaryUrl, expect.any(Object));
-    expect(getActiveIncidents).not.toHaveBeenCalled();
+    expect(getUnresolvedIncidents).not.toHaveBeenCalled();
   });
 
   it("dispatches ChatGPT and lets its provider load active incidents", async () => {
     const service = getService("chatgpt");
-    const { context, fetcher, getActiveIncidents } = providerContext({
+    const { context, fetcher, getUnresolvedIncidents } = providerContext({
       status: { indicator: "none" },
       components: service.components.map(({ id, name }) => ({ id, name, status: "operational" })),
       incidents: [],
@@ -80,7 +80,7 @@ describe("provider dispatch", () => {
 
     expect(snapshot.status).toBe("operational");
     expect(fetcher).toHaveBeenCalledWith(service.summaryUrl, expect.any(Object));
-    expect(getActiveIncidents).toHaveBeenCalledOnce();
+    expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
   });
 
   it("dispatches Google Workspace through its current dashboard and history feeds", async () => {
@@ -98,16 +98,20 @@ describe("provider dispatch", () => {
         headers: { "content-type": "application/json" },
       });
     });
-    const getActiveIncidents = vi.fn<ProviderContext["getActiveIncidents"]>(async () => []);
+    const getUnresolvedIncidents = vi.fn<ProviderContext["getUnresolvedIncidents"]>(async () => []);
 
     try {
-      const snapshot = await fetchServiceSnapshot(service, { signal, fetcher, getActiveIncidents });
+      const snapshot = await fetchServiceSnapshot(service, {
+        signal,
+        fetcher,
+        getUnresolvedIncidents,
+      });
 
       expect(snapshot.status).toBe("operational");
       expect(fetcher).toHaveBeenCalledWith(service.productsUrl, expect.any(Object));
       expect(fetcher).toHaveBeenCalledWith(service.incidentsUrl, expect.any(Object));
       expect(fetcher).toHaveBeenCalledWith(service.dashboardUrl, expect.any(Object));
-      expect(getActiveIncidents).toHaveBeenCalledOnce();
+      expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }

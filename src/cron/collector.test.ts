@@ -30,7 +30,7 @@ const snapshot: ProviderSnapshot = {
 
 function store(overrides: Partial<CollectionStore> = {}): CollectionStore {
   return {
-    getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => []),
+    getUnresolvedIncidents: vi.fn<CollectionStore["getUnresolvedIncidents"]>(async () => []),
     saveSuccess: vi.fn<CollectionStore["saveSuccess"]>(async () => undefined),
     saveFailure: vi.fn<CollectionStore["saveFailure"]>(async () => undefined),
     ...overrides,
@@ -90,14 +90,16 @@ describe("status collection", () => {
       officialCreatedAt: null,
       officialUpdatedAt: null,
       url: null,
-      active: true,
+      lifecycle: "active" as const,
       lastObservedAt: "2026-10-23T04:59:00.000Z",
     };
     const persistence = store({
-      getActiveIncidents: vi.fn<CollectionStore["getActiveIncidents"]>(async () => [knownIncident]),
+      getUnresolvedIncidents: vi.fn<CollectionStore["getUnresolvedIncidents"]>(async () => [
+        knownIncident,
+      ]),
     });
     const fetchSnapshot = vi.fn<SnapshotFetcher>(async (_item, context) => {
-      await expect(context.getActiveIncidents()).resolves.toEqual([knownIncident]);
+      await expect(context.getUnresolvedIncidents()).resolves.toEqual([knownIncident]);
       return snapshot;
     });
 
@@ -109,7 +111,7 @@ describe("status collection", () => {
     );
 
     expect(result).toBe("ok");
-    expect(persistence.getActiveIncidents).toHaveBeenCalledWith(chatgptService.id);
+    expect(persistence.getUnresolvedIncidents).toHaveBeenCalledWith(chatgptService.id);
   });
 
   it("does not load active incidents for Slack or Statuspage providers", async () => {
@@ -134,7 +136,7 @@ describe("status collection", () => {
 
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(persistence.saveSuccess).toHaveBeenCalledTimes(2);
-    expect(persistence.getActiveIncidents).not.toHaveBeenCalled();
+    expect(persistence.getUnresolvedIncidents).not.toHaveBeenCalled();
   });
 
   it("uses the service timeout and labels an abort as a timeout", async () => {

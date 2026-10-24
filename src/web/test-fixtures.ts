@@ -38,6 +38,7 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T04:55:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
+    lifecycle: "active" as const,
     ...overrides,
   };
 }

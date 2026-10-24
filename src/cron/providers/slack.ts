@@ -6,7 +6,6 @@ import {
   asRecord,
   boundedText,
   fetchJson,
-  isIncidentActive,
   normalizeTimestamp,
   parseIncidentState,
   ProviderError,
@@ -87,6 +86,6 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url,
-    active: isIncidentActive(state),
+    lifecycle: state === "resolved" ? "resolved" : "active",
   };
 }

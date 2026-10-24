@@ -82,19 +82,21 @@ export async function fetchGoogleWorkspaceSnapshot(
   const productNames = new Map(products.map(({ id, name }) => [id, name]));
   const dashboardProducts = parseCurrentDashboard(dashboardHtml, products);
   const historyIncidents = history.map((value) => parseIncident(value, service, productNames));
-  const knownActiveIncidents = await context.getActiveIncidents();
+  const knownUnresolvedIncidents = await context.getUnresolvedIncidents();
   const incidentsById = new Map(historyIncidents.map((incident) => [incident.id, incident]));
-  const knownActiveById = new Map(knownActiveIncidents.map((incident) => [incident.id, incident]));
+  const knownUnresolvedById = new Map(
+    knownUnresolvedIncidents.map((incident) => [incident.id, incident]),
+  );
 
   // The history feed can omit older incidents. Preserve them as unverifiable instead of
   // implying recovery or treating their last reported impact as current.
-  const omittedKnownActive = knownActiveIncidents.filter(
-    (incident) => incident.active && !incidentsById.has(incident.id),
+  const omittedKnownIncidents = knownUnresolvedIncidents.filter(
+    (incident) => incident.lifecycle !== "resolved" && !incidentsById.has(incident.id),
   );
   const incidents: ParsedIncident[] = historyIncidents.filter(
-    (incident) => incident.active || knownActiveById.has(incident.id),
+    (incident) => incident.lifecycle !== "resolved" || knownUnresolvedById.has(incident.id),
   );
-  for (const incident of omittedKnownActive) {
+  for (const incident of omittedKnownIncidents) {
     incidents.push(unverifiableIncident(incident));
   }
   if (incidents.length > INCIDENTS_PER_SERVICE_LIMIT) {
@@ -106,10 +108,10 @@ export async function fetchGoogleWorkspaceSnapshot(
 
   const activeByProductId = new Map<string, StatusObservation[]>();
   for (const incident of incidents) {
-    if (!incident.active) continue;
-    const status = statusForActiveIncident(incident);
+    if (incident.lifecycle === "resolved") continue;
+    const status = statusForUnresolvedIncident(incident);
     const sourceStatus =
-      incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+      incident.lifecycle === "unverified"
         ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
         : (incident.statusImpact ?? "unknown");
     for (const id of incident.componentIds) {
@@ -132,13 +134,13 @@ export async function fetchGoogleWorkspaceSnapshot(
     };
   });
 
-  const activeIncidents = incidents.filter((incident) => incident.active);
+  const unresolvedIncidents = incidents.filter((incident) => incident.lifecycle !== "resolved");
   const overallStatus = combineObservations([
     ...components.map(({ status, sourceStatus }) => ({ status, sourceStatus })),
-    ...activeIncidents.map((incident) => ({
-      status: statusForActiveIncident(incident),
+    ...unresolvedIncidents.map((incident) => ({
+      status: statusForUnresolvedIncident(incident),
       sourceStatus:
-        incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+        incident.lifecycle === "unverified"
           ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
           : (incident.statusImpact ?? "unknown"),
     })),
@@ -366,7 +368,7 @@ function parseIncident(
     officialCreatedAt,
     officialUpdatedAt,
     url: incidentUrl,
-    active,
+    lifecycle: active ? "active" : "resolved",
     statusImpact,
   };
 }
@@ -404,16 +406,17 @@ function parseAffectedProducts(
 function unverifiableIncident(incident: NormalizedIncident): ParsedIncident {
   return {
     ...incident,
-    state: "unknown",
-    sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-    active: true,
+    lifecycle: "unverified",
     statusImpact: incident.sourceImpact,
   };
 }
 
 function statusForActiveIncident(incident: ParsedIncident): NormalizedStatus {
-  if (incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS) return "unknown";
   return impactStatuses[incident.statusImpact ?? ""] ?? "unknown";
+}
+
+function statusForUnresolvedIncident(incident: ParsedIncident): NormalizedStatus {
+  return incident.lifecycle === "unverified" ? "unknown" : statusForActiveIncident(incident);
 }
 
 function uniqueProducts(

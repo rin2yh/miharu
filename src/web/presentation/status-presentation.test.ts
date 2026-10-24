@@ -27,11 +27,17 @@ describe("status presentation", () => {
     ["scheduled", "予定・実施中"],
     ["resolved", "復旧"],
   ] as const)("labels incident state %s", (state, label) => {
-    expect(incidentStateLabel(state)).toBe(label);
+    expect(incidentStateLabel(state, "active")).toBe(label);
   });
 
   it("uses a fallback label for an unrecognized incident state", () => {
-    expect(incidentStateLabel("unrecognized" as DashboardIncident["state"])).toBe("状態不明");
+    expect(incidentStateLabel("unrecognized" as DashboardIncident["state"], "active")).toBe(
+      "状態不明",
+    );
+  });
+
+  it("labels an unverified incident as unverifiable", () => {
+    expect(incidentStateLabel("investigating", "unverified")).toBe("確認不能");
   });
 
   it("formats valid dates and identifies invalid dates", () => {
