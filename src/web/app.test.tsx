@@ -57,7 +57,7 @@ describe("dashboard", () => {
     expect(mobileHeader?.parentElement).toHaveClass("lg:hidden");
 
     const desktopLink = brandLinks.find((link) => link.closest("aside"));
-    expect(desktopLink?.closest("aside")).toHaveClass("hidden", "lg:flex");
+    expect(desktopLink?.closest("aside")).toHaveClass("hidden", "lg:block");
   });
 
   it("uses official event times and concise labels in the recent updates", async () => {

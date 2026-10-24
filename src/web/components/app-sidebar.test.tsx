@@ -11,14 +11,18 @@ describe("AppSidebar", () => {
     );
 
     const sidebar = screen.getByRole("complementary", { name: "サービス選択" });
-    expect(sidebar).toHaveClass("hidden", "lg:flex", "lg:sticky", "lg:flex-col");
+    expect(sidebar).toHaveClass(
+      "hidden",
+      "lg:block",
+      "lg:sticky",
+      "lg:self-start",
+      "lg:overflow-y-auto",
+    );
     expect(within(sidebar).getByRole("link", { name: "miharu ホーム" })).toHaveAttribute(
       "href",
       "/",
     );
-    expect(within(sidebar).getByRole("navigation", { name: "表示サービス" })).toHaveClass(
-      "min-h-0",
-      "flex-1",
+    expect(within(sidebar).getByRole("navigation", { name: "表示サービス" })).not.toHaveClass(
       "overflow-y-auto",
     );
 

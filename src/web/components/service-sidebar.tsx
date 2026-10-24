@@ -39,9 +39,9 @@ export function ServiceSidebar({
   return (
     <aside
       aria-label="サービス選択"
-      className="service-sidebar hidden lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col lg:self-start"
+      className="hidden lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto"
     >
-      <div className="shrink-0 border-b border-line pb-4">
+      <div className="border-b border-line pb-4">
         <AppBrand />
         <div className="mt-5 border-b border-line pb-3">
           <h2 className="m-0 text-sm font-bold text-ink">表示サービス</h2>
@@ -58,10 +58,7 @@ export function ServiceSidebar({
           />
         </div>
       </div>
-      <nav
-        aria-label="表示サービス"
-        className="service-sidebar__list min-h-0 flex-1 overflow-y-auto pt-3"
-      >
+      <nav aria-label="表示サービス" className="pt-3">
         <ul className="m-0 list-none space-y-1 p-0">
           <li>
             <button

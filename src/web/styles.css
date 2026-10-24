@@ -104,15 +104,3 @@ summary::-webkit-details-marker {
     transition-duration: 0.01ms !important;
   }
 }
-
-@media (min-width: 1024px) and (max-height: 512px) {
-  .service-sidebar {
-    overflow-y: auto;
-  }
-
-  .service-sidebar__list {
-    min-height: auto;
-    flex: none;
-    overflow-y: visible;
-  }
-}
