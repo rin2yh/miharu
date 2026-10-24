@@ -26,6 +26,7 @@ export function incidentStateLabel(
   kind: DashboardIncident["kind"],
   state: DashboardIncident["state"],
   lifecycle: DashboardIncident["lifecycle"],
+  sourceStatus?: string,
 ): string {
   if (lifecycle === "unverified") {
     return kind === "maintenance" ? "メンテナンス・確認不能" : "障害・確認不能";
@@ -33,6 +34,13 @@ export function incidentStateLabel(
 
   if (kind === "maintenance") {
     if (lifecycle === "resolved" || state === "resolved") return "メンテナンス完了";
+    const normalizedSourceStatus = sourceStatus
+      ?.toLowerCase()
+      .replaceAll("-", "_")
+      .replaceAll(" ", "_");
+    if (["in_progress", "in_progress_maintenance"].includes(normalizedSourceStatus ?? "")) {
+      return "メンテナンス中";
+    }
     if (state === "scheduled") return "メンテナンス予定";
     if (state === "investigating" || state === "identified" || state === "monitoring") {
       return "メンテナンス中";

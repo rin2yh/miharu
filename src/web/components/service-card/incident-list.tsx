@@ -64,7 +64,12 @@ export function IncidentList({
               <span
                 className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColor(incident)}`}
               >
-                {incidentStateLabel(incident.kind, incident.state, incident.lifecycle)}
+                {incidentStateLabel(
+                  incident.kind,
+                  incident.state,
+                  incident.lifecycle,
+                  incident.sourceStatus,
+                )}
               </span>
               <span className="whitespace-nowrap text-xs tabular-nums text-quiet">
                 更新{" "}

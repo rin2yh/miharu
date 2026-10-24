@@ -111,4 +111,34 @@ describe("IncidentList", () => {
     expect(within(incidentItem).getByText("メンテナンス")).toBeVisible();
     expect(within(incidentItem).getByText("メンテナンス状態: メンテナンス")).toBeVisible();
   });
+
+  it.each([
+    {
+      sourceStatus: "in_progress",
+      state: "scheduled" as const,
+      lifecycle: "active" as const,
+      label: "メンテナンス中",
+    },
+    {
+      sourceStatus: "completed",
+      state: "resolved" as const,
+      lifecycle: "resolved" as const,
+      label: "メンテナンス完了",
+    },
+  ])("shows $sourceStatus maintenance state before opening its details", (status) => {
+    const maintenance = incident({
+      title: `${status.sourceStatus} maintenance`,
+      kind: "maintenance",
+      state: status.state,
+      lifecycle: status.lifecycle,
+      sourceStatus: status.sourceStatus,
+      sourceType: "maintenance",
+      sourceImpact: "maintenance",
+      severityStatus: "under_maintenance",
+    });
+    render(<IncidentList incidents={[maintenance]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: maintenance.title });
+    expect(within(incidentItem).getByText(status.label)).toBeVisible();
+  });
 });

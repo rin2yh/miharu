@@ -26,14 +26,45 @@ describe("status presentation", () => {
     { kind: "incident", state: "monitoring", lifecycle: "active", label: "障害・監視中" },
     { kind: "incident", state: "scheduled", lifecycle: "active", label: "障害・予定" },
     { kind: "incident", state: "resolved", lifecycle: "resolved", label: "障害・復旧" },
-    { kind: "maintenance", state: "scheduled", lifecycle: "active", label: "メンテナンス予定" },
+    {
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+      sourceStatus: "scheduled",
+      label: "メンテナンス予定",
+    },
+    {
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+      sourceStatus: "in_progress",
+      label: "メンテナンス中",
+    },
+    {
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+      sourceStatus: "in_progress_maintenance",
+      label: "メンテナンス中",
+    },
     { kind: "maintenance", state: "investigating", lifecycle: "active", label: "メンテナンス中" },
     { kind: "maintenance", state: "identified", lifecycle: "active", label: "メンテナンス中" },
     { kind: "maintenance", state: "monitoring", lifecycle: "active", label: "メンテナンス中" },
-    { kind: "maintenance", state: "resolved", lifecycle: "resolved", label: "メンテナンス完了" },
-  ] as const)("labels $kind $state as $label", ({ kind, state, lifecycle, label }) => {
-    expect(incidentStateLabel(kind, state as DashboardIncident["state"], lifecycle)).toBe(label);
-  });
+    {
+      kind: "maintenance",
+      state: "resolved",
+      lifecycle: "resolved",
+      sourceStatus: "completed",
+      label: "メンテナンス完了",
+    },
+  ] as const)(
+    "labels $kind $state/$sourceStatus as $label",
+    ({ kind, state, lifecycle, sourceStatus, label }) => {
+      expect(
+        incidentStateLabel(kind, state as DashboardIncident["state"], lifecycle, sourceStatus),
+      ).toBe(label);
+    },
+  );
 
   it.each([
     { kind: "incident", lifecycle: "active", label: "障害・状態不明" },
