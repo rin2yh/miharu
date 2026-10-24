@@ -6,7 +6,7 @@ import { AppSidebar } from "./components/app-sidebar";
 import { AppBrand } from "./components/app-brand";
 import { EventRow } from "./components/event-row";
 import { RefreshIcon } from "./components/icons";
-import { ServiceCard } from "./components/service-card";
+import ServiceCard from "./components/service-card";
 import { ServiceSearch } from "./components/service-search";
 import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
