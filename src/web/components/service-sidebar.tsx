@@ -8,6 +8,7 @@ type ServiceSidebarProps = {
 export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarProps) {
   const selectedIds = new Set(selectedServiceIds);
   const allServicesSelected = selectedServiceIds.length === SERVICES.length;
+  const someServicesSelected = selectedServiceIds.length > 0 && !allServicesSelected;
 
   const toggleService = (serviceId: string) => {
     const nextSelection = new Set(selectedIds);
@@ -37,8 +38,8 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
         <ul className="m-0 list-none space-y-1 p-0">
           <li>
             <button
-              aria-pressed={allServicesSelected}
-              className={`${selectionButtonClass} ${allServicesSelected ? "bg-healthy-bg font-semibold text-ink" : "text-muted"}`}
+              aria-pressed={someServicesSelected ? "mixed" : allServicesSelected}
+              className={`${selectionButtonClass} ${allServicesSelected ? "bg-healthy-bg font-semibold text-ink" : someServicesSelected ? "font-semibold text-ink" : "text-muted"}`}
               type="button"
               onClick={() =>
                 onSelect(allServicesSelected ? [] : SERVICES.map((service) => service.id))
@@ -46,9 +47,9 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
             >
               <span
                 aria-hidden="true"
-                className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] leading-none ${allServicesSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] leading-none ${allServicesSelected || someServicesSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
               >
-                {allServicesSelected ? "✓" : ""}
+                {allServicesSelected ? "✓" : someServicesSelected ? "−" : ""}
               </span>
               <span className="flex-1">すべて</span>
             </button>

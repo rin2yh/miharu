@@ -58,6 +58,7 @@ test("PCではサイドバーの選択がURL、サービス一覧、最近の更
 
   const sidebar = statusDashboard.serviceSidebar();
   await expect(sidebar).toBeVisible();
+  await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "mixed");
   await expect(statusDashboard.serviceCount(2)).toBeVisible();
   await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
   await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
