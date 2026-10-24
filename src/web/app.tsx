@@ -136,8 +136,12 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
         </div>
       )}
 
-      <div className="grid items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+      <div className="grid gap-8 lg:grid-cols-[13rem_1px_minmax(0,1fr)] lg:gap-x-7">
         <ServiceSidebar selectedServiceIds={selectedServiceIds} onSelect={applyServiceSelection} />
+        <hr
+          aria-orientation="vertical"
+          className="m-0 hidden h-full w-px border-0 bg-line lg:block"
+        />
         <div className="min-w-0">
           <section id="top" aria-labelledby="services-title" aria-live="polite">
             <div className="mb-3.5 flex items-baseline justify-between gap-4">

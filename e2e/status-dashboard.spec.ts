@@ -64,10 +64,25 @@ test("PCではサイドバーの選択がURL、サービス一覧、最近の更
   await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
   await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
   const sidebarBox = await sidebar.boundingBox();
+  const divider = page.getByRole("separator");
+  const dividerBox = await divider.boundingBox();
   const serviceListBox = await page.getByRole("list", { name: "サービス一覧" }).boundingBox();
+  const historyBox = await statusDashboard.recentUpdates().boundingBox();
   expect(sidebarBox).not.toBeNull();
+  expect(dividerBox).not.toBeNull();
   expect(serviceListBox).not.toBeNull();
-  expect(serviceListBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width);
+  expect(historyBox).not.toBeNull();
+  expect(dividerBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width);
+  expect(serviceListBox!.x).toBeGreaterThan(dividerBox!.x + dividerBox!.width);
+  expect(dividerBox!.y + dividerBox!.height).toBe(historyBox!.y + historyBox!.height);
+  await expect(statusDashboard.serviceSelection("GitHub")).not.toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(statusDashboard.serviceSelection("Notion")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
 
   await statusDashboard.serviceSelection("Notion").click();
   await expect(statusDashboard.serviceCount(3)).toBeVisible();
@@ -85,9 +100,21 @@ test("PCではサイドバーの選択がURL、サービス一覧、最近の更
   await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
   await page.reload();
   await expect(statusDashboard.serviceCount(3)).toBeVisible();
+  await expect(statusDashboard.serviceSelection("GitHub")).not.toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
   await statusDashboard.serviceSelection("すべて").click();
   await expect(page).not.toHaveURL(/services=/);
   await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "true");
+  await expect(statusDashboard.serviceSelection("すべて")).not.toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(statusDashboard.serviceSelection("GitHub")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
 });
 
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({

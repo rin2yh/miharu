@@ -25,7 +25,7 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
   return (
     <aside
       aria-label="サービス選択"
-      className="hidden lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
+      className="hidden lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto"
     >
       <div className="border-b border-line pb-3">
         <h2 className="m-0 text-sm font-bold text-ink">表示サービス</h2>
@@ -54,12 +54,17 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
           {SERVICES.map((service) => {
             const isSelected = selectedIds.has(service.id);
             const isLastSelected = isSelected && selectedServiceIds.length === 1;
+            const serviceClassName = isSelected
+              ? allServicesSelected
+                ? "font-semibold text-ink"
+                : "bg-healthy-bg font-semibold text-ink"
+              : "text-muted";
 
             return (
               <li key={service.id}>
                 <button
                   aria-pressed={isSelected}
-                  className={`${selectionButtonClass} ${isSelected ? "bg-healthy-bg font-semibold text-ink" : "text-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
+                  className={`${selectionButtonClass} ${serviceClassName} disabled:cursor-not-allowed disabled:opacity-70`}
                   type="button"
                   disabled={isLastSelected}
                   onClick={() => toggleService(service.id)}
