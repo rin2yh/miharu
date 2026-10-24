@@ -139,10 +139,7 @@ test("低い画面高ではサイドバー全体をスクロールしてサー�
   await expect(brandLink).toBeVisible();
   await expect(lastService).not.toBeInViewport();
 
-  await sidebar.evaluate((element) => {
-    const scrollableSidebar = element as HTMLElement;
-    scrollableSidebar.scrollTop = scrollableSidebar.scrollHeight;
-  });
+  await lastService.scrollIntoViewIfNeeded();
 
   await expect(lastService).toBeInViewport();
   await expect(brandLink).not.toBeInViewport();

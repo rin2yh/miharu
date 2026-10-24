@@ -105,7 +105,7 @@ summary::-webkit-details-marker {
   }
 }
 
-@media (min-width: 64rem) and (max-height: 32rem) {
+@media (min-width: 1024px) and (max-height: 512px) {
   .service-sidebar {
     overflow-y: auto;
   }
