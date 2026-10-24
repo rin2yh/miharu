@@ -175,6 +175,19 @@ describe("createD1Store with local D1", () => {
     expect(await selectRows(`SELECT id FROM incidents`)).toHaveLength(1);
   });
 
+  it("does not overwrite a saved success with a failure at the same timestamp", async () => {
+    const store = createD1Store(env.DB);
+
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:00:00.000Z");
+    await store.saveFailure(service, "2026-10-01T05:00:00.000Z", "timeout");
+
+    expect(
+      await selectRows(
+        `SELECT last_error_at, error_code FROM service_status WHERE service_id = 'github'`,
+      ),
+    ).toEqual([{ last_error_at: null, error_code: null }]);
+  });
+
   it("removes stale components and prunes expired resolved incidents and events", async () => {
     const store = createD1Store(env.DB);
 

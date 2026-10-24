@@ -3,7 +3,12 @@ import { SERVICES } from "../shared/config/services";
 import type { ProviderSnapshot } from "../domain";
 import type { CollectionStore } from "../shared/store";
 import { ProviderError } from "./providers/shared";
-import { collectAll, collectService, type SnapshotFetcher } from "./collector";
+import {
+  collectAll,
+  collectService,
+  type CollectorOptions,
+  type SnapshotFetcher,
+} from "./collector";
 
 const service = SERVICES[0];
 if (!service) throw new Error("Service config is empty");
@@ -179,5 +184,55 @@ describe("status collection", () => {
     const successfulServiceCount = SERVICES.filter((item) => !failedServiceIds.has(item.id)).length;
     expect(persistence.saveSuccess).toHaveBeenCalledTimes(successfulServiceCount);
     expect(persistence.saveFailure).toHaveBeenCalledTimes(failedServiceIds.size);
+  });
+
+  it("reports persistence failures without stopping other service collections", async () => {
+    const persistence = store({
+      saveSuccess: vi.fn<CollectionStore["saveSuccess"]>(async (item) => {
+        if (item.id === service.id) throw new Error("D1 unavailable");
+      }),
+    });
+    const onPersistenceFailure = vi.fn<NonNullable<CollectorOptions["onPersistenceFailure"]>>(
+      async () => undefined,
+    );
+
+    await collectAll(
+      [service, statuspageService],
+      "2026-10-24T05:00:00.000Z",
+      persistence,
+      async () => snapshot,
+      { environment: "production", onPersistenceFailure },
+    );
+
+    expect(persistence.saveSuccess).toHaveBeenCalledTimes(2);
+    expect(onPersistenceFailure).toHaveBeenCalledOnce();
+    expect(onPersistenceFailure).toHaveBeenCalledWith(service, expect.any(Error));
+  });
+
+  it("reports a D1 read failure as persistence failure instead of upstream outage", async () => {
+    const persistence = store({
+      getUnresolvedIncidents: vi.fn<CollectionStore["getUnresolvedIncidents"]>(async () => {
+        throw new Error("D1 unavailable");
+      }),
+    });
+    const onPersistenceFailure = vi.fn<NonNullable<CollectorOptions["onPersistenceFailure"]>>(
+      async () => undefined,
+    );
+    const fetcher = vi.fn<SnapshotFetcher>(async (_service, context) => {
+      await context.getUnresolvedIncidents();
+      return snapshot;
+    });
+
+    await collectAll([chatgptService], "2026-10-24T05:00:00.000Z", persistence, fetcher, {
+      environment: "production",
+      onPersistenceFailure,
+    });
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(persistence.saveFailure).not.toHaveBeenCalled();
+    expect(onPersistenceFailure).toHaveBeenCalledOnce();
+    expect(onPersistenceFailure.mock.calls[0]?.[1]).toMatchObject({
+      name: "CollectionPersistenceError",
+    });
   });
 });
