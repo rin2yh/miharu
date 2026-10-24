@@ -25,7 +25,7 @@ describe("status presentation", () => {
     { kind: "incident", state: "identified", lifecycle: "active", label: "障害・対応中" },
     { kind: "incident", state: "monitoring", lifecycle: "active", label: "障害・監視中" },
     { kind: "incident", state: "scheduled", lifecycle: "active", label: "障害・予定" },
-    { kind: "incident", state: "resolved", lifecycle: "resolved", label: "障害・復旧" },
+    { kind: "incident", state: "resolved", lifecycle: "resolved", label: "復旧済み" },
     {
       kind: "maintenance",
       state: "scheduled",

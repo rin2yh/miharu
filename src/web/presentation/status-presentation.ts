@@ -48,7 +48,7 @@ export function incidentStateLabel(
     return "メンテナンス・状態不明";
   }
 
-  if (lifecycle === "resolved" || state === "resolved") return "障害・復旧";
+  if (lifecycle === "resolved" || state === "resolved") return "復旧済み";
   switch (state) {
     case "investigating":
       return "障害・調査中";

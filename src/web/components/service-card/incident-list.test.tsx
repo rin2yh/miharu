@@ -141,4 +141,22 @@ describe("IncidentList", () => {
     const incidentItem = screen.getByRole("listitem", { name: maintenance.title });
     expect(within(incidentItem).getByText(status.label)).toBeVisible();
   });
+
+  it("labels a resolved incident as recovered while retaining its incident kind", () => {
+    const resolvedIncident = incident({
+      title: "Messaging delays have been resolved",
+      kind: "incident",
+      state: "resolved",
+      sourceStatus: "resolved",
+      lifecycle: "resolved",
+    });
+    render(<IncidentList incidents={[resolvedIncident]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: resolvedIncident.title });
+    expect(within(incidentItem).getByText("復旧済み")).toBeVisible();
+
+    fireEvent.click(within(incidentItem).getByText(resolvedIncident.title));
+
+    expect(within(incidentItem).getByText("障害情報")).toBeVisible();
+  });
 });
