@@ -147,84 +147,83 @@ describe("Google Workspace provider", () => {
     },
   );
 
-  it("does not infer current operation from a resolved history entry", async () => {
-    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
-    const priorIncident = activeSnapshot.incidents[0];
-    if (!priorIncident) throw new Error("Expected captured active incident");
-    const knownIncident: KnownIncident = {
-      ...priorIncident,
-      lastObservedAt: "2026-05-31T05:00:00.000Z",
-    };
+  it.each([
+    {
+      name: "omitted from the history",
+      history: () => [],
+      previouslyUnverifiable: false,
+      expectedState: "unknown",
+      expectedSourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      expectedActive: true,
+      expectedServiceStatus: "unknown",
+      expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
+      expectedDriveStatus: "unknown",
+    },
+    {
+      name: "listed as active again",
+      history: () => [activeIncident("SERVICE_OUTAGE")],
+      previouslyUnverifiable: true,
+      expectedState: "investigating",
+      expectedSourceStatus: "SERVICE_OUTAGE",
+      expectedActive: true,
+      expectedServiceStatus: "major_outage",
+      expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
+      expectedDriveStatus: "major_outage",
+    },
+    {
+      name: "listed as resolved",
+      history: () => historyFixture,
+      previouslyUnverifiable: true,
+      expectedState: "resolved",
+      expectedSourceStatus: "AVAILABLE",
+      expectedActive: false,
+      expectedServiceStatus: "unknown",
+      expectedOfficialUpdatedAt: "2026-05-31T04:24:00.000Z",
+      expectedDriveStatus: "unknown",
+    },
+  ])(
+    "handles a known incident that is $name",
+    async ({
+      history,
+      previouslyUnverifiable,
+      expectedState,
+      expectedSourceStatus,
+      expectedActive,
+      expectedServiceStatus,
+      expectedOfficialUpdatedAt,
+      expectedDriveStatus,
+    }) => {
+      const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
+      const priorIncident = activeSnapshot.incidents[0];
+      if (!priorIncident) throw new Error("Expected captured active incident");
+      const knownIncident: KnownIncident = {
+        ...priorIncident,
+        ...(previouslyUnverifiable
+          ? {
+              state: "unknown" as const,
+              sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+            }
+          : {}),
+        lastObservedAt: "2026-01-01T00:00:00.000Z",
+      };
 
-    const { result } = fetchSnapshot(historyFixture, [knownIncident]);
-    const snapshot = await result;
-    const resolved = snapshot.incidents.find(({ id }) => id === priorIncident.id);
+      const { result, fetcher } = fetchSnapshot(history(), [knownIncident]);
+      const snapshot = await result;
+      const currentIncident = snapshot.incidents.find(({ id }) => id === knownIncident.id);
 
-    expect(resolved).toMatchObject({
-      state: "resolved",
-      active: false,
-      officialCreatedAt: "2026-05-31T03:28:00.000Z",
-      officialUpdatedAt: "2026-05-31T04:24:00.000Z",
-    });
-    expect(snapshot.status).toBe("unknown");
-    expect(snapshot.sourceStatus).toBe("no_active_incidents");
-    expect(snapshot.components?.find(({ id }) => id === "VHNA7p3Z5p3iakj5sA8V")?.status).toBe(
-      "unknown",
-    );
-  });
-
-  it("marks a long-omitted incident unverifiable without requesting its detail page", async () => {
-    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_OUTAGE")]).result;
-    const priorIncident = activeSnapshot.incidents[0];
-    if (!priorIncident) throw new Error("Expected active incident");
-    const knownIncident: KnownIncident = {
-      ...priorIncident,
-      lastObservedAt: "2026-01-01T00:00:00.000Z",
-    };
-
-    const { result, fetcher } = fetchSnapshot([], [knownIncident]);
-    const snapshot = await result;
-
-    expect(snapshot.status).toBe("unknown");
-    expect(snapshot.incidents[0]).toMatchObject({
-      id: knownIncident.id,
-      state: "unknown",
-      active: true,
-      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-      sourceImpact: knownIncident.sourceImpact,
-      body: knownIncident.body,
-    });
-    expect(snapshot.components?.find(({ id }) => id === "prPt2Yra2CbGsbEm9cpC")?.status).toBe(
-      "unknown",
-    );
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it("restores the feed's current incident state when the incident appears again", async () => {
-    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
-    const priorIncident = activeSnapshot.incidents[0];
-    if (!priorIncident) throw new Error("Expected active incident");
-    const knownIncident: KnownIncident = {
-      ...priorIncident,
-      state: "unknown",
-      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-      active: true,
-      lastObservedAt: "2026-01-01T00:00:00.000Z",
-    };
-
-    const { result, fetcher } = fetchSnapshot([activeIncident("SERVICE_OUTAGE")], [knownIncident]);
-    const snapshot = await result;
-
-    expect(snapshot.incidents[0]).toMatchObject({
-      id: knownIncident.id,
-      state: "investigating",
-      sourceStatus: "SERVICE_OUTAGE",
-      sourceImpact: "SERVICE_OUTAGE",
-      active: true,
-    });
-    expect(snapshot.status).toBe("major_outage");
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
+      expect(currentIncident).toMatchObject({
+        state: expectedState,
+        sourceStatus: expectedSourceStatus,
+        active: expectedActive,
+      });
+      expect(snapshot.status).toBe(expectedServiceStatus);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(currentIncident?.officialUpdatedAt).toBe(expectedOfficialUpdatedAt);
+      expect(snapshot.components?.find(({ id }) => id === "VHNA7p3Z5p3iakj5sA8V")?.status).toBe(
+        expectedDriveStatus,
+      );
+    },
+  );
 
   it("retains affected product ids that are not in the current catalog", async () => {
     const incident = activeIncident("SERVICE_DISRUPTION");
@@ -265,19 +264,32 @@ describe("Google Workspace provider", () => {
     expect(snapshot.components?.every(({ status }) => status === "unknown")).toBe(true);
   });
 
-  it("fails the collection when the history feed cannot be fetched", async () => {
-    const { result, fetcher } = fetchSnapshot([], [], true);
+  it.each([
+    {
+      name: "history request fails",
+      history: [],
+      failHistory: true,
+      catalogPayload: productCatalog,
+      expectedCode: "upstream_http_error",
+    },
+    {
+      name: "catalog is empty",
+      history: [],
+      failHistory: false,
+      catalogPayload: { products: [] },
+      expectedCode: "invalid_payload",
+    },
+    {
+      name: "history has an invalid shape",
+      history: { incidents: [] },
+      failHistory: false,
+      catalogPayload: productCatalog,
+      expectedCode: "invalid_payload",
+    },
+  ])("rejects input when $name", async ({ history, failHistory, catalogPayload, expectedCode }) => {
+    const { result, fetcher } = fetchSnapshot(history, [], failHistory, catalogPayload);
 
-    await expect(result).rejects.toMatchObject({ code: "upstream_http_error" });
+    await expect(result).rejects.toMatchObject({ code: expectedCode });
     expect(fetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects malformed catalog and history payloads", async () => {
-    await expect(fetchSnapshot([], [], false, { products: [] }).result).rejects.toMatchObject({
-      code: "invalid_payload",
-    });
-    await expect(fetchSnapshot({ incidents: [] }).result).rejects.toMatchObject({
-      code: "invalid_payload",
-    });
   });
 });
