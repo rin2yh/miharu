@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { NORMALIZED_STATUSES } from "../domain";
-import type { DashboardIncident, NormalizedStatus } from "../domain";
+import { NORMALIZED_STATUSES } from "../../domain";
+import type { DashboardIncident, NormalizedStatus } from "../../domain";
 import {
   formatDateTime,
   incidentStateLabel,
@@ -10,7 +10,7 @@ import {
   STATUS_LABELS,
   STATUS_RANK,
 } from "./status-presentation";
-import { component, incident, service } from "./test-fixtures";
+import { component, incident, service } from "../test-fixtures";
 
 afterEach(() => vi.useRealTimers());
 

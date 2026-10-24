@@ -10,7 +10,11 @@ import {
   INCIDENT_HISTORY_RETENTION_DAYS,
   type ServiceConfig,
 } from "./config/services";
-import type { ProviderSnapshot } from "../domain";
+import {
+  INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+  type KnownIncident,
+  type ProviderSnapshot,
+} from "../domain";
 import {
   reconcileIncidents,
   type IncidentEventRecord,
@@ -19,6 +23,7 @@ import {
 import { failureMetadata } from "../domain/failure";
 
 export interface CollectionStore {
+  getActiveIncidents(serviceId: string): Promise<KnownIncident[]>;
   saveSuccess(
     service: ServiceConfig,
     snapshot: ProviderSnapshot,
@@ -34,6 +39,39 @@ export interface DashboardStore extends CollectionStore {
 
 export function createD1Store(database: D1Database): DashboardStore {
   return {
+    async getActiveIncidents(serviceId) {
+      const result = await database
+        .prepare(`
+    SELECT
+      service_id AS serviceId,
+      id,
+      title,
+      body,
+      kind,
+      state,
+      source_status AS sourceStatus,
+      source_type AS sourceType,
+      source_impact AS sourceImpact,
+      severity_status AS severityStatus,
+      component_ids_json AS componentIdsJson,
+      components_json AS componentsJson,
+      official_created_at AS officialCreatedAt,
+      official_updated_at AS officialUpdatedAt,
+      url,
+      active,
+      first_seen_at AS firstSeenAt,
+      resolved_detected_at AS resolvedDetectedAt,
+      fingerprint,
+      revision,
+      last_observed_at AS lastObservedAt
+    FROM incidents
+    WHERE service_id = ? AND active = 1
+  `)
+        .bind(serviceId)
+        .all<IncidentRow>();
+      return result.results.map(toIncidentRecord);
+    },
+
     async saveSuccess(service, snapshot, observedAt) {
       const existing = await database
         .prepare(`
@@ -69,6 +107,7 @@ export function createD1Store(database: D1Database): DashboardStore {
         existing.results.map(toIncidentRecord),
         snapshot.incidents,
         observedAt,
+        snapshot.incidentListComplete,
       );
 
       await database.batch([
@@ -195,9 +234,20 @@ export function createD1Store(database: D1Database): DashboardStore {
       ).toISOString();
       await database.batch([
         database.prepare("DELETE FROM incident_events WHERE detected_at < ?").bind(cutoff),
+        // An unavailable recheck remains unknown; age it out without recording a false recovery.
         database
-          .prepare("DELETE FROM incidents WHERE active = 0 AND resolved_detected_at < ?")
-          .bind(cutoff),
+          .prepare(
+            "UPDATE incidents SET active = 0 WHERE active = 1 AND source_status = ? AND last_observed_at < ?",
+          )
+          .bind(INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, cutoff),
+        database
+          .prepare(
+            `DELETE FROM incidents
+            WHERE active = 0 AND (
+              resolved_detected_at < ? OR (source_status = ? AND last_observed_at < ?)
+            )`,
+          )
+          .bind(cutoff, INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, cutoff),
       ]);
     },
   };
@@ -371,20 +421,18 @@ async function syncComponents(
     upserts.map((statement) => [statement]),
   );
 
-  const componentIds = components.map((component) => component.id);
-  const notIn =
-    componentIds.length > 0 ? `AND id NOT IN (${componentIds.map(() => "?").join(",")})` : "";
   await database
     .prepare(
       `DELETE FROM service_components
-      WHERE service_id = ? ${notIn}
+      WHERE service_id = ?
+        AND id NOT IN (SELECT value FROM json_each(?))
         AND EXISTS (
           SELECT 1 FROM service_status
           WHERE service_id = service_components.service_id
             AND last_checked_at <= ?
         )`,
     )
-    .bind(serviceId, ...componentIds, observedAt)
+    .bind(serviceId, JSON.stringify(components.map((component) => component.id)), observedAt)
     .run();
 }
 

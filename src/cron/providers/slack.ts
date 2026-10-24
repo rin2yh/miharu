@@ -1,6 +1,7 @@
 import { normalizeStatus, type NormalizedIncident, type ProviderSnapshot } from "../../domain";
 import { stableFallbackId } from "../../domain/id";
 import { INCIDENTS_PER_SERVICE_LIMIT, type ServiceConfig } from "../../shared/config/services";
+import type { ProviderContext } from "../provider-context";
 import {
   asRecord,
   boundedText,
@@ -12,16 +13,15 @@ import {
   requiredText,
   safeIncidentUrl,
   uniqueNames,
-  type FetchLike,
 } from "./shared";
 
 type SlackService = Extract<ServiceConfig, { provider: "slack" }>;
 
 export async function fetchSlackSnapshot(
   service: SlackService,
-  signal: AbortSignal,
-  fetcher: FetchLike = fetch,
+  context: ProviderContext,
 ): Promise<ProviderSnapshot> {
+  const { signal, fetcher } = context;
   const data = asRecord(await fetchJson(service.currentUrl, signal, fetcher));
   if (!data || !Array.isArray(data.active_incidents)) {
     throw new ProviderError("invalid_payload", "Slack Status API response shape changed");

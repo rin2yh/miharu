@@ -164,6 +164,27 @@ describe("D1 store", () => {
     expect(mock.calls.find((call) => call.sql.includes("FROM incident_events"))?.args).toEqual([8]);
   });
 
+  it("loads active known incidents for a single service", async () => {
+    const row = existingIncidentRow();
+    const mock = createDatabase({ existingIncidents: [row] });
+    const store = createD1Store(mock.database);
+
+    const incidents = await store.getActiveIncidents("github");
+
+    expect(incidents).toMatchObject([
+      {
+        serviceId: "github",
+        id: "incident-1",
+        componentIds: ["actions"],
+        components: ["Actions"],
+        active: true,
+        lastObservedAt: row.lastObservedAt,
+      },
+    ]);
+    expect(mock.calls[0]?.sql).toContain("WHERE service_id = ? AND active = 1");
+    expect(mock.calls[0]?.args).toEqual(["github"]);
+  });
+
   it("prunes events and resolved incidents older than the retention window", async () => {
     const mock = createDatabase();
     const store = createD1Store(mock.database);
@@ -173,11 +194,13 @@ describe("D1 store", () => {
     expect(mock.batches).toHaveLength(1);
     expect(mock.batches[0]?.map(({ sql }) => sql)).toEqual([
       "DELETE FROM incident_events WHERE detected_at < ?",
-      "DELETE FROM incidents WHERE active = 0 AND resolved_detected_at < ?",
+      expect.stringContaining("UPDATE incidents SET active = 0"),
+      expect.stringContaining("DELETE FROM incidents"),
     ]);
     expect(mock.batches[0]?.map(({ args }) => args)).toEqual([
       ["2026-10-17T00:00:00.000Z"],
-      ["2026-10-17T00:00:00.000Z"],
+      ["recheck_unavailable", "2026-10-17T00:00:00.000Z"],
+      ["2026-10-17T00:00:00.000Z", "recheck_unavailable", "2026-10-17T00:00:00.000Z"],
     ]);
   });
 
@@ -211,7 +234,7 @@ describe("D1 store", () => {
     const componentCleanup = mock.calls.find((call) =>
       call.sql.includes("DELETE FROM service_components"),
     );
-    expect(componentCleanup?.args).toEqual(["github", "actions", "2026-10-23T05:10:00.000Z"]);
+    expect(componentCleanup?.args).toEqual(["github", '["actions"]', "2026-10-23T05:10:00.000Z"]);
     expect(mock.batches[2]?.[0]?.args.slice(0, 3)).toEqual([
       "github",
       "incident-1",

@@ -22,6 +22,9 @@ Slack、Notion、GitHubなど複数サービスの公式ステータスを集約
 src/
 ├── index.ts                    # Worker entry: HTTP と scheduled() を接続
 ├── web/                        # React UI と Hono API
+│   ├── components/              # React表示コンポーネントとテスト
+│   ├── filters/                 # URLサービスフィルターとテスト
+│   ├── presentation/            # 状態表示・日時フォーマット
 │   └── routes/api/status.ts
 ├── cron/                       # 定期収集と取得Provider
 │   ├── collect-status.ts
@@ -47,18 +50,21 @@ WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorke
 サービス一覧は `src/shared/config/services.ts` にある。取得方式を選んで既存の共通処理を使う。
 
 - Atlassian Statuspage互換JSON: `provider: "statuspage"` を指定する。NotionとGitHubもこの実装を使う。
+- ChatGPT: `provider: "openai-chatgpt"` を指定する。OpenAIのsummaryにインシデントがないため別APIを取得し、公式ページのChatGPTセクションに属するコンポーネントと明示的にChatGPT関連と分かるインシデントだけを使う。別APIは直近25件のみ返すため、一覧にないことを復旧とは扱わない。
 - 独自API: `src/cron/providers/` にパーサーを追加し、`ServiceConfig` のprovider種別と `fetchServiceSnapshot` に登録する。Slackはこの方式。
 - RSS/Atomなど: 共通化が必要になった時点でフィード用パーサーを追加し、取得元ごとの日時や状態を元データのまま保持する。
 
 Providerの出力は `ProviderSnapshot` と `NormalizedIncident` に正規化する。公式の全体ステータスと個別インシデントの重要度は別々に保存する。取得URLはコード上の設定に限定し、インシデント本文やURLは長さ・形式・許可ホストを検証してから利用する。
 
-Providerを追加・変更する際は `src/cron/providers/providers.test.ts` のテーブル駆動テストに実レスポンス例を追加する。新しい外部APIに認証情報が必要な場合はコードに置かず、Cloudflare Secretsを使う。
+Providerを追加・変更する際は、対応する `*.test.ts` に実レスポンス例を追加する。新しい外部APIに認証情報が必要な場合はコードに置かず、Cloudflare Secretsを使う。
 
-| サービス | 公式取得元                                                              | 形式               | 主な取得項目                                          |
-| -------- | ----------------------------------------------------------------------- | ------------------ | ----------------------------------------------------- |
-| Slack    | [公式API](https://slack-status.com/api/v2.0.0/current)                  | Slack独自JSON      | 全体status、active incidents、notes、services         |
-| Notion   | [公式Statuspage API](https://www.notion-status.com/api/v2/summary.json) | Statuspage互換JSON | status、components、incidents                         |
-| GitHub   | [公式Statuspage API](https://www.githubstatus.com/api/v2/summary.json)  | Statuspage互換JSON | status、components、incidents、scheduled maintenances |
+| サービス | 公式取得元                                                                                                                    | 形式               | 主な取得項目                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------- |
+| Slack    | [公式API](https://slack-status.com/api/v2.0.0/current)                                                                        | Slack独自JSON      | 全体status、active incidents、notes、services         |
+| Notion   | [公式Statuspage API](https://www.notion-status.com/api/v2/summary.json)                                                       | Statuspage互換JSON | status、components、incidents                         |
+| GitHub   | [公式Statuspage API](https://www.githubstatus.com/api/v2/summary.json)                                                        | Statuspage互換JSON | status、components、incidents、scheduled maintenances |
+| Claude   | [公式Statuspage API](https://status.claude.com/api/v2/summary.json)                                                           | Statuspage互換JSON | status、components、incidents                         |
+| ChatGPT  | [summary API](https://status.openai.com/api/v2/summary.json)、[incident API](https://status.openai.com/api/v2/incidents.json) | OpenAI独自JSON     | ChatGPTセクションのcomponents、関連incidents          |
 
 Notionの公開ステータスページは `notion-status.com` に移行している。画面から開くリンクは現行の [Notion公式ステータスページ](https://www.notion-status.com/) を使う。APIが返さない時刻、重要度、コンポーネントなどは `null` または空のまま保持する。Slackの `active` はインシデントの進行状態で、サービス全体の状態とは区別する。
 
@@ -95,6 +101,12 @@ Notionの公開ステータスページは `notion-status.com` に移行して�
    ```
 
    履歴は `incident_events` テーブルで確認できる。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加される。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local` の前に `.wrangler/state` 内のD1状態を削除する。
+
+## PR本文とローカル動作確認
+
+- PR本文に、型チェック・lint・単体テスト・E2EなどCIで確認できる検証結果を列挙しない。結果はCIのChecksで確認する。
+- PR作成・更新前に、ローカル環境で変更した機能を起動し、利用者の操作またはAPIリクエストを実際に行って結果を確認する。自動テストだけでは代替しない。
+- PR本文の動作確認には、実行したローカル操作と画面・APIで確認した結果を簡潔に記載する。ローカルで確認できない場合は、確認できる状態にしてからPRを作成・更新する。
 
 ## Cloudflare Free枠の目安
 

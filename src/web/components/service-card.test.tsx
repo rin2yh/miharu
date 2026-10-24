@@ -1,15 +1,63 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import { ServiceCard } from "./service-card";
-import { component, githubLinkName, incident, service } from "./test-fixtures";
+import { component, githubLinkName, incident, service, slackLinkName } from "../test-fixtures";
 
 describe("ServiceCard", () => {
+  it.each([
+    { id: "cloudflare", name: "Cloudflare", icon: siCloudflare, invertInDark: false },
+    { id: "notion", name: "Notion", icon: siNotion, invertInDark: true },
+    { id: "github", name: "GitHub", icon: siGithub, invertInDark: true },
+    { id: "claude", name: "Claude", icon: siClaude, invertInDark: false },
+  ])("shows the $name brand icon", ({ id, name, icon, invertInDark }) => {
+    render(<ServiceCard service={service({ id, name })} />);
+
+    const card = screen.getByRole("listitem", { name: `${name}のサービス状況` });
+    const iconWrapper = card.querySelector("header > span");
+
+    expect(iconWrapper?.querySelector("svg path")).toHaveAttribute("d", icon.path);
+    expect(iconWrapper).toHaveStyle({ color: `#${icon.hex}` });
+    expect(iconWrapper?.classList.contains("dark:[&>svg]:invert")).toBe(invertInDark);
+  });
+
+  it("uses a theme-colored SVG for ChatGPT", () => {
+    render(<ServiceCard service={service({ id: "chatgpt", name: "ChatGPT" })} />);
+
+    const card = screen.getByRole("listitem", { name: "ChatGPTのサービス状況" });
+    const iconWrapper = card.querySelector("header > span");
+    const iconPath = iconWrapper?.querySelector("svg path");
+
+    expect(iconPath?.getAttribute("d")).toBeTruthy();
+    expect(iconWrapper).toHaveClass("text-muted", "dark:text-ink");
+    expect(iconWrapper).not.toHaveAttribute("style");
+    expect(iconWrapper).not.toHaveClass("dark:[&>svg]:invert");
+  });
+
   it("links directly to the official status page", () => {
     render(<ServiceCard service={service()} />);
 
     const statusPageLink = screen.getByRole("link", { name: githubLinkName });
     expect(statusPageLink).toHaveAttribute("href", "https://www.githubstatus.com/");
     expect(statusPageLink).toHaveAttribute("target", "_blank");
+  });
+
+  it("links Slack to its official status page", () => {
+    render(
+      <ServiceCard
+        service={service({
+          id: "slack",
+          name: "Slack",
+          statusPageUrl: "https://slack-status.com/",
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: slackLinkName })).toHaveAttribute(
+      "href",
+      "https://slack-status.com/",
+    );
   });
 
   it("shows incidents when the service has no component catalogue", () => {
@@ -46,6 +94,68 @@ describe("ServiceCard", () => {
         .getAllByRole("time")
         .map((time) => time.getAttribute("datetime")),
     ).toEqual(["2026-10-23T04:55:00.000Z", "2026-10-23T04:50:00.000Z"]);
+  });
+
+  it("shows Google Workspace as unknown when history has no active incidents", () => {
+    const summary =
+      "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。";
+    render(
+      <ServiceCard
+        service={service({
+          id: "google-workspace",
+          name: "Google Workspace",
+          statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+          status: "unknown",
+          sourceStatus: "no_active_incidents",
+          summary,
+          components: [component("gmail", "Gmail", "unknown")],
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
+    expect(within(card).getByText(summary)).toBeVisible();
+  });
+
+  it("shows an unverified Google Workspace incident with a recovery warning", () => {
+    const unknownIncident = incident({
+      id: "unknown-google-workspace-incident",
+      title: "Earlier Gmail issue",
+      body: null,
+      state: "unknown",
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      severityStatus: null,
+      componentIds: ["gmail"],
+      components: ["Gmail"],
+      url: "https://www.google.com/appsstatus/dashboard/incidents/unknown-google-workspace-incident",
+    });
+    const summary = "公式の履歴フィードから現在の状態を判断できません。";
+    render(
+      <ServiceCard
+        service={service({
+          id: "google-workspace",
+          name: "Google Workspace",
+          statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+          status: "unknown",
+          sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+          summary,
+          components: [component("gmail", "Gmail", "unknown")],
+          incidents: [unknownIncident],
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
+    expect(within(card).getByText(summary)).toBeVisible();
+    const gmail = within(card).getByRole("listitem", { name: "Gmailコンポーネント" });
+    expect(within(gmail).getAllByText("状態不明")).toHaveLength(2);
+    const incidentItem = within(gmail).getByRole("listitem", { name: unknownIncident.title });
+    expect(within(incidentItem).getByText("状態不明")).toBeVisible();
+    fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
+
+    expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
   });
 
   it("sorts affected components by severity and keeps healthy ones behind a toggle", () => {

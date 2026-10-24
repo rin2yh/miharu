@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
+import type { DashboardPayload } from "../domain";
+import { SERVICES } from "../shared/config/services";
 import { buildDashboardPayload, createStatusRoutes } from "./routes/api/status";
+
+const slackService = SERVICES.find((service) => service.provider === "slack");
+const githubService = SERVICES.find(
+  (service) => service.provider === "statuspage" && service.scheduledMaintenances,
+);
+const cloudflareService = SERVICES.find(
+  (service) => service.provider === "statuspage" && service.componentGroupId !== undefined,
+);
+if (!slackService || !githubService || !cloudflareService) {
+  throw new Error("Service config is missing a test fixture");
+}
 
 const rows: DashboardRows = {
   statusRows: [
     {
-      serviceId: "slack",
+      serviceId: slackService.id,
       status: "operational",
       sourceStatus: "ok",
       summary: null,
@@ -17,7 +30,7 @@ const rows: DashboardRows = {
   ],
   componentRows: [
     {
-      serviceId: "github",
+      serviceId: githubService.id,
       id: "actions",
       name: "Actions",
       status: "degraded_performance",
@@ -27,7 +40,7 @@ const rows: DashboardRows = {
   ],
   activeRows: [
     {
-      serviceId: "slack",
+      serviceId: slackService.id,
       id: "incident-1",
       title: "Message delivery delays",
       body: "<p>We are investigating.<br />Update &amp; details</p>",
@@ -53,7 +66,7 @@ const rows: DashboardRows = {
   eventRows: [
     {
       id: "event-1",
-      serviceId: "slack",
+      serviceId: slackService.id,
       incidentId: "incident-1",
       title: "Message delivery delays",
       body: "Private history body",
@@ -72,27 +85,30 @@ const rows: DashboardRows = {
 
 describe("status API", () => {
   it("converts D1 rows directly into the public dashboard payload", () => {
-    const dashboard = buildDashboardPayload(rows, new Date("2026-10-23T05:03:00.000Z"));
+    const dashboard = buildDashboardPayload(rows, new Date("2026-10-23T05:03:00.000Z"), 180);
+    const slack = dashboard.services.find((service) => service.id === slackService.id);
+    const notion = dashboard.services.find((service) => service.id === "notion");
+    const github = dashboard.services.find((service) => service.id === githubService.id);
 
-    expect(dashboard).toMatchObject({
-      generatedAt: "2026-10-23T05:03:00.000Z",
-      services: [
-        {
-          id: "slack",
-          isStale: false,
-          hasFetchError: true,
-          incidents: [{ body: "We are investigating.\nUpdate & details" }],
-        },
-        { id: "notion", status: "unknown", isStale: true, components: [], incidents: [] },
-        {
-          id: "github",
-          status: "unknown",
-          isStale: true,
-          components: [{ id: "actions", status: "degraded_performance" }],
-        },
-      ],
-      recentEvents: [{ serviceName: "Slack", title: "Message delivery delays" }],
+    expect(dashboard.generatedAt).toBe("2026-10-23T05:03:00.000Z");
+    expect(dashboard.freshnessWarningSeconds).toBe(180);
+    expect(slack).toMatchObject({
+      isStale: false,
+      hasFetchError: true,
+      incidents: [{ body: "We are investigating.\nUpdate & details" }],
     });
+    expect(notion).toMatchObject({
+      status: "unknown",
+      isStale: true,
+      components: [],
+      incidents: [],
+    });
+    expect(github).toMatchObject({
+      status: "unknown",
+      isStale: true,
+      components: [{ id: "actions", status: "degraded_performance" }],
+    });
+    expect(dashboard.recentEvents[0]).toMatchObject({ serviceName: "Slack" });
     expect(dashboard.recentEvents[0]).not.toHaveProperty("body");
   });
 
@@ -110,8 +126,8 @@ describe("status API", () => {
       new Date("2026-10-23T05:00:00.000Z"),
     );
 
-    expect(dashboard.services.flatMap((item) => item.components)).toHaveLength(1);
-    expect(dashboard.services.flatMap((item) => item.incidents)).toHaveLength(1);
+    expect(dashboard.services.flatMap((service) => service.components)).toHaveLength(1);
+    expect(dashboard.services.flatMap((service) => service.incidents)).toHaveLength(1);
     expect(dashboard.recentEvents).toHaveLength(1);
   });
 
@@ -126,15 +142,19 @@ describe("status API", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("max-age=10");
-    expect(payload.services).toHaveLength(3);
-    expect(payload.services[0]).toMatchObject({
-      id: "slack",
+    expect(payload.services.map((service) => service.id)).toEqual(
+      SERVICES.map((service) => service.id),
+    );
+    const slack = payload.services.find((service) => service.id === slackService.id);
+    const github = payload.services.find((service) => service.id === githubService.id);
+    const cloudflare = payload.services.find((service) => service.id === cloudflareService.id);
+    expect(slack).toMatchObject({
       hasFetchError: true,
       isStale: true,
     });
-    expect(payload.services[0]).not.toHaveProperty("errorCode");
-    expect(payload.services[0]).not.toHaveProperty("lastCheckedAt");
-    expect(payload.services[0]).toMatchObject({
+    expect(slack).not.toHaveProperty("errorCode");
+    expect(slack).not.toHaveProperty("lastCheckedAt");
+    expect(slack).toMatchObject({
       incidents: [
         {
           title: "Message delivery delays",
@@ -143,8 +163,8 @@ describe("status API", () => {
         },
       ],
     });
-    expect(payload.services[0]).toMatchObject({ components: [] });
-    expect(payload.services[2]).toMatchObject({
+    expect(slack).toMatchObject({ components: [] });
+    expect(github).toMatchObject({
       components: [
         {
           id: "actions",
@@ -154,9 +174,44 @@ describe("status API", () => {
         },
       ],
     });
+    expect(cloudflare).toMatchObject({
+      id: cloudflareService.id,
+      name: "Cloudflare",
+      statusPageUrl: "https://www.cloudflarestatus.com/",
+    });
     expect(payload.recentEvents[0]).toMatchObject({ serviceName: "Slack", eventKind: "opened" });
     expect(payload.recentEvents[0]).not.toHaveProperty("body");
   });
+
+  it.each([
+    { environment: "production", seconds: 180, ageSeconds: 600, isStale: true },
+    { environment: "preview", seconds: 2_700, ageSeconds: 600, isStale: false },
+    { environment: "preview after 45 minutes", seconds: 2_700, ageSeconds: 2_701, isStale: true },
+  ])(
+    "uses the $environment freshness threshold in the API response and stale state",
+    async ({ seconds, ageSeconds, isStale }) => {
+      const checkedAt = new Date(Date.now() - ageSeconds * 1_000).toISOString();
+      const recentRows: DashboardRows = {
+        ...rows,
+        statusRows: rows.statusRows.map((row) => ({ ...row, lastSuccessAt: checkedAt })),
+      };
+      const reader = {
+        getDashboardRows: vi.fn<() => Promise<DashboardRows>>(async () => recentRows),
+      };
+      const app = createStatusRoutes(() => reader);
+      const response = await app.request(
+        "/api/status",
+        {},
+        { DB: {} as D1Database, FRESHNESS_WARNING_SECONDS: String(seconds) },
+      );
+      const payload = (await response.json()) as DashboardPayload;
+      const slack = payload.services.find((service) => service.id === slackService.id);
+
+      expect(response.status).toBe(200);
+      expect(payload.freshnessWarningSeconds).toBe(seconds);
+      expect(slack?.isStale).toBe(isStale);
+    },
+  );
 
   it("returns a generic unavailable response when D1 cannot be read", async () => {
     const reader = {

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { DashboardEvent } from "../domain";
+import type { DashboardEvent } from "../../domain";
 import { EventRow } from "./event-row";
 
 const labels = [

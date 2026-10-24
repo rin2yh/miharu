@@ -16,6 +16,7 @@ import { toPlainText } from "../../../domain/text";
 
 export interface StatusBindings {
   DB: D1Database;
+  FRESHNESS_WARNING_SECONDS?: string;
 }
 
 type DashboardReader = Pick<DashboardStore, "getDashboardRows">;
@@ -28,7 +29,10 @@ export function createStatusRoutes(storeFactory: StoreFactory = createD1Store) {
     try {
       const now = new Date();
       const rows = await storeFactory(context.env.DB).getDashboardRows();
-      return context.json(buildDashboardPayload(rows, now), 200, {
+      const freshnessWarningSeconds = parseFreshnessWarningSeconds(
+        context.env.FRESHNESS_WARNING_SECONDS,
+      );
+      return context.json(buildDashboardPayload(rows, now, freshnessWarningSeconds), 200, {
         "Cache-Control": "public, max-age=10, s-maxage=10, stale-while-revalidate=10",
         "X-Content-Type-Options": "nosniff",
       });
@@ -43,7 +47,11 @@ export function createStatusRoutes(storeFactory: StoreFactory = createD1Store) {
   return app;
 }
 
-export function buildDashboardPayload(rows: DashboardRows, now: Date): DashboardPayload {
+export function buildDashboardPayload(
+  rows: DashboardRows,
+  now: Date,
+  freshnessWarningSeconds = FRESHNESS_WARNING_SECONDS,
+): DashboardPayload {
   const statusById = new Map(rows.statusRows.map((row) => [row.serviceId, row]));
   const componentsByService = new Map<string, DashboardComponent[]>();
   const incidentsByService = new Map<string, DashboardIncident[]>();
@@ -97,14 +105,15 @@ export function buildDashboardPayload(rows: DashboardRows, now: Date): Dashboard
       lastSuccessAt,
       hasFetchError: Boolean(state?.lastErrorAt),
       isStale:
-        !Number.isFinite(checkedAt) ||
-        now.getTime() - checkedAt > FRESHNESS_WARNING_SECONDS * 1_000,
+        !Number.isFinite(checkedAt) || now.getTime() - checkedAt > freshnessWarningSeconds * 1_000,
       components: componentsByService.get(service.id) ?? [],
       incidents: incidentsByService.get(service.id) ?? [],
     } satisfies DashboardPayload["services"][number];
   });
 
-  const serviceNames = new Map(SERVICES.map((service) => [service.id, service.name]));
+  const serviceNames = new Map<string, string>(
+    SERVICES.map((service) => [service.id, service.name]),
+  );
   const recentEvents: DashboardEvent[] = rows.eventRows
     .filter((row) => serviceNames.has(row.serviceId))
     .slice(0, INCIDENT_HISTORY_DISPLAY_LIMIT)
@@ -125,8 +134,13 @@ export function buildDashboardPayload(rows: DashboardRows, now: Date): Dashboard
 
   return {
     generatedAt: now.toISOString(),
-    freshnessWarningSeconds: FRESHNESS_WARNING_SECONDS,
+    freshnessWarningSeconds,
     services,
     recentEvents,
   };
+}
+
+function parseFreshnessWarningSeconds(value: string | undefined): number {
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : FRESHNESS_WARNING_SECONDS;
 }
