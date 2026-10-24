@@ -30,6 +30,8 @@ pnpm exec wrangler secret put DISCORD_WEBHOOK_URL
 
 Previewでは通知を無効にし、ローカル開発でもWebhookへ送信しません。
 
+Discord通知はat-least-onceで配信します。Webhookへの送信成功後にD1の送信済み記録が失敗すると、リース期限後に同じ通知が再送されることがあります。
+
 ## ライセンス
 
 [MIT License](LICENSE)を適用しています。

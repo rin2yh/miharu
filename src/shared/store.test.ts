@@ -198,6 +198,7 @@ describe("createD1Store with local D1", () => {
         errorType: "TimeoutError",
         firstFailedAt: "2026-10-01T05:00:00.000Z",
         failureCount: 3,
+        attempts: 1,
       },
     ]);
     await expect(
@@ -208,13 +209,28 @@ describe("createD1Store with local D1", () => {
       ),
     ).resolves.toEqual([]);
 
-    await store.markCollectionAlertDelivered(failures[0]!.id, "2026-10-01T05:04:05.000Z");
-    await store.saveSuccess(service, snapshot(), "2026-10-01T05:04:00.000Z");
-    await store.saveSuccess(service, snapshot(), "2026-10-01T05:04:00.000Z");
+    await store.releaseCollectionAlert(failures[0]!.id, "2026-10-01T05:06:00.000Z");
+    await expect(
+      store.claimPendingCollectionAlerts(
+        "2026-10-01T05:05:00.000Z",
+        "2026-10-01T05:10:00.000Z",
+        20,
+      ),
+    ).resolves.toEqual([]);
+    const retry = await store.claimPendingCollectionAlerts(
+      "2026-10-01T05:06:00.000Z",
+      "2026-10-01T05:11:00.000Z",
+      20,
+    );
+    expect(retry).toMatchObject([{ id: failures[0]!.id, attempts: 2 }]);
+
+    await store.markCollectionAlertDelivered(retry[0]!.id, "2026-10-01T05:06:05.000Z");
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:07:00.000Z");
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:07:00.000Z");
 
     const recoveries = await store.claimPendingCollectionAlerts(
-      "2026-10-01T05:05:00.000Z",
-      "2026-10-01T05:10:00.000Z",
+      "2026-10-01T05:08:00.000Z",
+      "2026-10-01T05:13:00.000Z",
       20,
     );
     expect(recoveries).toMatchObject([

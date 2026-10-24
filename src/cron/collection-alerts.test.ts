@@ -4,6 +4,7 @@ import {
   createDiscordAlertSender,
   dispatchPendingCollectionAlerts,
   reportCriticalAlert,
+  type CollectionAlertSender,
 } from "./collection-alerts";
 
 function alertStore(overrides: Partial<CollectionAlertStore> = {}): CollectionAlertStore {
@@ -23,6 +24,7 @@ function alertStore(overrides: Partial<CollectionAlertStore> = {}): CollectionAl
           firstFailedAt: "2026-10-24T05:00:00.000Z",
           failureCount: 3,
           createdAt: "2026-10-24T05:02:00.000Z",
+          attempts: 1,
         },
       ],
     ),
@@ -94,7 +96,115 @@ describe("Discord collection alerts", () => {
     expect(store.markCollectionAlertDelivered).not.toHaveBeenCalled();
     expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
       "slack:failure:2026-10-24T05:02:00.000Z",
+      "2026-10-24T05:04:00.000Z",
     );
+  });
+
+  it("uses Discord's Retry-After delay for rate-limited deliveries", async () => {
+    const scheduledAt = "2026-10-24T05:03:00.000Z";
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse(scheduledAt));
+    const fetcher = vi.fn<typeof fetch>(
+      async () =>
+        new Response('{"retry_after":2}', {
+          status: 429,
+          headers: { "retry-after": "5" },
+        }),
+    );
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      enabled: true,
+      environment: "production",
+      fetcher,
+    });
+    const store = alertStore();
+
+    try {
+      await dispatchPendingCollectionAlerts(store, sender, scheduledAt, "production");
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
+      "slack:failure:2026-10-24T05:02:00.000Z",
+      "2026-10-24T05:03:05.000Z",
+    );
+  });
+
+  it("increases the delay after repeated delivery failures", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      enabled: true,
+      environment: "production",
+      fetcher,
+    });
+    const store = alertStore({
+      claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
+        async () => [
+          {
+            id: "slack:failure:2026-10-24T05:02:00.000Z",
+            kind: "failure",
+            serviceId: "slack",
+            serviceName: "Slack",
+            errorCode: "timeout",
+            errorType: "TimeoutError",
+            firstFailedAt: "2026-10-24T05:00:00.000Z",
+            failureCount: 3,
+            createdAt: "2026-10-24T05:02:00.000Z",
+            attempts: 3,
+          },
+        ],
+      ),
+    });
+
+    await dispatchPendingCollectionAlerts(store, sender, "2026-10-24T05:03:00.000Z", "production");
+
+    expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
+      "slack:failure:2026-10-24T05:02:00.000Z",
+      "2026-10-24T05:07:00.000Z",
+    );
+  });
+
+  it("limits each dispatch to eight alerts and runs at most four service queues at once", async () => {
+    const alerts = Array.from({ length: 10 }, (_, index) => ({
+      id: `service-${index}:failure`,
+      kind: "failure" as const,
+      serviceId: `service-${index}`,
+      serviceName: `Service ${index}`,
+      errorCode: "timeout",
+      errorType: "TimeoutError",
+      firstFailedAt: "2026-10-24T05:00:00.000Z",
+      failureCount: 3,
+      createdAt: `2026-10-24T05:02:${String(index).padStart(2, "0")}.000Z`,
+      attempts: 1,
+    }));
+    let activeSends = 0;
+    let maxActiveSends = 0;
+    const send = vi.fn<CollectionAlertSender["send"]>(async () => {
+      activeSends += 1;
+      maxActiveSends = Math.max(maxActiveSends, activeSends);
+      await Promise.resolve();
+      activeSends -= 1;
+    });
+    const sender: CollectionAlertSender = {
+      enabled: true,
+      send,
+    };
+    const store = alertStore({
+      claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
+        async (_now, _leaseUntil, limit) => alerts.slice(0, limit),
+      ),
+    });
+
+    await dispatchPendingCollectionAlerts(store, sender, "2026-10-24T05:03:00.000Z", "production");
+
+    expect(store.claimPendingCollectionAlerts).toHaveBeenCalledWith(
+      "2026-10-24T05:03:00.000Z",
+      "2026-10-24T05:08:00.000Z",
+      8,
+    );
+    expect(send).toHaveBeenCalledTimes(8);
+    expect(maxActiveSends).toBeLessThanOrEqual(4);
   });
 
   it("does not send when alerts are disabled or the webhook is missing", async () => {

@@ -84,4 +84,5 @@ export interface CollectionAlertNotificationRow {
   firstFailedAt: string;
   failureCount: number;
   createdAt: string;
+  attempts: number;
 }

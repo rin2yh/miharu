@@ -47,7 +47,7 @@ export interface CollectionAlertStore extends CollectionStore {
     limit: number,
   ): Promise<CollectionAlertNotificationRow[]>;
   markCollectionAlertDelivered(id: string, deliveredAt: string): Promise<void>;
-  releaseCollectionAlert(id: string): Promise<void>;
+  releaseCollectionAlert(id: string, nextAttemptAt: string): Promise<void>;
 }
 
 export function createD1Store(database: D1Database): DashboardStore & CollectionAlertStore {
@@ -286,15 +286,17 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
             SELECT id FROM collection_alert_notifications
             WHERE delivered_at IS NULL
               AND (lease_until IS NULL OR lease_until <= ?)
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
             ORDER BY created_at, id
             LIMIT ?
           )
           RETURNING
             id, kind, service_id AS serviceId, service_name AS serviceName,
             error_code AS errorCode, first_failed_at AS firstFailedAt,
-            error_type AS errorType, failure_count AS failureCount, created_at AS createdAt`,
+            error_type AS errorType, failure_count AS failureCount, created_at AS createdAt,
+            attempts`,
         )
-        .bind(leaseUntil, now, limit)
+        .bind(leaseUntil, now, now, limit)
         .all<CollectionAlertNotificationRow>();
       return result.results;
     },
@@ -310,14 +312,14 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
         .run();
     },
 
-    async releaseCollectionAlert(id) {
+    async releaseCollectionAlert(id, nextAttemptAt) {
       await database
         .prepare(
           `UPDATE collection_alert_notifications
-          SET lease_until = NULL
+          SET lease_until = NULL, next_attempt_at = ?
           WHERE id = ? AND delivered_at IS NULL`,
         )
-        .bind(id)
+        .bind(nextAttemptAt, id)
         .run();
     },
 
