@@ -20,6 +20,10 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
+## カスタムOxlintルール
+
+`pnpm lint` では、テーブル駆動化を検討できるVitestテストを警告する `miharu/prefer-table-driven-tests` ルールも実行します。検出条件と制限は[ルールのドキュメント](docs/lint-rules/prefer-table-driven-tests.md)を参照してください。
+
 ## ライセンス
 
 [MIT License](LICENSE)を適用しています。
