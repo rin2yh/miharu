@@ -27,11 +27,7 @@ describe("service card icons", () => {
 
     expect(iconWrapper?.querySelector("svg path")).toHaveAttribute("d", icon.path);
     expect(iconWrapper).toHaveStyle({ color: `#${icon.hex}` });
-    if (invertInDark) {
-      expect(iconWrapper).toHaveClass("dark:[&>svg]:invert");
-    } else {
-      expect(iconWrapper).not.toHaveClass("dark:[&>svg]:invert");
-    }
+    expect(iconWrapper?.classList.contains("dark:[&>svg]:invert")).toBe(invertInDark);
   });
 
   it("uses a theme-colored SVG for ChatGPT", async () => {
