@@ -17,21 +17,6 @@ const nodeFields = {
   UnaryExpression: ["operator", "prefix", "argument"],
 };
 
-const mutatingMethods = new Set([
-  "add",
-  "clear",
-  "copyWithin",
-  "delete",
-  "fill",
-  "pop",
-  "push",
-  "reverse",
-  "set",
-  "shift",
-  "sort",
-  "splice",
-  "unshift",
-]);
 const unsupported = Symbol("unsupported AST");
 
 function variableFor(identifier, sourceCode) {
@@ -98,11 +83,6 @@ function astShape(node, state, sourceCode, expectBindings) {
   const fields = nodeFields[node.type];
   if (!fields || (node.type === "UnaryExpression" && node.operator === "delete")) {
     return unsupported;
-  }
-  if (node.type === "CallExpression" && node.callee.type === "MemberExpression") {
-    const property = node.callee.property;
-    const name = property.type === "Identifier" ? property.name : property.value;
-    if (mutatingMethods.has(name)) return unsupported;
   }
   if (node.type === "CallExpression" && isImportedCall(node, expectBindings, sourceCode)) {
     state.expectCalls++;

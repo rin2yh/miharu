@@ -118,11 +118,20 @@ const examples: Example[] = [
   { name: "ignores a shadowed it import", source: shadowed("it") },
   { name: "ignores a shadowed describe import", source: shadowed("describe") },
   {
-    name: "ignores a collection mutation",
+    name: "reports arbitrary calls with possible side effects",
+    source: pair(
+      call("first", "() => expect(next()).toBe(1)"),
+      call("second", "() => expect(next()).toBe(2)"),
+    ),
+    target: call("second", "() => expect(next()).toBe(2)"),
+  },
+  {
+    name: "does not infer side effects from collection method names",
     source: pair(
       call("first", '() => expect(queue.shift()).toBe("a")'),
       call("second", '() => expect(queue.shift()).toBe("b")'),
     ),
+    target: call("second", '() => expect(queue.shift()).toBe("b")'),
   },
   {
     name: "ignores update expressions",
