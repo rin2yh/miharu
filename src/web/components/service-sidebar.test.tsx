@@ -5,8 +5,8 @@ import { ServiceSidebar } from "./service-sidebar";
 
 describe("ServiceSidebar", () => {
   it("selects all services from a partial selection and clears all from the selected state", () => {
-    const onSelect = vi.fn();
-    const onQueryChange = vi.fn();
+    const onSelect = vi.fn<(serviceIds: string[]) => void>();
+    const onQueryChange = vi.fn<(query: string) => void>();
     const allServiceIds = SERVICES.map(({ id }) => id);
     const { rerender } = render(
       <ServiceSidebar
@@ -52,9 +52,9 @@ describe("ServiceSidebar", () => {
     render(
       <ServiceSidebar
         selectedServiceIds={["github"]}
-        onSelect={vi.fn()}
+        onSelect={vi.fn<(serviceIds: string[]) => void>()}
         query=""
-        onQueryChange={vi.fn()}
+        onQueryChange={vi.fn<(query: string) => void>()}
       />,
     );
     const sidebar = screen.getByRole("complementary", { name: "サービス選択" });
