@@ -7,7 +7,7 @@ import {
 import {
   asRecord,
   boundedText,
-  isIncidentActive,
+  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   requiredText,
@@ -38,7 +38,7 @@ export async function parseOpenAIChatGPTIncidents(
     .filter((incident): incident is NormalizedIncident => incident !== null);
   const listedIncidentIds = new Set(incidents.map((incident) => incident.id));
   const omittedActiveIncidents = knownActiveIncidents.filter(
-    (incident) => incident.active && !listedIncidentIds.has(incident.id),
+    (incident) => incident.lifecycle !== "resolved" && !listedIncidentIds.has(incident.id),
   );
   const recheckedIncidents = await Promise.all(
     selectOmittedIncidentsForRecheck(omittedActiveIncidents).map((incident) =>
@@ -109,7 +109,7 @@ function parseOpenAIIncident(
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url: incidentUrl,
-    active: isIncidentActive(state),
+    lifecycle: incidentLifecycleForState(state),
   };
 }
 

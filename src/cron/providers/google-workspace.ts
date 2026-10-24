@@ -71,17 +71,17 @@ export async function fetchGoogleWorkspaceSnapshot(
   const products = parseProducts(catalog.products);
   const productNames = new Map(products.map(({ id, name }) => [id, name]));
   const historyIncidents = history.map((value) => parseIncident(value, service, productNames));
-  const knownActiveIncidents = await context.getActiveIncidents();
+  const knownActiveIncidents = await context.getUnresolvedIncidents();
   const incidentsById = new Map(historyIncidents.map((incident) => [incident.id, incident]));
   const knownActiveById = new Map(knownActiveIncidents.map((incident) => [incident.id, incident]));
 
   // The history feed can omit older incidents. Preserve them as unverifiable instead of
   // implying recovery or treating their last reported impact as current.
   const omittedKnownActive = knownActiveIncidents.filter(
-    (incident) => incident.active && !incidentsById.has(incident.id),
+    (incident) => incident.lifecycle !== "resolved" && !incidentsById.has(incident.id),
   );
   const incidents: ParsedIncident[] = historyIncidents.filter(
-    (incident) => incident.active || knownActiveById.has(incident.id),
+    (incident) => incident.lifecycle !== "resolved" || knownActiveById.has(incident.id),
   );
   for (const incident of omittedKnownActive) {
     incidents.push(unverifiableIncident(incident));
@@ -99,17 +99,17 @@ export async function fetchGoogleWorkspaceSnapshot(
   >();
   for (const incident of incidents) {
     for (const id of incident.componentIds) {
-      if (incident.active) {
-        const status = statusForActiveIncident(incident);
-        addActiveProductStatus(
-          activeByProductId,
-          id,
-          status,
-          incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
-            ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
-            : (incident.statusImpact ?? "unknown"),
-        );
-      }
+      if (incident.lifecycle === "resolved") continue;
+      const status =
+        incident.lifecycle === "unverified" ? "unknown" : statusForActiveIncident(incident);
+      addActiveProductStatus(
+        activeByProductId,
+        id,
+        status,
+        incident.lifecycle === "unverified"
+          ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+          : (incident.statusImpact ?? "unknown"),
+      );
     }
   }
 
@@ -133,7 +133,7 @@ export async function fetchGoogleWorkspaceSnapshot(
     };
   });
 
-  const activeIncidents = incidents.filter((incident) => incident.active);
+  const activeIncidents = incidents.filter((incident) => incident.lifecycle === "active");
   const activeStatuses = activeIncidents.map(statusForActiveIncident);
   const incidentStatus = activeIncidents.length ? combineActiveStatuses(activeStatuses) : "unknown";
   const status = incidentStatus;
@@ -248,7 +248,7 @@ function parseIncident(
     officialCreatedAt,
     officialUpdatedAt,
     url: incidentUrl,
-    active,
+    lifecycle: active ? "active" : "resolved",
     statusImpact,
   };
 }
@@ -286,9 +286,7 @@ function parseAffectedProducts(
 function unverifiableIncident(incident: NormalizedIncident): ParsedIncident {
   return {
     ...incident,
-    state: "unknown",
-    sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-    active: true,
+    lifecycle: "unverified",
     statusImpact: incident.sourceImpact,
   };
 }

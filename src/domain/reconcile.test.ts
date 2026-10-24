@@ -21,7 +21,7 @@ function incident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncide
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T04:55:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
-    active: true,
+    lifecycle: "active",
     ...overrides,
   };
 }
@@ -32,7 +32,7 @@ describe("incident reconciliation", () => {
     expect(result.changedIncidents).toHaveLength(1);
     expect(result.changedIncidents[0]).toMatchObject({
       revision: 1,
-      active: true,
+      lifecycle: "active",
       firstSeenAt: observedAt,
     });
     expect(result.events).toHaveLength(1);
@@ -100,13 +100,13 @@ describe("incident reconciliation", () => {
     const recovered = incident({
       state: "resolved",
       sourceStatus: "resolved",
-      active: false,
+      lifecycle: "resolved",
       officialUpdatedAt: "2026-10-23T05:15:00.000Z",
       body: "The issue has been resolved.",
     });
     const result = reconcileIncidents("github", existing, [recovered], "2026-10-23T05:16:00.000Z");
     expect(result.changedIncidents[0]).toMatchObject({
-      active: false,
+      lifecycle: "resolved",
       resolvedDetectedAt: "2026-10-23T05:16:00.000Z",
     });
     expect(result.events[0]).toMatchObject({
@@ -126,7 +126,7 @@ describe("incident reconciliation", () => {
     const detectedAt = "2026-10-23T05:10:00.000Z";
     const result = reconcileIncidents("slack", existing, [], detectedAt);
     expect(result.changedIncidents[0]).toMatchObject({
-      active: false,
+      lifecycle: "resolved",
       sourceStatus: "not_listed",
       resolvedDetectedAt: detectedAt,
     });
@@ -145,16 +145,91 @@ describe("incident reconciliation", () => {
     expect(result.events).toEqual([]);
   });
 
+  it("keeps an unverified incident without recording a recovery", () => {
+    const active = reconcileIncidents(
+      "google-workspace",
+      [],
+      [incident()],
+      observedAt,
+    ).changedIncidents;
+    const result = reconcileIncidents(
+      "google-workspace",
+      active,
+      [incident({ lifecycle: "unverified" })],
+      "2026-10-23T05:05:00.000Z",
+      false,
+    );
+
+    expect(result.changedIncidents).toMatchObject([
+      { lifecycle: "unverified", resolvedDetectedAt: null, revision: 2 },
+    ]);
+    expect(result.events).toEqual([]);
+  });
+
+  it("reconfirms an unverified incident without creating a duplicate open event", () => {
+    const active = reconcileIncidents(
+      "google-workspace",
+      [],
+      [incident()],
+      observedAt,
+    ).changedIncidents;
+    const unverified = reconcileIncidents(
+      "google-workspace",
+      active,
+      [incident({ lifecycle: "unverified" })],
+      "2026-10-23T05:05:00.000Z",
+      false,
+    ).changedIncidents;
+    const result = reconcileIncidents(
+      "google-workspace",
+      unverified,
+      [incident()],
+      "2026-10-23T05:10:00.000Z",
+      false,
+    );
+
+    expect(result.changedIncidents).toMatchObject([{ lifecycle: "active", revision: 3 }]);
+    expect(result.events).toEqual([]);
+  });
+
+  it("records recovery when an unverified incident is confirmed resolved", () => {
+    const active = reconcileIncidents(
+      "google-workspace",
+      [],
+      [incident()],
+      observedAt,
+    ).changedIncidents;
+    const unverified = reconcileIncidents(
+      "google-workspace",
+      active,
+      [incident({ lifecycle: "unverified" })],
+      "2026-10-23T05:05:00.000Z",
+      false,
+    ).changedIncidents;
+    const result = reconcileIncidents(
+      "google-workspace",
+      unverified,
+      [incident({ state: "resolved", sourceStatus: "resolved", lifecycle: "resolved" })],
+      "2026-10-23T05:10:00.000Z",
+      false,
+    );
+
+    expect(result.changedIncidents).toMatchObject([
+      { lifecycle: "resolved", resolvedDetectedAt: "2026-10-23T05:10:00.000Z", revision: 3 },
+    ]);
+    expect(result.events).toMatchObject([{ eventKind: "resolved" }]);
+  });
+
   it("does not add historical events for resolved incidents first seen in an incomplete list", () => {
     const result = reconcileIncidents(
       "chatgpt",
       [],
-      [incident({ state: "resolved", sourceStatus: "resolved", active: false })],
+      [incident({ state: "resolved", sourceStatus: "resolved", lifecycle: "resolved" })],
       observedAt,
       false,
     );
 
-    expect(result.changedIncidents).toMatchObject([{ active: false, revision: 1 }]);
+    expect(result.changedIncidents).toMatchObject([{ lifecycle: "resolved", revision: 1 }]);
     expect(result.events).toEqual([]);
   });
 
@@ -163,7 +238,7 @@ describe("incident reconciliation", () => {
     const recovered = incident({
       state: "resolved",
       sourceStatus: "resolved",
-      active: false,
+      lifecycle: "resolved",
       officialUpdatedAt: "2026-10-23T05:15:00.000Z",
       body: "The issue has been resolved.",
     });
@@ -175,7 +250,10 @@ describe("incident reconciliation", () => {
       false,
     );
 
-    expect(result.changedIncidents[0]).toMatchObject({ active: false, sourceStatus: "resolved" });
+    expect(result.changedIncidents[0]).toMatchObject({
+      lifecycle: "resolved",
+      sourceStatus: "resolved",
+    });
     expect(result.events[0]).toMatchObject({
       eventKind: "resolved",
       officialEventAt: "2026-10-23T05:15:00.000Z",
@@ -186,7 +264,7 @@ describe("incident reconciliation", () => {
     const resolved = reconcileIncidents(
       "github",
       [],
-      [incident({ active: false, state: "resolved" })],
+      [incident({ lifecycle: "resolved", state: "resolved" })],
       observedAt,
     ).changedIncidents;
     const reopened = reconcileIncidents(

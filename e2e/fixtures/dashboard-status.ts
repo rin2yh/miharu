@@ -64,6 +64,7 @@ export function createDashboardStatusFixture(): DashboardStatusFixture {
               officialCreatedAt: checkedAt,
               officialUpdatedAt: checkedAt,
               url: incidentUrl,
+              lifecycle: "active",
             },
           ],
         },

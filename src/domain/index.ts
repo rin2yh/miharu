@@ -15,6 +15,7 @@ export type IncidentState =
   | "scheduled"
   | "resolved"
   | "unknown";
+export type IncidentLifecycle = "active" | "resolved" | "unverified";
 export type IncidentKind = "incident" | "maintenance";
 export type IncidentEventKind = "opened" | "updated" | "resolved";
 export const INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS = "recheck_unavailable";
@@ -41,7 +42,7 @@ export interface NormalizedIncident {
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
   url: string | null;
-  active: boolean;
+  lifecycle: IncidentLifecycle;
 }
 
 export interface KnownIncident extends NormalizedIncident {
@@ -73,6 +74,7 @@ export interface DashboardIncident {
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
   url: string | null;
+  lifecycle: IncidentLifecycle;
 }
 
 export interface DashboardService {

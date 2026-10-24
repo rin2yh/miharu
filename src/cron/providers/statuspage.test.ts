@@ -29,7 +29,7 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
 }
 
 function providerContext(fetcher: FetchLike): ProviderContext {
-  return { signal: abortSignal, fetcher, getActiveIncidents: async () => [] };
+  return { signal: abortSignal, fetcher, getUnresolvedIncidents: async () => [] };
 }
 
 const github = getService("github", "statuspage");
@@ -137,7 +137,7 @@ describe("Statuspage provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       id: "inc-1",
       state: "monitoring",
-      active: true,
+      lifecycle: "active",
       sourceImpact: "critical",
       severityStatus: "major_outage",
       body: "Mitigation is in place.\nNext line.",
@@ -176,7 +176,7 @@ describe("Statuspage provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       officialUpdatedAt: "2026-10-23T04:01:17.000Z",
       severityStatus: "major_outage",
-      active: true,
+      lifecycle: "active",
       componentIds: [],
     });
   });

@@ -1,6 +1,7 @@
 import type {
   IncidentEventKind,
   IncidentKind,
+  IncidentLifecycle,
   IncidentState,
   NormalizedStatus,
 } from "../src/domain";
@@ -41,7 +42,7 @@ export interface IncidentRow {
   officialCreatedAt: string | null;
   officialUpdatedAt: string | null;
   url: string | null;
-  active: number;
+  lifecycle: IncidentLifecycle;
   firstSeenAt: string;
   resolvedDetectedAt: string | null;
   fingerprint: string;
@@ -69,6 +70,6 @@ export interface IncidentEventRow {
 export interface DashboardRows {
   statusRows: ServiceStatusRow[];
   componentRows: ServiceComponentRow[];
-  activeRows: IncidentRow[];
+  incidentRows: IncidentRow[];
   eventRows: IncidentEventRow[];
 }

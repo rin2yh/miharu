@@ -69,7 +69,7 @@ export function buildDashboardPayload(
     componentsByService.set(row.serviceId, list);
   }
 
-  for (const row of rows.activeRows) {
+  for (const row of rows.incidentRows) {
     if (!SERVICES.some((service) => service.id === row.serviceId)) continue;
     const list = incidentsByService.get(row.serviceId) ?? [];
     list.push({
@@ -87,6 +87,7 @@ export function buildDashboardPayload(
       officialCreatedAt: row.officialCreatedAt,
       officialUpdatedAt: row.officialUpdatedAt,
       url: row.url,
+      lifecycle: row.lifecycle,
     });
     incidentsByService.set(row.serviceId, list);
   }

@@ -18,7 +18,7 @@ export async function fetchOpenAIChatGPTSnapshot(
   const incidents = Object.hasOwn(data, "incidents")
     ? parseSummaryIncidents(data.incidents)
     : await fetchIncidentList(service, signal, fetcher);
-  const knownActiveIncidents = await context.getActiveIncidents();
+  const knownActiveIncidents = await context.getUnresolvedIncidents();
   const normalizedIncidents = await parseOpenAIChatGPTIncidents(
     service,
     incidents,

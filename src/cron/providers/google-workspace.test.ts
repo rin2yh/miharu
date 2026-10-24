@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../domain";
+import type { KnownIncident } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
 import type { ProviderContext } from "../provider-context";
 import { fetchGoogleWorkspaceSnapshot } from "./google-workspace";
@@ -42,15 +42,15 @@ function providerContext(
     }
     return new Response("Unavailable", { status: 503 });
   });
-  const getActiveIncidents = vi.fn<ProviderContext["getActiveIncidents"]>(
+  const getUnresolvedIncidents = vi.fn<ProviderContext["getUnresolvedIncidents"]>(
     async () => knownIncidents,
   );
   const context: ProviderContext = {
     signal: new AbortController().signal,
     fetcher,
-    getActiveIncidents,
+    getUnresolvedIncidents,
   };
-  return { context, fetcher, getActiveIncidents };
+  return { context, fetcher, getUnresolvedIncidents };
 }
 
 function activeIncident(impact: string): Record<string, unknown> {
@@ -70,7 +70,7 @@ function fetchSnapshot(
   failHistory = false,
   catalogPayload: unknown = productCatalog,
 ) {
-  const { context, fetcher, getActiveIncidents } = providerContext(
+  const { context, fetcher, getUnresolvedIncidents } = providerContext(
     history,
     knownIncidents,
     failHistory,
@@ -79,7 +79,7 @@ function fetchSnapshot(
   return {
     result: fetchGoogleWorkspaceSnapshot(googleWorkspaceService, context),
     fetcher,
-    getActiveIncidents,
+    getUnresolvedIncidents,
   };
 }
 
@@ -112,7 +112,7 @@ describe("Google Workspace provider", () => {
   ])(
     "normalizes an active $impact incident across multiple products",
     async ({ impact, expectedStatus, expectedComponentStatus, expectedSeverityStatus }) => {
-      const { result, fetcher, getActiveIncidents } = fetchSnapshot([activeIncident(impact)]);
+      const { result, fetcher, getUnresolvedIncidents } = fetchSnapshot([activeIncident(impact)]);
       const snapshot = await result;
       const incident = snapshot.incidents[0];
 
@@ -124,7 +124,7 @@ describe("Google Workspace provider", () => {
         id: "vagmms1y6yRxwg6RMQZp",
         state: "investigating",
         sourceImpact: impact,
-        active: true,
+        lifecycle: "active",
         componentIds: [
           "prPt2Yra2CbGsbEm9cpC",
           "n5hVexuq1PM9onY9qrmo",
@@ -138,7 +138,7 @@ describe("Google Workspace provider", () => {
       });
       expect(fetcher).toHaveBeenCalledWith(googleWorkspaceService.productsUrl, expect.any(Object));
       expect(fetcher).toHaveBeenCalledWith(googleWorkspaceService.incidentsUrl, expect.any(Object));
-      expect(getActiveIncidents).toHaveBeenCalledOnce();
+      expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
       expect(snapshot.incidentListComplete).toBe(false);
       expect(snapshot.components?.find(({ id }) => id === "prPt2Yra2CbGsbEm9cpC")?.status).toBe(
         expectedComponentStatus,
@@ -152,9 +152,9 @@ describe("Google Workspace provider", () => {
       name: "omitted from the history",
       history: () => [],
       previouslyUnverifiable: false,
-      expectedState: "unknown",
-      expectedSourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-      expectedActive: true,
+      expectedState: "investigating",
+      expectedSourceStatus: "SERVICE_DISRUPTION",
+      expectedLifecycle: "unverified",
       expectedServiceStatus: "unknown",
       expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
       expectedDriveStatus: "unknown",
@@ -165,7 +165,7 @@ describe("Google Workspace provider", () => {
       previouslyUnverifiable: true,
       expectedState: "investigating",
       expectedSourceStatus: "SERVICE_OUTAGE",
-      expectedActive: true,
+      expectedLifecycle: "active",
       expectedServiceStatus: "major_outage",
       expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
       expectedDriveStatus: "major_outage",
@@ -176,7 +176,7 @@ describe("Google Workspace provider", () => {
       previouslyUnverifiable: true,
       expectedState: "resolved",
       expectedSourceStatus: "AVAILABLE",
-      expectedActive: false,
+      expectedLifecycle: "resolved",
       expectedServiceStatus: "unknown",
       expectedOfficialUpdatedAt: "2026-05-31T04:24:00.000Z",
       expectedDriveStatus: "unknown",
@@ -188,7 +188,7 @@ describe("Google Workspace provider", () => {
       previouslyUnverifiable,
       expectedState,
       expectedSourceStatus,
-      expectedActive,
+      expectedLifecycle,
       expectedServiceStatus,
       expectedOfficialUpdatedAt,
       expectedDriveStatus,
@@ -200,8 +200,7 @@ describe("Google Workspace provider", () => {
         ...priorIncident,
         ...(previouslyUnverifiable
           ? {
-              state: "unknown" as const,
-              sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+              lifecycle: "unverified" as const,
             }
           : {}),
         lastObservedAt: "2026-01-01T00:00:00.000Z",
@@ -214,7 +213,7 @@ describe("Google Workspace provider", () => {
       expect(currentIncident).toMatchObject({
         state: expectedState,
         sourceStatus: expectedSourceStatus,
-        active: expectedActive,
+        lifecycle: expectedLifecycle,
       });
       expect(snapshot.status).toBe(expectedServiceStatus);
       expect(fetcher).toHaveBeenCalledTimes(2);

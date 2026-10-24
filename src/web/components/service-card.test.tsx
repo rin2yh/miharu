@@ -87,6 +87,29 @@ describe("service card incidents", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("labels an unverified incident without presenting it as recovered", async () => {
+    render(
+      <App
+        load={async () =>
+          payload([
+            service({
+              incidents: [
+                incident({
+                  title: "History entry missing",
+                  lifecycle: "unverified",
+                }),
+              ],
+            }),
+          ])
+        }
+      />,
+    );
+
+    const incidentItem = await screen.findByRole("listitem", { name: "History entry missing" });
+    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).queryByText("復旧")).not.toBeInTheDocument();
+  });
+
   it("reveals an incident's official details when its summary is opened", async () => {
     render(<App load={async () => payload([service({ incidents: [incident()] })])} />);
 

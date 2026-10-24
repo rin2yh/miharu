@@ -62,7 +62,11 @@ export function reconcileIncidents(
     const fingerprint = incidentFingerprint(snapshot);
 
     if (!old) {
-      if (!snapshot.active && !incidentListComplete) {
+      if (snapshot.lifecycle === "unverified") {
+        changedIncidents.push(makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint));
+        continue;
+      }
+      if (snapshot.lifecycle === "resolved" && !incidentListComplete) {
         changedIncidents.push(
           makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint, detectedAt),
         );
@@ -71,7 +75,7 @@ export function reconcileIncidents(
       let record = makeRecord(serviceId, snapshot, detectedAt, 1, fingerprint);
       changedIncidents.push(record);
       events.push(makeEvent(record, "opened", 1, snapshot.officialCreatedAt));
-      if (!snapshot.active) {
+      if (snapshot.lifecycle === "resolved") {
         record = {
           ...record,
           revision: 2,
@@ -85,23 +89,26 @@ export function reconcileIncidents(
     }
 
     const contentChanged = fingerprint !== old.fingerprint;
+    const lifecycleChanged = snapshot.lifecycle !== old.lifecycle;
     const observationChanged =
       contentChanged ||
+      lifecycleChanged ||
       snapshot.officialCreatedAt !== old.officialCreatedAt ||
       snapshot.officialUpdatedAt !== old.officialUpdatedAt ||
       snapshot.url !== old.url;
     if (!observationChanged) continue;
 
-    const reopened = !old.active && snapshot.active;
-    const resolved = old.active && !snapshot.active;
-    const revision = old.revision + (contentChanged || reopened || resolved ? 1 : 0);
+    const reopened = old.lifecycle === "resolved" && snapshot.lifecycle === "active";
+    const resolved = old.lifecycle !== "resolved" && snapshot.lifecycle === "resolved";
+    const revision =
+      old.revision + (contentChanged || lifecycleChanged || reopened || resolved ? 1 : 0);
     const record = makeRecord(
       serviceId,
       snapshot,
       old.firstSeenAt,
       revision,
       fingerprint,
-      snapshot.active ? null : (old.resolvedDetectedAt ?? detectedAt),
+      snapshot.lifecycle === "resolved" ? (old.resolvedDetectedAt ?? detectedAt) : null,
       detectedAt,
     );
     changedIncidents.push(record);
@@ -114,11 +121,11 @@ export function reconcileIncidents(
   }
 
   for (const old of previous) {
-    if (!old.active || incomingIds.has(old.id)) continue;
+    if (old.lifecycle === "resolved" || incomingIds.has(old.id)) continue;
     if (!incidentListComplete) continue;
     const snapshot: NormalizedIncident = {
       ...old,
-      active: false,
+      lifecycle: "resolved",
       state: "resolved",
       sourceStatus: "not_listed",
     };
@@ -191,7 +198,7 @@ function makeEvent(
   };
 }
 
-function incidentFingerprint(incident: NormalizedIncident): string {
+export function incidentFingerprint(incident: NormalizedIncident): string {
   return stableFallbackId("incident-content", [
     incident.title,
     incident.body,
@@ -203,6 +210,6 @@ function incidentFingerprint(incident: NormalizedIncident): string {
     incident.severityStatus,
     [...incident.componentIds].toSorted().join("\u001e"),
     [...incident.components].toSorted().join("\u001e"),
-    String(incident.active),
+    String(incident.lifecycle !== "resolved"),
   ]);
 }
