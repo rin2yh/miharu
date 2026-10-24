@@ -123,7 +123,7 @@ export function createD1Store(database: D1Database): DashboardStore {
               last_error_at = NULL,
               error_code = NULL
             WHERE service_status.last_checked_at IS NULL
-              OR service_status.last_checked_at <= excluded.last_checked_at`,
+              OR service_status.last_checked_at < excluded.last_checked_at`,
           )
           .bind(
             service.id,
@@ -150,20 +150,21 @@ export function createD1Store(database: D1Database): DashboardStore {
 
     async saveFailure(service, observedAt, errorCode) {
       const failure = failureMetadata(observedAt, errorCode);
-      await database
-        .prepare(
-          `INSERT INTO service_status (
+      await database.batch([
+        database
+          .prepare(
+            `INSERT INTO service_status (
             service_id, status, last_checked_at, last_error_at, error_code
           ) VALUES (?, 'unknown', ?, ?, ?)
           ON CONFLICT(service_id) DO UPDATE SET
             last_checked_at = excluded.last_checked_at,
             last_error_at = excluded.last_error_at,
             error_code = excluded.error_code
-          WHERE service_status.last_checked_at IS NULL
-            OR service_status.last_checked_at <= excluded.last_checked_at`,
-        )
-        .bind(service.id, failure.lastCheckedAt, failure.lastErrorAt, failure.errorCode)
-        .run();
+            WHERE service_status.last_checked_at IS NULL
+              OR service_status.last_checked_at < excluded.last_checked_at`,
+          )
+          .bind(service.id, failure.lastCheckedAt, failure.lastErrorAt, failure.errorCode),
+      ]);
     },
 
     async getDashboardRows() {
