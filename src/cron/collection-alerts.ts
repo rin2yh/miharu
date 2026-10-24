@@ -145,7 +145,7 @@ async function dispatchAlert(
       environment,
     });
     try {
-      await store.releaseCollectionAlert(alert.id, getNextAttemptAt(alert, error, now));
+      await store.releaseCollectionAlert(alert.id, getNextAttemptAt(alert, error));
     } catch (releaseError) {
       await reportCriticalAlert(sender, {
         kind: "persistence_failure",
@@ -176,18 +176,15 @@ async function dispatchAlert(
   }
 }
 
-function getNextAttemptAt(
-  alert: CollectionAlertNotificationRow,
-  error: unknown,
-  now: string,
-): string {
+function getNextAttemptAt(alert: CollectionAlertNotificationRow, error: unknown): string {
+  const attemptedAt = Date.now();
   if (error instanceof DiscordDeliveryError && error.retryAfterMs !== undefined) {
-    return new Date(Date.now() + Math.max(1_000, error.retryAfterMs)).toISOString();
+    return new Date(attemptedAt + Math.max(1_000, error.retryAfterMs)).toISOString();
   }
 
   const exponent = Math.min(Math.max(alert.attempts - 1, 0), 10);
   const retryDelayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** exponent);
-  return new Date(Date.parse(now) + retryDelayMs).toISOString();
+  return new Date(attemptedAt + retryDelayMs).toISOString();
 }
 
 async function getRetryAfterMs(response: Response): Promise<number | undefined> {

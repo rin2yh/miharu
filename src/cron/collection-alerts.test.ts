@@ -70,7 +70,7 @@ describe("Discord collection alerts", () => {
     );
   });
 
-  it("releases failed deliveries for a later retry and records a structured error", async () => {
+  it("schedules failed deliveries from the attempt time and records a structured error", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
@@ -80,6 +80,7 @@ describe("Discord collection alerts", () => {
     });
     const store = alertStore();
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-24T05:10:00.000Z"));
 
     try {
       await dispatchPendingCollectionAlerts(
@@ -91,12 +92,13 @@ describe("Discord collection alerts", () => {
       expect(log.mock.calls[0]?.[0]).toContain('"event":"discord_notification_failed"');
     } finally {
       log.mockRestore();
+      nowSpy.mockRestore();
     }
 
     expect(store.markCollectionAlertDelivered).not.toHaveBeenCalled();
     expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
       "slack:failure:2026-10-24T05:02:00.000Z",
-      "2026-10-24T05:04:00.000Z",
+      "2026-10-24T05:11:00.000Z",
     );
   });
 
@@ -131,6 +133,8 @@ describe("Discord collection alerts", () => {
   });
 
   it("increases the delay after repeated delivery failures", async () => {
+    const scheduledAt = "2026-10-24T05:03:00.000Z";
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse(scheduledAt));
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
@@ -157,7 +161,11 @@ describe("Discord collection alerts", () => {
       ),
     });
 
-    await dispatchPendingCollectionAlerts(store, sender, "2026-10-24T05:03:00.000Z", "production");
+    try {
+      await dispatchPendingCollectionAlerts(store, sender, scheduledAt, "production");
+    } finally {
+      nowSpy.mockRestore();
+    }
 
     expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
       "slack:failure:2026-10-24T05:02:00.000Z",
