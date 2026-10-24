@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
-import { ServiceCard } from "./service-card";
+import { ServiceCard } from "./service-card/index";
 import { component, githubLinkName, incident, service, slackLinkName } from "../test-fixtures";
 
 describe("ServiceCard", () => {
