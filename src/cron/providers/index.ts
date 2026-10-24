@@ -1,6 +1,7 @@
 import type { ProviderSnapshot } from "../../domain";
 import type { ServiceConfig } from "../../shared/config/services";
 import type { ProviderContext } from "../provider-context";
+import { fetchGoogleWorkspaceSnapshot } from "./google-workspace";
 import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";
 import { fetchStatuspageSnapshot } from "./statuspage";
@@ -19,6 +20,7 @@ const providerImplementations: ProviderImplementations = {
   slack: fetchSlackSnapshot,
   statuspage: fetchStatuspageSnapshot,
   "openai-chatgpt": fetchOpenAIChatGPTSnapshot,
+  "google-workspace": fetchGoogleWorkspaceSnapshot,
 };
 
 export function fetchServiceSnapshot<Kind extends ProviderKind>(
