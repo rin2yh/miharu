@@ -10,12 +10,9 @@ import {
   INCIDENT_HISTORY_RETENTION_DAYS,
   type ServiceConfig,
 } from "./config/services";
+import { type KnownIncident, type ProviderSnapshot } from "../domain";
 import {
-  INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-  type KnownIncident,
-  type ProviderSnapshot,
-} from "../domain";
-import {
+  incidentFingerprint,
   reconcileIncidents,
   type IncidentEventRecord,
   type IncidentRecord,
@@ -23,7 +20,7 @@ import {
 import { failureMetadata } from "../domain/failure";
 
 export interface CollectionStore {
-  getActiveIncidents(serviceId: string): Promise<KnownIncident[]>;
+  getUnresolvedIncidents(serviceId: string): Promise<KnownIncident[]>;
   saveSuccess(
     service: ServiceConfig,
     snapshot: ProviderSnapshot,
@@ -39,7 +36,7 @@ export interface DashboardStore extends CollectionStore {
 
 export function createD1Store(database: D1Database): DashboardStore {
   return {
-    async getActiveIncidents(serviceId) {
+    async getUnresolvedIncidents(serviceId) {
       const result = await database
         .prepare(`
     SELECT
@@ -58,14 +55,14 @@ export function createD1Store(database: D1Database): DashboardStore {
       official_created_at AS officialCreatedAt,
       official_updated_at AS officialUpdatedAt,
       url,
-      active,
+      lifecycle,
       first_seen_at AS firstSeenAt,
       resolved_detected_at AS resolvedDetectedAt,
       fingerprint,
       revision,
       last_observed_at AS lastObservedAt
     FROM incidents
-    WHERE service_id = ? AND active = 1
+        WHERE service_id = ? AND lifecycle IN ('active', 'unverified')
   `)
         .bind(serviceId)
         .all<IncidentRow>();
@@ -91,7 +88,7 @@ export function createD1Store(database: D1Database): DashboardStore {
       official_created_at AS officialCreatedAt,
       official_updated_at AS officialUpdatedAt,
       url,
-      active,
+      lifecycle,
       first_seen_at AS firstSeenAt,
       resolved_detected_at AS resolvedDetectedAt,
       fingerprint,
@@ -170,7 +167,7 @@ export function createD1Store(database: D1Database): DashboardStore {
     },
 
     async getDashboardRows() {
-      const [statuses, components, active, events] = await Promise.all([
+      const [statuses, components, incidents, events] = await Promise.all([
         database
           .prepare(
             `SELECT
@@ -197,11 +194,11 @@ export function createD1Store(database: D1Database): DashboardStore {
               source_impact AS sourceImpact, severity_status AS severityStatus,
               component_ids_json AS componentIdsJson, components_json AS componentsJson,
               official_created_at AS officialCreatedAt,
-              official_updated_at AS officialUpdatedAt, url, active,
+              official_updated_at AS officialUpdatedAt, url, lifecycle,
               first_seen_at AS firstSeenAt, resolved_detected_at AS resolvedDetectedAt,
               fingerprint, revision, last_observed_at AS lastObservedAt
             FROM incidents
-            WHERE active = 1
+            WHERE lifecycle IN ('active', 'unverified')
             ORDER BY service_id, official_created_at DESC`,
           )
           .all<IncidentRow>(),
@@ -223,7 +220,7 @@ export function createD1Store(database: D1Database): DashboardStore {
       return {
         statusRows: statuses.results,
         componentRows: components.results,
-        activeRows: active.results,
+        incidentRows: incidents.results,
         eventRows: events.results,
       };
     },
@@ -234,20 +231,12 @@ export function createD1Store(database: D1Database): DashboardStore {
       ).toISOString();
       await database.batch([
         database.prepare("DELETE FROM incident_events WHERE detected_at < ?").bind(cutoff),
-        // An unavailable recheck remains unknown; age it out without recording a false recovery.
-        database
-          .prepare(
-            "UPDATE incidents SET active = 0 WHERE active = 1 AND source_status = ? AND last_observed_at < ?",
-          )
-          .bind(INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, cutoff),
         database
           .prepare(
             `DELETE FROM incidents
-            WHERE active = 0 AND (
-              resolved_detected_at < ? OR (source_status = ? AND last_observed_at < ?)
-            )`,
+            WHERE lifecycle = 'resolved' AND resolved_detected_at < ?`,
           )
-          .bind(cutoff, INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, cutoff),
+          .bind(cutoff),
       ]);
     },
   };
@@ -259,9 +248,9 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
       `INSERT INTO incidents (
         service_id, id, title, body, kind, state, source_status, source_type,
         source_impact, severity_status, component_ids_json, components_json, official_created_at,
-        official_updated_at, url, active, first_seen_at, resolved_detected_at,
+        official_updated_at, url, active, lifecycle, first_seen_at, resolved_detected_at,
         fingerprint, revision, last_observed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(service_id, id) DO UPDATE SET
         title = excluded.title,
         body = excluded.body,
@@ -277,6 +266,7 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
         official_updated_at = excluded.official_updated_at,
         url = excluded.url,
         active = excluded.active,
+        lifecycle = excluded.lifecycle,
         resolved_detected_at = excluded.resolved_detected_at,
         fingerprint = excluded.fingerprint,
         revision = excluded.revision,
@@ -299,7 +289,8 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
       record.officialCreatedAt,
       record.officialUpdatedAt,
       record.url,
-      Number(record.active),
+      Number(record.lifecycle !== "resolved"),
+      record.lifecycle,
       record.firstSeenAt,
       record.resolvedDetectedAt,
       record.fingerprint,
@@ -352,7 +343,7 @@ async function runBatches(database: D1Database, groups: D1PreparedStatement[][])
 }
 
 function toIncidentRecord(row: IncidentRow): IncidentRecord {
-  return {
+  const record: IncidentRecord = {
     serviceId: row.serviceId,
     id: row.id,
     title: row.title,
@@ -370,13 +361,14 @@ function toIncidentRecord(row: IncidentRow): IncidentRecord {
     officialCreatedAt: row.officialCreatedAt,
     officialUpdatedAt: row.officialUpdatedAt,
     url: row.url,
-    active: Boolean(row.active),
+    lifecycle: row.lifecycle,
     firstSeenAt: row.firstSeenAt,
     resolvedDetectedAt: row.resolvedDetectedAt,
     fingerprint: row.fingerprint,
     revision: row.revision,
     lastObservedAt: row.lastObservedAt,
   };
+  return { ...record, fingerprint: incidentFingerprint(record) };
 }
 
 async function syncComponents(

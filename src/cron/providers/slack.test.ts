@@ -28,7 +28,7 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
 }
 
 function providerContext(fetcher: FetchLike): ProviderContext {
-  return { signal: abortSignal, fetcher, getActiveIncidents: async () => [] };
+  return { signal: abortSignal, fetcher, getUnresolvedIncidents: async () => [] };
 }
 
 const slack = getService("slack", "slack");

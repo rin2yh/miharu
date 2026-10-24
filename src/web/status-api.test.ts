@@ -38,7 +38,7 @@ const rows: DashboardRows = {
       lastChangedAt: "2026-10-23T04:55:00.000Z",
     },
   ],
-  activeRows: [
+  incidentRows: [
     {
       serviceId: slackService.id,
       id: "incident-1",
@@ -55,7 +55,7 @@ const rows: DashboardRows = {
       officialCreatedAt: "2026-10-23T04:50:00.000Z",
       officialUpdatedAt: "2026-10-23T04:55:00.000Z",
       url: "https://slack-status.com/2026-10/incident-1",
-      active: 1,
+      lifecycle: "active",
       firstSeenAt: "2026-10-23T04:50:00.000Z",
       resolvedDetectedAt: null,
       fingerprint: "fingerprint",
@@ -120,7 +120,10 @@ describe("status API", () => {
           ...rows.componentRows,
           { ...rows.componentRows[0]!, serviceId: "unregistered" },
         ],
-        activeRows: [...rows.activeRows, { ...rows.activeRows[0]!, serviceId: "unregistered" }],
+        incidentRows: [
+          ...rows.incidentRows,
+          { ...rows.incidentRows[0]!, serviceId: "unregistered" },
+        ],
         eventRows: [...rows.eventRows, { ...rows.eventRows[0]!, serviceId: "unregistered" }],
       },
       new Date("2026-10-23T05:00:00.000Z"),
@@ -160,6 +163,7 @@ describe("status API", () => {
           title: "Message delivery delays",
           components: ["Messaging"],
           body: "We are investigating.\nUpdate & details",
+          lifecycle: "active",
         },
       ],
     });

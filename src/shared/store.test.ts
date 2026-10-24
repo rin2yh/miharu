@@ -30,9 +30,7 @@ function createDatabase(
         },
         all: vi.fn<() => Promise<{ results: unknown[] }>>(async () => ({
           results: (options.resultsForSql?.(sql) ??
-            (sql.includes("FROM incidents\n    WHERE service_id")
-              ? (options.existingIncidents ?? [])
-              : [])) as unknown[],
+            (sql.includes("FROM incidents") ? (options.existingIncidents ?? []) : [])) as unknown[],
         })),
         run: vi.fn<() => Promise<{ success: boolean; meta: { changes: number } }>>(async () => ({
           success: true,
@@ -67,7 +65,7 @@ function existingIncidentRow(overrides: Partial<IncidentRow> = {}): IncidentRow 
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T04:55:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
-    active: 1,
+    lifecycle: "active",
     firstSeenAt: "2026-10-23T04:50:00.000Z",
     resolvedDetectedAt: null,
     fingerprint: "old-fingerprint",
@@ -93,7 +91,7 @@ function normalizedIncident(overrides: Partial<NormalizedIncident> = {}): Normal
     officialCreatedAt: "2026-10-23T04:50:00.000Z",
     officialUpdatedAt: "2026-10-23T05:05:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
-    active: true,
+    lifecycle: "active",
     ...overrides,
   };
 }
@@ -156,7 +154,7 @@ describe("D1 store", () => {
     expect(result).toEqual({
       statusRows: [statusRow],
       componentRows: [componentRow],
-      activeRows: [incidentRow],
+      incidentRows: [incidentRow],
       eventRows: [eventRow],
     });
     expect(mock.calls).toHaveLength(4);
@@ -169,7 +167,7 @@ describe("D1 store", () => {
     const mock = createDatabase({ existingIncidents: [row] });
     const store = createD1Store(mock.database);
 
-    const incidents = await store.getActiveIncidents("github");
+    const incidents = await store.getUnresolvedIncidents("github");
 
     expect(incidents).toMatchObject([
       {
@@ -177,11 +175,11 @@ describe("D1 store", () => {
         id: "incident-1",
         componentIds: ["actions"],
         components: ["Actions"],
-        active: true,
+        lifecycle: "active",
         lastObservedAt: row.lastObservedAt,
       },
     ]);
-    expect(mock.calls[0]?.sql).toContain("WHERE service_id = ? AND active = 1");
+    expect(mock.calls[0]?.sql).toContain("lifecycle IN ('active', 'unverified')");
     expect(mock.calls[0]?.args).toEqual(["github"]);
   });
 
@@ -194,13 +192,11 @@ describe("D1 store", () => {
     expect(mock.batches).toHaveLength(1);
     expect(mock.batches[0]?.map(({ sql }) => sql)).toEqual([
       "DELETE FROM incident_events WHERE detected_at < ?",
-      expect.stringContaining("UPDATE incidents SET active = 0"),
       expect.stringContaining("DELETE FROM incidents"),
     ]);
     expect(mock.batches[0]?.map(({ args }) => args)).toEqual([
       ["2026-10-17T00:00:00.000Z"],
-      ["recheck_unavailable", "2026-10-17T00:00:00.000Z"],
-      ["2026-10-17T00:00:00.000Z", "recheck_unavailable", "2026-10-17T00:00:00.000Z"],
+      ["2026-10-17T00:00:00.000Z"],
     ]);
   });
 

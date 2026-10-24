@@ -15,7 +15,7 @@ import {
   asRecord,
   boundedText,
   fetchJson,
-  isIncidentActive,
+  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   ProviderError,
@@ -235,7 +235,6 @@ function parseStatuspageIncident(
   const sourceType = boundedText(rowType, 100);
   const explicitDescription = statusText(row.description ?? row.body);
   const updateBody = statusText(latestUpdate?.body ?? latestUpdate?.update_text);
-  const active = isIncidentActive(state);
 
   return {
     id,
@@ -252,7 +251,7 @@ function parseStatuspageIncident(
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url,
-    active,
+    lifecycle: incidentLifecycleForState(state),
   };
 }
 

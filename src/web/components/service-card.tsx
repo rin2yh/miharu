@@ -297,9 +297,9 @@ function IncidentList({
                 {incident.title}
               </span>
               <span
-                className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColors[incident.state]}`}
+                className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incident.lifecycle === "unverified" ? "bg-unknown-bg text-unknown" : incidentStateColors[incident.state]}`}
               >
-                {incidentStateLabel(incident.state)}
+                {incidentStateLabel(incident.state, incident.lifecycle)}
               </span>
               <span className="whitespace-nowrap text-xs tabular-nums text-quiet">
                 更新{" "}

@@ -1,11 +1,7 @@
-import {
-  INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-  type KnownIncident,
-  type NormalizedIncident,
-} from "../../../domain";
+import { type KnownIncident, type NormalizedIncident } from "../../../domain";
 import {
   fetchText,
-  isIncidentActive,
+  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   ProviderError,
@@ -41,7 +37,7 @@ export async function recheckOmittedIncident(
       sourceStatus: update.sourceStatus,
       body: update.body ?? incident.body,
       officialUpdatedAt: update.updatedAt ?? incident.officialUpdatedAt,
-      active: isIncidentActive(update.state),
+      lifecycle: incidentLifecycleForState(update.state),
     };
   } catch {
     return unknownIncident(incident);
@@ -51,10 +47,7 @@ export async function recheckOmittedIncident(
 function unknownIncident(incident: KnownIncident): NormalizedIncident {
   return {
     ...incident,
-    body: null,
-    state: "unknown",
-    sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-    active: true,
+    lifecycle: "unverified",
   };
 }
 
