@@ -1,4 +1,4 @@
-import type { DashboardIncident, DashboardService, NormalizedStatus } from "../domain";
+import type { DashboardIncident, DashboardService, NormalizedStatus } from "../../domain";
 
 export const STATUS_LABELS: Record<NormalizedStatus, string> = {
   operational: "正常",

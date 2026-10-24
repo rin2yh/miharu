@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SERVICES } from "../shared/config/services";
+import { SERVICES } from "../../shared/config/services";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./service-filter";
 
 describe("service selection URL", () => {

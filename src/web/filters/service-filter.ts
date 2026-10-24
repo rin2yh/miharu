@@ -1,4 +1,4 @@
-import { SERVICES } from "../shared/config/services";
+import { SERVICES } from "../../shared/config/services";
 
 export function getSelectedServiceIds(search: string): string[] {
   const params = new URLSearchParams(search);

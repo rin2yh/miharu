@@ -22,6 +22,9 @@ Slack、Notion、GitHubなど複数サービスの公式ステータスを集約
 src/
 ├── index.ts                    # Worker entry: HTTP と scheduled() を接続
 ├── web/                        # React UI と Hono API
+│   ├── components/              # React表示コンポーネントとテスト
+│   ├── filters/                 # URLサービスフィルターとテスト
+│   ├── presentation/            # 状態表示・日時フォーマット
 │   └── routes/api/status.ts
 ├── cron/                       # 定期収集と取得Provider
 │   ├── collect-status.ts
@@ -98,6 +101,12 @@ Notionの公開ステータスページは `notion-status.com` に移行して�
    ```
 
    履歴は `incident_events` テーブルで確認できる。2回目以降のCron実行では、新しいインシデントや内容の変更があった場合だけイベントが追加される。ローカルデータを消して最初から確認する場合は、`pnpm db:migrate:local` の前に `.wrangler/state` 内のD1状態を削除する。
+
+## PR本文とローカル動作確認
+
+- PR本文に、型チェック・lint・単体テスト・E2EなどCIで確認できる検証結果を列挙しない。結果はCIのChecksで確認する。
+- PR作成・更新前に、ローカル環境で変更した機能を起動し、利用者の操作またはAPIリクエストを実際に行って結果を確認する。自動テストだけでは代替しない。
+- PR本文の動作確認には、実行したローカル操作と画面・APIで確認した結果を簡潔に記載する。ローカルで確認できない場合は、確認できる状態にしてからPRを作成・更新する。
 
 ## Cloudflare Free枠の目安
 

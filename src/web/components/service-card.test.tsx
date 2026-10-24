@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { describe, expect, it } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
-import { App } from "./app";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
+import { App } from "../app";
 import {
   basePayload,
   component,
@@ -11,33 +11,40 @@ import {
   payload,
   service,
   slackLinkName,
-} from "./test-fixtures";
+} from "../test-fixtures";
 
 describe("service card icons", () => {
   it.each([
-    { id: "cloudflare", name: "Cloudflare", path: siCloudflare.path },
-    { id: "notion", name: "Notion", path: siNotion.path },
-    { id: "github", name: "GitHub", path: siGithub.path },
-    { id: "claude", name: "Claude", path: siClaude.path },
-  ])("shows the $name Simple Icons glyph", async ({ id, name, path }) => {
+    { id: "cloudflare", name: "Cloudflare", icon: siCloudflare, invertInDark: false },
+    { id: "notion", name: "Notion", icon: siNotion, invertInDark: true },
+    { id: "github", name: "GitHub", icon: siGithub, invertInDark: true },
+    { id: "claude", name: "Claude", icon: siClaude, invertInDark: false },
+  ])("shows the $name brand icon", async ({ id, name, icon, invertInDark }) => {
     render(<App load={async () => payload([service({ id, name })])} />);
 
     const card = await screen.findByRole("listitem", { name: `${name}のサービス状況` });
-    expect(card.querySelector("header > span svg path")).toHaveAttribute("d", path);
+    const iconWrapper = card.querySelector("header > span");
+
+    expect(iconWrapper?.querySelector("svg path")).toHaveAttribute("d", icon.path);
+    expect(iconWrapper).toHaveStyle({ color: `#${icon.hex}` });
+    if (invertInDark) {
+      expect(iconWrapper).toHaveClass("dark:[&>svg]:invert");
+    } else {
+      expect(iconWrapper).not.toHaveClass("dark:[&>svg]:invert");
+    }
   });
 
-  it("uses OpenAI's black and white marks for ChatGPT's light and dark themes", async () => {
+  it("uses a theme-colored SVG for ChatGPT", async () => {
     render(<App load={async () => payload([service({ id: "chatgpt", name: "ChatGPT" })])} />);
 
     const card = await screen.findByRole("listitem", { name: "ChatGPTのサービス状況" });
-    const picture = card.querySelector("header > span picture");
-    const darkSource = picture?.querySelector("source");
-    const lightImage = picture?.querySelector("img");
+    const iconWrapper = card.querySelector("header > span");
+    const iconPath = iconWrapper?.querySelector("svg path");
 
-    expect(darkSource).toHaveAttribute("media", "(prefers-color-scheme: dark)");
-    expect(decodeURIComponent(darkSource?.getAttribute("srcset") ?? "")).toContain("fill='white'");
-    expect(decodeURIComponent(lightImage?.getAttribute("src") ?? "")).toContain("fill='black'");
-    expect(lightImage).toHaveAttribute("alt", "");
+    expect(iconPath?.getAttribute("d")).toBeTruthy();
+    expect(iconWrapper).toHaveClass("text-muted", "dark:text-ink");
+    expect(iconWrapper).not.toHaveAttribute("style");
+    expect(iconWrapper).not.toHaveClass("dark:[&>svg]:invert");
   });
 });
 

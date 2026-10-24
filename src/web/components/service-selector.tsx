@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SERVICES } from "../shared/config/services";
+import { SERVICES } from "../../shared/config/services";
 
 type ServiceSelectorProps = {
   selectedServiceIds: string[];
