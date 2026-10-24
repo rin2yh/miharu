@@ -38,6 +38,12 @@ export class StatusDashboardPage {
     return this.page.getByRole("listitem", { name: `${name}のサービス状況` });
   }
 
+  serviceCards(): Locator {
+    return this.page
+      .getByRole("list", { name: "サービス一覧" })
+      .getByRole("listitem", { name: /のサービス状況$/ });
+  }
+
   recentUpdates(): Locator {
     return this.page.getByRole("region", { name: "最近の更新" });
   }

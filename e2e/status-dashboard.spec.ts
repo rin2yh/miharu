@@ -204,7 +204,7 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
     await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
     await expect(serviceList).toBeVisible();
-    await expect(serviceList.getByRole("listitem")).toHaveCount(
+    await expect(statusDashboard.serviceCards()).toHaveCount(
       dashboardStatus.payload.services.length,
     );
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
