@@ -73,16 +73,3 @@ export interface DashboardRows {
   incidentRows: IncidentRow[];
   eventRows: IncidentEventRow[];
 }
-
-export interface CollectionAlertNotificationRow {
-  id: string;
-  kind: "failure" | "recovery";
-  serviceId: string;
-  serviceName: string;
-  errorCode: string;
-  errorType: string;
-  firstFailedAt: string;
-  failureCount: number;
-  createdAt: string;
-  attempts: number;
-}

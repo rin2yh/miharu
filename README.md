@@ -30,7 +30,11 @@ pnpm exec wrangler secret put DISCORD_WEBHOOK_URL
 
 Previewでは通知を無効にし、ローカル開発でもWebhookへ送信しません。
 
-Discord通知はat-least-onceで配信します。Webhookへの送信成功後にD1の送信済み記録が失敗すると、リース期限後に同じ通知が再送されることがあります。
+サービス別の連続失敗回数と通知済み状態はWorkers KVに保存します。失敗が3回に達した後は、追加の失敗ごとにKVを書き換えません。復旧時に状態を削除します。
+
+通知済み状態を保存してからWebhookへ1回送信します。Webhook送信に失敗しても自動再送しません。失敗は構造化ログに記録します。
+
+Workers KV Free枠は書き込み・削除が各1,000回/日です。連続失敗中は通知まで最大3回書き込み、通知後は復旧まで書き込みません。KVは結果整合性のため、競合時は失敗回数や通知タイミングがずれる可能性があります（[利用上限](https://developers.cloudflare.com/kv/platform/limits/)、[整合性と同時更新](https://developers.cloudflare.com/kv/concepts/how-kv-works/)）。
 
 ## ライセンス
 

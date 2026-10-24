@@ -175,108 +175,17 @@ describe("createD1Store with local D1", () => {
     expect(await selectRows(`SELECT id FROM incidents`)).toHaveLength(1);
   });
 
-  it("queues one alert after three distinct failures and one recovery alert", async () => {
-    const store = createD1Store(env.DB);
-
-    await store.saveFailure(service, "2026-10-01T05:00:00.000Z", "timeout", "TimeoutError");
-    expect(await selectRows(`SELECT id FROM collection_alert_notifications`)).toEqual([]);
-    await store.saveFailure(service, "2026-10-01T05:01:00.000Z", "timeout", "TimeoutError");
-    await store.saveFailure(service, "2026-10-01T05:02:00.000Z", "timeout", "TimeoutError");
-    await store.saveFailure(service, "2026-10-01T05:02:00.000Z", "timeout", "TimeoutError");
-    await store.saveFailure(service, "2026-10-01T05:03:00.000Z", "timeout", "TimeoutError");
-
-    const failures = await store.claimPendingCollectionAlerts(
-      "2026-10-01T05:04:00.000Z",
-      "2026-10-01T05:09:00.000Z",
-      20,
-    );
-    expect(failures).toMatchObject([
-      {
-        kind: "failure",
-        serviceId: "github",
-        errorCode: "timeout",
-        errorType: "TimeoutError",
-        firstFailedAt: "2026-10-01T05:00:00.000Z",
-        failureCount: 3,
-        attempts: 1,
-      },
-    ]);
-    await expect(
-      store.claimPendingCollectionAlerts(
-        "2026-10-01T05:04:00.000Z",
-        "2026-10-01T05:09:00.000Z",
-        20,
-      ),
-    ).resolves.toEqual([]);
-
-    await store.releaseCollectionAlert(failures[0]!.id, "2026-10-01T05:06:00.000Z");
-    await expect(
-      store.claimPendingCollectionAlerts(
-        "2026-10-01T05:05:00.000Z",
-        "2026-10-01T05:10:00.000Z",
-        20,
-      ),
-    ).resolves.toEqual([]);
-    const retry = await store.claimPendingCollectionAlerts(
-      "2026-10-01T05:06:00.000Z",
-      "2026-10-01T05:11:00.000Z",
-      20,
-    );
-    expect(retry).toMatchObject([{ id: failures[0]!.id, attempts: 2 }]);
-
-    await store.markCollectionAlertDelivered(retry[0]!.id, "2026-10-01T05:06:05.000Z");
-    await store.saveSuccess(service, snapshot(), "2026-10-01T05:07:00.000Z");
-    await store.saveSuccess(service, snapshot(), "2026-10-01T05:07:00.000Z");
-
-    const recoveries = await store.claimPendingCollectionAlerts(
-      "2026-10-01T05:08:00.000Z",
-      "2026-10-01T05:13:00.000Z",
-      20,
-    );
-    expect(recoveries).toMatchObject([
-      {
-        kind: "recovery",
-        serviceId: "github",
-        firstFailedAt: "2026-10-01T05:00:00.000Z",
-        failureCount: 4,
-      },
-    ]);
-    expect(await selectRows(`SELECT service_id FROM collection_failures`)).toEqual([]);
-  });
-
-  it("tracks consecutive failures independently for multiple services", async () => {
-    const store = createD1Store(env.DB);
-    const slack = SERVICES.find(({ id }) => id === "slack");
-    if (!slack) throw new Error("Slack service configuration is missing");
-
-    for (const minute of [0, 1, 2]) {
-      await Promise.all([
-        store.saveFailure(service, `2026-10-01T05:0${minute}:00.000Z`, "timeout", "TimeoutError"),
-        store.saveFailure(slack, `2026-10-01T05:0${minute}:00.000Z`, "network_error", "TypeError"),
-      ]);
-    }
-
-    const alerts = await store.claimPendingCollectionAlerts(
-      "2026-10-01T05:03:00.000Z",
-      "2026-10-01T05:08:00.000Z",
-      20,
-    );
-    expect(
-      alerts.toSorted((left, right) => left.serviceId.localeCompare(right.serviceId)),
-    ).toMatchObject([
-      { kind: "failure", serviceId: "github", errorCode: "timeout", failureCount: 3 },
-      { kind: "failure", serviceId: "slack", errorCode: "network_error", failureCount: 3 },
-    ]);
-  });
-
-  it("does not count a stale failure that shares a timestamp with a saved success", async () => {
+  it("does not overwrite a saved success with a failure at the same timestamp", async () => {
     const store = createD1Store(env.DB);
 
     await store.saveSuccess(service, snapshot(), "2026-10-01T05:00:00.000Z");
-    await store.saveFailure(service, "2026-10-01T05:00:00.000Z", "timeout", "TimeoutError");
+    await store.saveFailure(service, "2026-10-01T05:00:00.000Z", "timeout");
 
-    expect(await selectRows(`SELECT service_id FROM collection_failures`)).toEqual([]);
-    expect(await selectRows(`SELECT id FROM collection_alert_notifications`)).toEqual([]);
+    expect(
+      await selectRows(
+        `SELECT last_error_at, error_code FROM service_status WHERE service_id = 'github'`,
+      ),
+    ).toEqual([{ last_error_at: null, error_code: null }]);
   });
 
   it("removes stale components and prunes expired resolved incidents and events", async () => {

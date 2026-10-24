@@ -1,5 +1,4 @@
 import type {
-  CollectionAlertNotificationRow,
   DashboardRows,
   IncidentEventRow,
   IncidentRow,
@@ -27,12 +26,7 @@ export interface CollectionStore {
     snapshot: ProviderSnapshot,
     observedAt: string,
   ): Promise<void>;
-  saveFailure(
-    service: ServiceConfig,
-    observedAt: string,
-    errorCode: string,
-    errorType?: string,
-  ): Promise<void>;
+  saveFailure(service: ServiceConfig, observedAt: string, errorCode: string): Promise<void>;
 }
 
 export interface DashboardStore extends CollectionStore {
@@ -40,17 +34,7 @@ export interface DashboardStore extends CollectionStore {
   pruneHistory(now: Date): Promise<void>;
 }
 
-export interface CollectionAlertStore extends CollectionStore {
-  claimPendingCollectionAlerts(
-    now: string,
-    leaseUntil: string,
-    limit: number,
-  ): Promise<CollectionAlertNotificationRow[]>;
-  markCollectionAlertDelivered(id: string, deliveredAt: string): Promise<void>;
-  releaseCollectionAlert(id: string, nextAttemptAt: string): Promise<void>;
-}
-
-export function createD1Store(database: D1Database): DashboardStore & CollectionAlertStore {
+export function createD1Store(database: D1Database): DashboardStore {
   return {
     async getUnresolvedIncidents(serviceId) {
       const result = await database
@@ -149,43 +133,6 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
             observedAt,
             observedAt,
           ),
-        database
-          .prepare(
-            `INSERT OR IGNORE INTO collection_alert_notifications (
-              id, kind, service_id, service_name, error_code,
-              error_type, first_failed_at, failure_count, created_at
-            )
-            SELECT ?, 'recovery', failures.service_id, ?, failures.error_code,
-              failures.error_type, failures.first_failed_at, failures.consecutive_failures, ?
-            FROM collection_failures AS failures
-            JOIN service_status AS status ON status.service_id = failures.service_id
-            WHERE failures.service_id = ?
-              AND failures.consecutive_failures >= 3
-              AND failures.last_failed_at < ?
-              AND status.last_success_at = ?
-              AND status.last_error_at IS NULL`,
-          )
-          .bind(
-            JSON.stringify([service.id, "recovery", observedAt]),
-            service.name,
-            observedAt,
-            service.id,
-            observedAt,
-            observedAt,
-          ),
-        database
-          .prepare(
-            `DELETE FROM collection_failures
-            WHERE service_id = ?
-              AND last_failed_at < ?
-              AND EXISTS (
-                SELECT 1 FROM service_status
-                WHERE service_id = ?
-                  AND last_success_at = ?
-                  AND last_error_at IS NULL
-              )`,
-          )
-          .bind(service.id, observedAt, service.id, observedAt),
       ]);
 
       if (snapshot.components !== undefined) {
@@ -201,7 +148,7 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
       await runBatches(database, groups);
     },
 
-    async saveFailure(service, observedAt, errorCode, errorType = "UnknownError") {
+    async saveFailure(service, observedAt, errorCode) {
       const failure = failureMetadata(observedAt, errorCode);
       await database.batch([
         database
@@ -217,110 +164,7 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
               OR service_status.last_checked_at < excluded.last_checked_at`,
           )
           .bind(service.id, failure.lastCheckedAt, failure.lastErrorAt, failure.errorCode),
-        database
-          .prepare(
-            `INSERT INTO collection_failures (
-              service_id, consecutive_failures, first_failed_at, last_failed_at,
-              error_code, error_type
-            )
-            SELECT ?, 1, ?, ?, ?, ?
-            WHERE EXISTS (
-              SELECT 1 FROM service_status
-              WHERE service_id = ?
-                AND last_checked_at = ?
-                AND last_error_at = ?
-                AND error_code = ?
-            )
-            ON CONFLICT(service_id) DO UPDATE SET
-              consecutive_failures = collection_failures.consecutive_failures + 1,
-              last_failed_at = excluded.last_failed_at,
-              error_code = excluded.error_code,
-              error_type = excluded.error_type
-            WHERE collection_failures.last_failed_at < excluded.last_failed_at
-              `,
-          )
-          .bind(
-            service.id,
-            observedAt,
-            observedAt,
-            errorCode,
-            errorType,
-            service.id,
-            observedAt,
-            observedAt,
-            errorCode,
-          ),
-        database
-          .prepare(
-            `INSERT OR IGNORE INTO collection_alert_notifications (
-              id, kind, service_id, service_name, error_code,
-              error_type, first_failed_at, failure_count, created_at
-            )
-            SELECT ?, 'failure', failures.service_id, ?, failures.error_code,
-              failures.error_type, failures.first_failed_at, failures.consecutive_failures, ?
-            FROM collection_failures AS failures
-            JOIN service_status AS status ON status.service_id = failures.service_id
-            WHERE failures.service_id = ?
-              AND failures.consecutive_failures = 3
-              AND failures.last_failed_at = ?
-              AND status.last_error_at = ?
-              AND status.error_code = failures.error_code`,
-          )
-          .bind(
-            JSON.stringify([service.id, "failure", observedAt]),
-            service.name,
-            observedAt,
-            service.id,
-            observedAt,
-            observedAt,
-          ),
       ]);
-    },
-
-    async claimPendingCollectionAlerts(now, leaseUntil, limit) {
-      const result = await database
-        .prepare(
-          `UPDATE collection_alert_notifications
-          SET lease_until = ?, attempts = attempts + 1
-          WHERE id IN (
-            SELECT id FROM collection_alert_notifications
-            WHERE delivered_at IS NULL
-              AND (lease_until IS NULL OR lease_until <= ?)
-              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-            ORDER BY created_at, id
-            LIMIT ?
-          )
-          RETURNING
-            id, kind, service_id AS serviceId, service_name AS serviceName,
-            error_code AS errorCode, first_failed_at AS firstFailedAt,
-            error_type AS errorType, failure_count AS failureCount, created_at AS createdAt,
-            attempts`,
-        )
-        .bind(leaseUntil, now, now, limit)
-        .all<CollectionAlertNotificationRow>();
-      return result.results;
-    },
-
-    async markCollectionAlertDelivered(id, deliveredAt) {
-      await database
-        .prepare(
-          `UPDATE collection_alert_notifications
-          SET delivered_at = ?, lease_until = NULL
-          WHERE id = ? AND delivered_at IS NULL`,
-        )
-        .bind(deliveredAt, id)
-        .run();
-    },
-
-    async releaseCollectionAlert(id, nextAttemptAt) {
-      await database
-        .prepare(
-          `UPDATE collection_alert_notifications
-          SET lease_until = NULL, next_attempt_at = ?
-          WHERE id = ? AND delivered_at IS NULL`,
-        )
-        .bind(nextAttemptAt, id)
-        .run();
     },
 
     async getDashboardRows() {
@@ -388,11 +232,6 @@ export function createD1Store(database: D1Database): DashboardStore & Collection
       ).toISOString();
       await database.batch([
         database.prepare("DELETE FROM incident_events WHERE detected_at < ?").bind(cutoff),
-        database
-          .prepare(
-            "DELETE FROM collection_alert_notifications WHERE delivered_at IS NOT NULL AND created_at < ?",
-          )
-          .bind(cutoff),
         database
           .prepare(
             `DELETE FROM incidents

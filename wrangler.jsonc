@@ -21,6 +21,12 @@
       "migrations_dir": "db/migrations",
     },
   ],
+  "kv_namespaces": [
+    {
+      "binding": "COLLECTION_ALERT_STATE",
+      "id": "de8cef033ba04d78b15e3761f6d33780",
+    },
+  ],
   "triggers": {
     "crons": ["* * * * *"],
   },

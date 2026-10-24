@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import type {
+  CollectionAlertState,
+  CollectionAlertStateStore,
+} from "../shared/collection-alert-state";
 import type { ProviderSnapshot } from "../domain";
-import type { CollectionAlertStore } from "../shared/store";
+import type { CollectionStore } from "../shared/store";
 import { SERVICES } from "../shared/config/services";
 import type { CollectionAlertSender } from "./collection-alerts";
 import { collectAtScheduledTime } from "./collect-status";
@@ -15,23 +19,36 @@ const snapshot: ProviderSnapshot = {
   incidents: [],
 };
 
-function collectionStore(overrides: Partial<CollectionAlertStore> = {}) {
+const failFetcher = async (): Promise<ProviderSnapshot> => {
+  throw new Error("upstream unavailable");
+};
+
+function collectionStore(
+  overrides: Partial<CollectionStore> & { pruneHistory?: () => Promise<void> } = {},
+) {
   return {
-    getUnresolvedIncidents: vi.fn<CollectionAlertStore["getUnresolvedIncidents"]>(async () => []),
-    saveSuccess: vi.fn<CollectionAlertStore["saveSuccess"]>(async () => undefined),
-    saveFailure: vi.fn<CollectionAlertStore["saveFailure"]>(async () => undefined),
-    claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
-      async () => [],
-    ),
-    markCollectionAlertDelivered: vi.fn<CollectionAlertStore["markCollectionAlertDelivered"]>(
-      async () => undefined,
-    ),
-    releaseCollectionAlert: vi.fn<CollectionAlertStore["releaseCollectionAlert"]>(
-      async () => undefined,
-    ),
+    getUnresolvedIncidents: vi.fn<CollectionStore["getUnresolvedIncidents"]>(async () => []),
+    saveSuccess: vi.fn<CollectionStore["saveSuccess"]>(async () => undefined),
+    saveFailure: vi.fn<CollectionStore["saveFailure"]>(async () => undefined),
     pruneHistory: vi.fn<(now: Date) => Promise<void>>(async () => undefined),
     ...overrides,
   };
+}
+
+function alertStateStore() {
+  const states = new Map<string, CollectionAlertState>();
+  return {
+    states,
+    get: vi.fn<CollectionAlertStateStore["get"]>(
+      async (serviceId) => states.get(serviceId) ?? null,
+    ),
+    put: vi.fn<CollectionAlertStateStore["put"]>(async (serviceId, state) => {
+      states.set(serviceId, state);
+    }),
+    delete: vi.fn<CollectionAlertStateStore["delete"]>(async (serviceId) => {
+      states.delete(serviceId);
+    }),
+  } satisfies CollectionAlertStateStore & { states: Map<string, CollectionAlertState> };
 }
 
 function sender(): CollectionAlertSender {
@@ -42,9 +59,9 @@ function sender(): CollectionAlertSender {
 }
 
 describe("scheduled status collection alerts", () => {
-  it("immediately reports a service-specific persistence failure", async () => {
+  it("immediately reports a service-specific D1 persistence failure", async () => {
     const store = collectionStore({
-      saveSuccess: vi.fn<CollectionAlertStore["saveSuccess"]>(async () => {
+      saveSuccess: vi.fn<CollectionStore["saveSuccess"]>(async () => {
         throw new Error("D1 unavailable");
       }),
     });
@@ -72,6 +89,47 @@ describe("scheduled status collection alerts", () => {
         environment: "production",
       }),
     );
+  });
+
+  it("sends failure and recovery alerts from KV state transitions", async () => {
+    const store = collectionStore();
+    const alertState = alertStateStore();
+    const alertSender = sender();
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      for (const minute of [1, 2, 3, 4]) {
+        await collectAtScheduledTime(
+          {} as D1Database,
+          Date.parse(`2026-10-24T05:0${minute}:00.000Z`),
+          {
+            sender: alertSender,
+            alertState,
+            environment: "production",
+            services: [service],
+            fetcher: failFetcher,
+            storeFactory: () => store,
+          },
+        );
+      }
+
+      expect(alertSender.send).toHaveBeenCalledTimes(1);
+      expect(alertState.put).toHaveBeenCalledTimes(3);
+
+      await collectAtScheduledTime({} as D1Database, Date.parse("2026-10-24T05:05:00.000Z"), {
+        sender: alertSender,
+        alertState,
+        environment: "production",
+        services: [service],
+        fetcher: async () => snapshot,
+        storeFactory: () => store,
+      });
+    } finally {
+      log.mockRestore();
+    }
+
+    expect(alertSender.send).toHaveBeenCalledTimes(2);
+    expect(alertState.delete).toHaveBeenCalledOnce();
+    expect(alertState.states.has(service.id)).toBe(false);
   });
 
   it("reports a fatal cron error even when collection cannot start", async () => {

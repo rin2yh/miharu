@@ -75,7 +75,6 @@ describe("status collection", () => {
       service,
       "2026-10-23T05:00:00.000Z",
       "invalid_payload",
-      "ProviderError",
     );
     expect(persistence.saveSuccess).not.toHaveBeenCalled();
   });
@@ -164,7 +163,6 @@ describe("status collection", () => {
       shortTimeout,
       "2026-10-23T05:00:00.000Z",
       "timeout",
-      "Error",
     );
   });
 

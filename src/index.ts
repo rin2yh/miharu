@@ -1,9 +1,11 @@
 import { collectAtScheduledTime } from "./cron/collect-status";
 import { createDiscordAlertSender } from "./cron/collection-alerts";
+import { createKvCollectionAlertStateStore } from "./shared/collection-alert-state";
 import { createStatusRoutes } from "./web/routes/api/status";
 
 interface Env {
   DB: D1Database;
+  COLLECTION_ALERT_STATE: KVNamespace;
   FRESHNESS_WARNING_SECONDS: string;
   DISCORD_WEBHOOK_URL?: string;
   DISCORD_ALERTS_ENABLED?: string;
@@ -23,7 +25,11 @@ export default {
       environment,
     });
     context.waitUntil(
-      collectAtScheduledTime(env.DB, controller.scheduledTime, { sender, environment }),
+      collectAtScheduledTime(env.DB, controller.scheduledTime, {
+        alertState: createKvCollectionAlertStateStore(env.COLLECTION_ALERT_STATE),
+        sender,
+        environment,
+      }),
     );
   },
 } satisfies ExportedHandler<Env>;

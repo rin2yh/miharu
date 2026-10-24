@@ -1,7 +1,18 @@
-import type { CollectionAlertNotificationRow } from "../../db/schema";
-import type { CollectionAlertStore } from "../shared/store";
+import type { ServiceConfig } from "../shared/config/services";
+import type {
+  CollectionAlertState,
+  CollectionAlertStateStore,
+} from "../shared/collection-alert-state";
 
-export type CollectionAlert = CollectionAlertNotificationRow;
+export type CollectionAlert = {
+  kind: "failure" | "recovery";
+  serviceId: string;
+  serviceName: string;
+  errorCode: string;
+  errorType: string;
+  firstFailedAt: string;
+  failureCount: number;
+};
 
 export type CriticalCollectionAlert = {
   kind: "persistence_failure" | "cron_failure";
@@ -16,23 +27,6 @@ export type CriticalCollectionAlert = {
 export interface CollectionAlertSender {
   enabled: boolean;
   send(alert: CollectionAlert | CriticalCollectionAlert): Promise<void>;
-}
-
-const MAX_PENDING_ALERTS_PER_RUN = 8;
-const MAX_CONCURRENT_SERVICE_GROUPS = 4;
-const ALERT_LEASE_MS = 5 * 60 * 1_000;
-const RETRY_BASE_DELAY_MS = 60 * 1_000;
-const RETRY_MAX_DELAY_MS = 60 * 60 * 1_000;
-
-class DiscordDeliveryError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly retryAfterMs?: number,
-  ) {
-    super(message);
-    this.name = "DiscordDeliveryError";
-  }
 }
 
 interface DiscordAlertConfig {
@@ -59,168 +53,61 @@ export function createDiscordAlertSender(config: DiscordAlertConfig): Collection
         }),
         signal: AbortSignal.timeout(5_000),
       });
-      if (!response.ok) {
-        const retryAfterMs = response.status === 429 ? await getRetryAfterMs(response) : undefined;
-        throw new DiscordDeliveryError(
-          `Discord webhook returned HTTP ${response.status}`,
-          response.status,
-          retryAfterMs,
-        );
-      }
+      if (!response.ok) throw new Error(`Discord webhook returned HTTP ${response.status}`);
     },
   };
 }
 
-export async function dispatchPendingCollectionAlerts(
-  store: CollectionAlertStore,
+export async function notifyCollectionFailure(
+  stateStore: CollectionAlertStateStore,
   sender: CollectionAlertSender | undefined,
-  now: string,
+  service: ServiceConfig,
+  occurredAt: string,
+  errorCode: string,
+  errorType: string,
   environment: string,
 ): Promise<void> {
-  if (!sender?.enabled) return;
-
-  let alerts: CollectionAlertNotificationRow[];
+  let alert: CollectionAlert | undefined;
   try {
-    alerts = await store.claimPendingCollectionAlerts(
-      now,
-      new Date(Date.parse(now) + ALERT_LEASE_MS).toISOString(),
-      MAX_PENDING_ALERTS_PER_RUN,
-    );
+    alert = await recordCollectionFailure(stateStore, service, occurredAt, errorCode, errorType);
   } catch (error) {
-    await reportCriticalAlert(sender, {
-      kind: "persistence_failure",
-      serviceId: "miharu-d1",
-      serviceName: "miharu D1",
-      errorCode: "d1_persistence_error",
+    reportLog("collection_alert_state_failed", {
+      kind: "failure",
+      serviceId: service.id,
+      serviceName: service.name,
+      errorCode: "kv_state_error",
       errorType: getErrorType(error),
-      occurredAt: now,
       environment,
     });
     return;
   }
 
-  const alertsByService = new Map<string, CollectionAlertNotificationRow[]>();
-  for (const alert of alerts.toSorted(
-    (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-  )) {
-    const serviceAlerts = alertsByService.get(alert.serviceId) ?? [];
-    serviceAlerts.push(alert);
-    alertsByService.set(alert.serviceId, serviceAlerts);
-  }
-
-  const serviceQueues = [...alertsByService.values()];
-  let nextQueueIndex = 0;
-  await Promise.all(
-    Array.from(
-      { length: Math.min(MAX_CONCURRENT_SERVICE_GROUPS, serviceQueues.length) },
-      async () => {
-        while (nextQueueIndex < serviceQueues.length) {
-          const serviceQueue = serviceQueues[nextQueueIndex++];
-          if (!serviceQueue) continue;
-          for (const alert of serviceQueue) {
-            await dispatchAlert(store, sender, alert, now, environment);
-          }
-        }
-      },
-    ),
-  );
+  if (alert) await sendCollectionAlert(sender, alert, environment);
 }
 
-async function dispatchAlert(
-  store: CollectionAlertStore,
-  sender: CollectionAlertSender,
-  alert: CollectionAlertNotificationRow,
-  now: string,
+export async function notifyCollectionRecovery(
+  stateStore: CollectionAlertStateStore,
+  sender: CollectionAlertSender | undefined,
+  service: ServiceConfig,
+  recoveredAt: string,
   environment: string,
 ): Promise<void> {
+  let alert: CollectionAlert | undefined;
   try {
-    await sender.send(alert);
+    alert = await recordCollectionRecovery(stateStore, service, recoveredAt);
   } catch (error) {
-    reportLog("discord_notification_failed", {
-      kind: alert.kind,
-      serviceId: alert.serviceId,
-      errorCode: "discord_delivery_error",
+    reportLog("collection_alert_state_failed", {
+      kind: "recovery",
+      serviceId: service.id,
+      serviceName: service.name,
+      errorCode: "kv_state_error",
       errorType: getErrorType(error),
       environment,
     });
-    try {
-      await store.releaseCollectionAlert(alert.id, getNextAttemptAt(alert, error));
-    } catch (releaseError) {
-      await reportCriticalAlert(sender, {
-        kind: "persistence_failure",
-        serviceId: alert.serviceId,
-        serviceName: alert.serviceName,
-        errorCode: "d1_persistence_error",
-        errorType: getErrorType(releaseError),
-        occurredAt: now,
-        environment,
-      });
-    }
     return;
   }
 
-  try {
-    await store.markCollectionAlertDelivered(alert.id, now);
-  } catch (error) {
-    // Delivery is at-least-once: if D1 cannot record this ACK, the lease expiry can cause a duplicate.
-    await reportCriticalAlert(sender, {
-      kind: "persistence_failure",
-      serviceId: alert.serviceId,
-      serviceName: alert.serviceName,
-      errorCode: "d1_persistence_error",
-      errorType: getErrorType(error),
-      occurredAt: now,
-      environment,
-    });
-  }
-}
-
-function getNextAttemptAt(alert: CollectionAlertNotificationRow, error: unknown): string {
-  const attemptedAt = Date.now();
-  if (error instanceof DiscordDeliveryError && error.retryAfterMs !== undefined) {
-    return new Date(attemptedAt + Math.max(1_000, error.retryAfterMs)).toISOString();
-  }
-
-  const exponent = Math.min(Math.max(alert.attempts - 1, 0), 10);
-  const retryDelayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** exponent);
-  return new Date(attemptedAt + retryDelayMs).toISOString();
-}
-
-async function getRetryAfterMs(response: Response): Promise<number | undefined> {
-  const headerDelay = parseRetryAfter(response.headers.get("retry-after"));
-  let bodyDelay: number | undefined;
-  try {
-    const body: unknown = await response.clone().json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "retry_after" in body &&
-      typeof body.retry_after === "number" &&
-      Number.isFinite(body.retry_after) &&
-      body.retry_after >= 0
-    ) {
-      const delay = body.retry_after * 1_000;
-      if (Number.isFinite(delay)) bodyDelay = delay;
-    }
-  } catch {
-    // A missing or non-JSON body is valid; the header is the primary source.
-  }
-
-  if (headerDelay === undefined) return bodyDelay;
-  if (bodyDelay === undefined) return headerDelay;
-  return Math.max(headerDelay, bodyDelay);
-}
-
-function parseRetryAfter(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const normalized = value.trim();
-  if (/^\d+(\.\d+)?$/.test(normalized)) {
-    const delay = Number(normalized) * 1_000;
-    return Number.isFinite(delay) ? delay : undefined;
-  }
-  const retryAt = Date.parse(normalized);
-  return Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : undefined;
+  if (alert) await sendCollectionAlert(sender, alert, environment);
 }
 
 export async function reportCriticalAlert(
@@ -252,6 +139,80 @@ export async function reportCriticalAlert(
 export function getErrorType(error: unknown): string {
   if (error instanceof Error && /^[A-Za-z][\w.]{0,63}$/.test(error.name)) return error.name;
   return "UnknownError";
+}
+
+export async function recordCollectionFailure(
+  stateStore: CollectionAlertStateStore,
+  service: ServiceConfig,
+  occurredAt: string,
+  errorCode: string,
+  errorType: string,
+): Promise<CollectionAlert | undefined> {
+  const previous = await stateStore.get(service.id);
+  if (previous?.notified || (previous && previous.lastFailedAt >= occurredAt)) return undefined;
+
+  const state: CollectionAlertState = {
+    consecutiveFailures: (previous?.consecutiveFailures ?? 0) + 1,
+    firstFailedAt: previous?.firstFailedAt ?? occurredAt,
+    lastFailedAt: occurredAt,
+    errorCode,
+    errorType,
+    notified: (previous?.consecutiveFailures ?? 0) + 1 >= 3,
+  };
+  // Save the guard before sending so a webhook outage does not cause a write and send every minute.
+  await stateStore.put(service.id, state);
+
+  if (!state.notified) return undefined;
+  return {
+    kind: "failure",
+    serviceId: service.id,
+    serviceName: service.name,
+    errorCode: state.errorCode,
+    errorType: state.errorType,
+    firstFailedAt: state.firstFailedAt,
+    failureCount: state.consecutiveFailures,
+  };
+}
+
+export async function recordCollectionRecovery(
+  stateStore: CollectionAlertStateStore,
+  service: ServiceConfig,
+  recoveredAt: string,
+): Promise<CollectionAlert | undefined> {
+  const previous = await stateStore.get(service.id);
+  if (!previous || previous.lastFailedAt >= recoveredAt) return undefined;
+
+  await stateStore.delete(service.id);
+  if (!previous.notified) return undefined;
+
+  return {
+    kind: "recovery",
+    serviceId: service.id,
+    serviceName: service.name,
+    errorCode: previous.errorCode,
+    errorType: previous.errorType,
+    firstFailedAt: previous.firstFailedAt,
+    failureCount: previous.consecutiveFailures,
+  };
+}
+
+async function sendCollectionAlert(
+  sender: CollectionAlertSender | undefined,
+  alert: CollectionAlert,
+  environment: string,
+): Promise<void> {
+  if (!sender?.enabled) return;
+  try {
+    await sender.send(alert);
+  } catch (error) {
+    reportLog("discord_notification_failed", {
+      kind: alert.kind,
+      serviceId: alert.serviceId,
+      errorCode: "discord_delivery_error",
+      errorType: getErrorType(error),
+      environment,
+    });
+  }
 }
 
 function formatAlert(

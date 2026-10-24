@@ -1,45 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CollectionAlertStore } from "../shared/store";
+import {
+  createKvCollectionAlertStateStore,
+  type CollectionAlertState,
+  type CollectionAlertStateStore,
+} from "../shared/collection-alert-state";
+import { SERVICES } from "../shared/config/services";
 import {
   createDiscordAlertSender,
-  dispatchPendingCollectionAlerts,
-  reportCriticalAlert,
-  type CollectionAlertSender,
+  notifyCollectionFailure,
+  notifyCollectionRecovery,
+  recordCollectionFailure,
 } from "./collection-alerts";
 
-function alertStore(overrides: Partial<CollectionAlertStore> = {}): CollectionAlertStore {
+const service = SERVICES.find(({ id }) => id === "slack");
+if (!service) throw new Error("Slack service config is missing");
+
+function stateStore() {
+  const states = new Map<string, CollectionAlertState>();
+  const get = vi.fn<CollectionAlertStateStore["get"]>(async (serviceId) => {
+    return states.get(serviceId) ?? null;
+  });
+  const put = vi.fn<CollectionAlertStateStore["put"]>(async (serviceId, state) => {
+    states.set(serviceId, state);
+  });
+  const deleteState = vi.fn<CollectionAlertStateStore["delete"]>(async (serviceId) => {
+    states.delete(serviceId);
+  });
   return {
-    getUnresolvedIncidents: vi.fn<CollectionAlertStore["getUnresolvedIncidents"]>(async () => []),
-    saveSuccess: vi.fn<CollectionAlertStore["saveSuccess"]>(async () => undefined),
-    saveFailure: vi.fn<CollectionAlertStore["saveFailure"]>(async () => undefined),
-    claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
-      async () => [
-        {
-          id: "slack:failure:2026-10-24T05:02:00.000Z",
-          kind: "failure" as const,
-          serviceId: "slack",
-          serviceName: "Slack",
-          errorCode: "timeout",
-          errorType: "TimeoutError",
-          firstFailedAt: "2026-10-24T05:00:00.000Z",
-          failureCount: 3,
-          createdAt: "2026-10-24T05:02:00.000Z",
-          attempts: 1,
-        },
-      ],
-    ),
-    markCollectionAlertDelivered: vi.fn<CollectionAlertStore["markCollectionAlertDelivered"]>(
-      async () => undefined,
-    ),
-    releaseCollectionAlert: vi.fn<CollectionAlertStore["releaseCollectionAlert"]>(
-      async () => undefined,
-    ),
-    ...overrides,
+    states,
+    get,
+    put,
+    delete: deleteState,
   };
 }
 
-describe("Discord collection alerts", () => {
-  it("sends a service-specific message without allowing mentions", async () => {
+describe("Discord collection alerts with KV state", () => {
+  it("stores service state as JSON under a service-specific KV key", async () => {
+    const namespace = {
+      get: vi.fn<
+        (
+          key: string,
+          options: { type: "json"; cacheTtl: number },
+        ) => Promise<CollectionAlertState | null>
+      >(async () => null),
+      put: vi.fn<(key: string, value: string) => Promise<void>>(async () => undefined),
+      delete: vi.fn<(key: string) => Promise<void>>(async () => undefined),
+    } as unknown as KVNamespace;
+    const store = createKvCollectionAlertStateStore(namespace);
+    const state: CollectionAlertState = {
+      consecutiveFailures: 2,
+      firstFailedAt: "2026-10-24T05:00:00.000Z",
+      lastFailedAt: "2026-10-24T05:01:00.000Z",
+      errorCode: "timeout",
+      errorType: "TimeoutError",
+      notified: false,
+    };
+
+    await store.get("slack");
+    await store.put("slack", state);
+    await store.delete("slack");
+
+    expect(namespace.get).toHaveBeenCalledWith("collection-alert:slack", {
+      type: "json",
+      cacheTtl: 30,
+    });
+    expect(namespace.put).toHaveBeenCalledWith("collection-alert:slack", JSON.stringify(state));
+    expect(namespace.delete).toHaveBeenCalledWith("collection-alert:slack");
+  });
+
+  it("sends one failure alert on the third failure and stops writes until recovery", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
@@ -47,206 +76,196 @@ describe("Discord collection alerts", () => {
       environment: "production",
       fetcher,
     });
-    const store = alertStore();
+    const store = stateStore();
 
-    await dispatchPendingCollectionAlerts(store, sender, "2026-10-24T05:03:00.000Z", "production");
+    for (const minute of [0, 1, 2]) {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "timeout",
+        "TimeoutError",
+        "production",
+      );
+      expect(fetcher).toHaveBeenCalledTimes(minute === 2 ? 1 : 0);
+    }
 
-    expect(fetcher).toHaveBeenCalledOnce();
-    const request = fetcher.mock.calls[0]?.[1];
-    const payload = JSON.parse(String(request?.body)) as {
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:03:00.000Z",
+      "timeout",
+      "TimeoutError",
+      "production",
+    );
+
+    expect(store.put).toHaveBeenCalledTimes(3);
+    expect(store.states.get(service.id)).toMatchObject({
+      consecutiveFailures: 3,
+      firstFailedAt: "2026-10-24T05:00:00.000Z",
+      lastFailedAt: "2026-10-24T05:02:00.000Z",
+      errorCode: "timeout",
+      errorType: "TimeoutError",
+      notified: true,
+    });
+    const payload = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as {
       content: string;
       allowed_mentions: { parse: string[] };
     };
+    expect(payload.content).toContain("収集失敗が継続");
     expect(payload.content).toContain("Slack (slack)");
-    expect(payload.content).toContain("timeout");
-    expect(payload.content).toContain("TimeoutError");
-    expect(payload.content).toContain("2026-10-24T05:00:00.000Z");
     expect(payload.content).toContain("失敗回数: 3");
-    expect(payload.content).toContain("環境: production");
     expect(payload.allowed_mentions).toEqual({ parse: [] });
-    expect(store.markCollectionAlertDelivered).toHaveBeenCalledWith(
-      "slack:failure:2026-10-24T05:02:00.000Z",
-      "2026-10-24T05:03:00.000Z",
-    );
   });
 
-  it("schedules failed deliveries from the attempt time and records a structured error", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
+  it("clears a notified service state and sends recovery once", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
       enabled: true,
       environment: "production",
       fetcher,
     });
-    const store = alertStore();
-    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-24T05:10:00.000Z"));
-
-    try {
-      await dispatchPendingCollectionAlerts(
-        store,
-        sender,
-        "2026-10-24T05:03:00.000Z",
-        "production",
-      );
-      expect(log.mock.calls[0]?.[0]).toContain('"event":"discord_notification_failed"');
-    } finally {
-      log.mockRestore();
-      nowSpy.mockRestore();
-    }
-
-    expect(store.markCollectionAlertDelivered).not.toHaveBeenCalled();
-    expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
-      "slack:failure:2026-10-24T05:02:00.000Z",
-      "2026-10-24T05:11:00.000Z",
-    );
-  });
-
-  it("uses Discord's Retry-After delay for rate-limited deliveries", async () => {
-    const scheduledAt = "2026-10-24T05:03:00.000Z";
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse(scheduledAt));
-    const fetcher = vi.fn<typeof fetch>(
-      async () =>
-        new Response('{"retry_after":2}', {
-          status: 429,
-          headers: { "retry-after": "5" },
-        }),
-    );
-    const sender = createDiscordAlertSender({
-      webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
-      fetcher,
-    });
-    const store = alertStore();
-
-    try {
-      await dispatchPendingCollectionAlerts(store, sender, scheduledAt, "production");
-    } finally {
-      nowSpy.mockRestore();
-    }
-
-    expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
-      "slack:failure:2026-10-24T05:02:00.000Z",
-      "2026-10-24T05:03:05.000Z",
-    );
-  });
-
-  it("increases the delay after repeated delivery failures", async () => {
-    const scheduledAt = "2026-10-24T05:03:00.000Z";
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.parse(scheduledAt));
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
-    const sender = createDiscordAlertSender({
-      webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
-      fetcher,
-    });
-    const store = alertStore({
-      claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
-        async () => [
-          {
-            id: "slack:failure:2026-10-24T05:02:00.000Z",
-            kind: "failure",
-            serviceId: "slack",
-            serviceName: "Slack",
-            errorCode: "timeout",
-            errorType: "TimeoutError",
-            firstFailedAt: "2026-10-24T05:00:00.000Z",
-            failureCount: 3,
-            createdAt: "2026-10-24T05:02:00.000Z",
-            attempts: 3,
-          },
-        ],
-      ),
-    });
-
-    try {
-      await dispatchPendingCollectionAlerts(store, sender, scheduledAt, "production");
-    } finally {
-      nowSpy.mockRestore();
-    }
-
-    expect(store.releaseCollectionAlert).toHaveBeenCalledWith(
-      "slack:failure:2026-10-24T05:02:00.000Z",
-      "2026-10-24T05:07:00.000Z",
-    );
-  });
-
-  it("limits each dispatch to eight alerts and runs at most four service queues at once", async () => {
-    const alerts = Array.from({ length: 10 }, (_, index) => ({
-      id: `service-${index}:failure`,
-      kind: "failure" as const,
-      serviceId: `service-${index}`,
-      serviceName: `Service ${index}`,
+    const store = stateStore();
+    store.states.set(service.id, {
+      consecutiveFailures: 3,
+      firstFailedAt: "2026-10-24T05:00:00.000Z",
+      lastFailedAt: "2026-10-24T05:02:00.000Z",
       errorCode: "timeout",
       errorType: "TimeoutError",
-      firstFailedAt: "2026-10-24T05:00:00.000Z",
-      failureCount: 3,
-      createdAt: `2026-10-24T05:02:${String(index).padStart(2, "0")}.000Z`,
-      attempts: 1,
-    }));
-    let activeSends = 0;
-    let maxActiveSends = 0;
-    const send = vi.fn<CollectionAlertSender["send"]>(async () => {
-      activeSends += 1;
-      maxActiveSends = Math.max(maxActiveSends, activeSends);
-      await Promise.resolve();
-      activeSends -= 1;
-    });
-    const sender: CollectionAlertSender = {
-      enabled: true,
-      send,
-    };
-    const store = alertStore({
-      claimPendingCollectionAlerts: vi.fn<CollectionAlertStore["claimPendingCollectionAlerts"]>(
-        async (_now, _leaseUntil, limit) => alerts.slice(0, limit),
-      ),
+      notified: true,
     });
 
-    await dispatchPendingCollectionAlerts(store, sender, "2026-10-24T05:03:00.000Z", "production");
-
-    expect(store.claimPendingCollectionAlerts).toHaveBeenCalledWith(
+    await notifyCollectionRecovery(
+      store,
+      sender,
+      service,
       "2026-10-24T05:03:00.000Z",
-      "2026-10-24T05:08:00.000Z",
-      8,
+      "production",
     );
-    expect(send).toHaveBeenCalledTimes(8);
-    expect(maxActiveSends).toBeLessThanOrEqual(4);
+    await notifyCollectionRecovery(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:03:00.000Z",
+      "production",
+    );
+
+    expect(store.delete).toHaveBeenCalledOnce();
+    expect(store.states.has(service.id)).toBe(false);
+    expect(fetcher).toHaveBeenCalledOnce();
+    const payload = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as { content: string };
+    expect(payload.content).toContain("収集が復旧");
   });
 
-  it("does not send when alerts are disabled or the webhook is missing", async () => {
+  it("clears failures that recover before the notification threshold", async () => {
+    const store = stateStore();
+    await recordCollectionFailure(store, service, "2026-10-24T05:00:00.000Z", "timeout", "Error");
+    await recordCollectionFailure(store, service, "2026-10-24T05:01:00.000Z", "timeout", "Error");
+
+    await notifyCollectionRecovery(
+      store,
+      undefined,
+      service,
+      "2026-10-24T05:02:00.000Z",
+      "production",
+    );
+
+    expect(store.delete).toHaveBeenCalledOnce();
+    expect(store.states.has(service.id)).toBe(false);
+  });
+
+  it("ignores duplicate failure timestamps and stale recovery events", async () => {
+    const store = stateStore();
+    const observedAt = "2026-10-24T05:01:00.000Z";
+
+    await recordCollectionFailure(store, service, observedAt, "timeout", "Error");
+    await recordCollectionFailure(store, service, observedAt, "timeout", "Error");
+    await notifyCollectionRecovery(store, undefined, service, observedAt, "production");
+
+    expect(store.put).toHaveBeenCalledOnce();
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(store.states.get(service.id)?.consecutiveFailures).toBe(1);
+  });
+
+  it("does not retry a failed webhook after recording the notification guard", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      enabled: true,
+      environment: "production",
+      fetcher,
+    });
+    const store = stateStore();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      for (const minute of [0, 1, 2, 3]) {
+        await notifyCollectionFailure(
+          store,
+          sender,
+          service,
+          `2026-10-24T05:0${minute}:00.000Z`,
+          "timeout",
+          "TimeoutError",
+          "production",
+        );
+      }
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining('"event":"discord_notification_failed"'),
+      );
+    } finally {
+      log.mockRestore();
+    }
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(store.put).toHaveBeenCalledTimes(3);
+    expect(store.states.get(service.id)?.notified).toBe(true);
+  });
+
+  it("keeps service failure counts isolated", async () => {
+    const notion = SERVICES.find(({ id }) => id === "notion");
+    if (!notion) throw new Error("Notion service config is missing");
+    const store = stateStore();
+
+    await recordCollectionFailure(store, service, "2026-10-24T05:00:00.000Z", "timeout", "Error");
+    await recordCollectionFailure(
+      store,
+      notion,
+      "2026-10-24T05:00:00.000Z",
+      "network_error",
+      "TypeError",
+    );
+
+    expect(store.states.get(service.id)?.consecutiveFailures).toBe(1);
+    expect(store.states.get(notion.id)?.consecutiveFailures).toBe(1);
+  });
+
+  it("does not send without an enabled webhook", async () => {
     const fetcher = vi.fn<typeof fetch>();
-    const store = alertStore();
-    const disabledSender = createDiscordAlertSender({
+    const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
       enabled: false,
       environment: "preview",
       fetcher,
     });
-    const missingSecretSender = createDiscordAlertSender({
-      enabled: true,
-      environment: "local",
-      fetcher,
-    });
+    const store = stateStore();
 
-    await dispatchPendingCollectionAlerts(
-      store,
-      disabledSender,
-      "2026-10-24T05:03:00.000Z",
-      "preview",
-    );
-    await reportCriticalAlert(missingSecretSender, {
-      kind: "cron_failure",
-      serviceId: "miharu-cron",
-      serviceName: "miharu Cron",
-      errorCode: "cron_execution_error",
-      errorType: "Error",
-      occurredAt: "2026-10-24T05:03:00.000Z",
-      environment: "local",
-    });
+    for (const minute of [0, 1, 2]) {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "timeout",
+        "TimeoutError",
+        "preview",
+      );
+    }
 
     expect(fetcher).not.toHaveBeenCalled();
-    expect(store.claimPendingCollectionAlerts).not.toHaveBeenCalled();
+    expect(store.states.get(service.id)?.notified).toBe(true);
   });
 });

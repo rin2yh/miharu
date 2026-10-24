@@ -14,6 +14,13 @@ export type SnapshotFetcher = (
 export interface CollectorOptions {
   environment?: string;
   onPersistenceFailure?: (service: ServiceConfig, error: unknown) => Promise<void>;
+  onCollectionFailure?: (
+    service: ServiceConfig,
+    observedAt: string,
+    errorCode: string,
+    errorType: string,
+  ) => Promise<void>;
+  onCollectionSuccess?: (service: ServiceConfig, observedAt: string) => Promise<void>;
 }
 
 class CollectionPersistenceError extends Error {
@@ -28,7 +35,7 @@ export async function collectService(
   observedAt: string,
   store: CollectionStore,
   fetcher: SnapshotFetcher = fetchServiceSnapshot,
-  environment = "unknown",
+  options: CollectorOptions = {},
 ): Promise<"ok" | "failed"> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), service.timeoutMs ?? COLLECTION_TIMEOUT_MS);
@@ -57,16 +64,18 @@ export async function collectService(
         serviceName: service.name,
         errorCode,
         errorType: getErrorType(error),
-        environment,
+        environment: options.environment ?? "unknown",
       }),
     );
-    await store.saveFailure(service, observedAt, errorCode, getErrorType(error));
+    await store.saveFailure(service, observedAt, errorCode);
+    await options.onCollectionFailure?.(service, observedAt, errorCode, getErrorType(error));
     return "failed";
   } finally {
     clearTimeout(timeout);
   }
 
   await store.saveSuccess(service, snapshot, observedAt);
+  await options.onCollectionSuccess?.(service, observedAt);
   return "ok";
 }
 
@@ -80,7 +89,7 @@ export async function collectAll(
   await Promise.all(
     services.map(async (service) => {
       try {
-        await collectService(service, observedAt, store, fetcher, options.environment);
+        await collectService(service, observedAt, store, fetcher, options);
       } catch (error) {
         console.error(
           JSON.stringify({

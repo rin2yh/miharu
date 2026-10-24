@@ -1,20 +1,22 @@
 import { SERVICES, type ServiceConfig } from "../shared/config/services";
-import { createD1Store } from "../shared/store";
+import { createD1Store, type CollectionStore } from "../shared/store";
+import type { CollectionAlertStateStore } from "../shared/collection-alert-state";
 import { collectAll, type SnapshotFetcher } from "./collector";
-import type { CollectionAlertStore } from "../shared/store";
 import {
-  dispatchPendingCollectionAlerts,
   getErrorType,
+  notifyCollectionFailure,
+  notifyCollectionRecovery,
   reportCriticalAlert,
   type CollectionAlertSender,
 } from "./collection-alerts";
 
-interface ScheduledCollectionStore extends CollectionAlertStore {
+interface ScheduledCollectionStore extends CollectionStore {
   pruneHistory(now: Date): Promise<void>;
 }
 
 export interface ScheduledCollectionOptions {
   sender?: CollectionAlertSender;
+  alertState?: CollectionAlertStateStore;
   environment: string;
   services?: ServiceConfig[];
   fetcher?: SnapshotFetcher;
@@ -30,8 +32,34 @@ export async function collectAtScheduledTime(
 
   try {
     const store = (options.storeFactory ?? createD1Store)(database);
+    const alertSender = options.sender?.enabled ? options.sender : undefined;
+    const alertState = alertSender ? options.alertState : undefined;
     await collectAll(options.services ?? SERVICES, observedAt, store, options.fetcher, {
       environment: options.environment,
+      onCollectionFailure:
+        alertSender && alertState
+          ? (service, failedAt, errorCode, errorType) =>
+              notifyCollectionFailure(
+                alertState,
+                alertSender,
+                service,
+                failedAt,
+                errorCode,
+                errorType,
+                options.environment,
+              )
+          : undefined,
+      onCollectionSuccess:
+        alertSender && alertState
+          ? (service, succeededAt) =>
+              notifyCollectionRecovery(
+                alertState,
+                alertSender,
+                service,
+                succeededAt,
+                options.environment,
+              )
+          : undefined,
       onPersistenceFailure: async (service, error) =>
         reportCriticalAlert(options.sender, {
           kind: "persistence_failure",
@@ -59,8 +87,6 @@ export async function collectAtScheduledTime(
         });
       }
     }
-
-    await dispatchPendingCollectionAlerts(store, options.sender, observedAt, options.environment);
   } catch (error) {
     await reportCriticalAlert(options.sender, {
       kind: "cron_failure",
