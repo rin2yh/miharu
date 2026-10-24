@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
-import { createStatusRoutes } from "./routes/api/status";
+import { buildDashboardPayload, createStatusRoutes } from "./routes/api/status";
 
 const rows: DashboardRows = {
   statusRows: [
@@ -71,6 +71,50 @@ const rows: DashboardRows = {
 };
 
 describe("status API", () => {
+  it("converts D1 rows directly into the public dashboard payload", () => {
+    const dashboard = buildDashboardPayload(rows, new Date("2026-10-23T05:03:00.000Z"));
+
+    expect(dashboard).toMatchObject({
+      generatedAt: "2026-10-23T05:03:00.000Z",
+      services: [
+        {
+          id: "slack",
+          isStale: false,
+          hasFetchError: true,
+          incidents: [{ body: "We are investigating.\nUpdate & details" }],
+        },
+        { id: "notion", status: "unknown", isStale: true, components: [], incidents: [] },
+        {
+          id: "github",
+          status: "unknown",
+          isStale: true,
+          components: [{ id: "actions", status: "degraded_performance" }],
+        },
+      ],
+      recentEvents: [{ serviceName: "Slack", title: "Message delivery delays" }],
+    });
+    expect(dashboard.recentEvents[0]).not.toHaveProperty("body");
+  });
+
+  it("ignores rows belonging to services that are not registered", () => {
+    const dashboard = buildDashboardPayload(
+      {
+        ...rows,
+        componentRows: [
+          ...rows.componentRows,
+          { ...rows.componentRows[0]!, serviceId: "unregistered" },
+        ],
+        activeRows: [...rows.activeRows, { ...rows.activeRows[0]!, serviceId: "unregistered" }],
+        eventRows: [...rows.eventRows, { ...rows.eventRows[0]!, serviceId: "unregistered" }],
+      },
+      new Date("2026-10-23T05:00:00.000Z"),
+    );
+
+    expect(dashboard.services.flatMap((item) => item.components)).toHaveLength(1);
+    expect(dashboard.services.flatMap((item) => item.incidents)).toHaveLength(1);
+    expect(dashboard.recentEvents).toHaveLength(1);
+  });
+
   it("returns registered services, active incidents, and a small public history", async () => {
     const reader = { getDashboardRows: vi.fn<() => Promise<DashboardRows>>(async () => rows) };
     const app = createStatusRoutes(() => reader);
