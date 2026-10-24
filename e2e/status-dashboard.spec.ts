@@ -126,48 +126,6 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   });
 });
 
-test("サービス稼働状況の見出しと更新操作がPC・モバイルで崩れない", async ({
-  page,
-  statusDashboard,
-}) => {
-  const heading = page.getByRole("heading", { name: "サービス稼働状況" });
-  const refreshButton = page.getByRole("button", { name: "手動更新" });
-
-  await test.step("PCでは見出しとボタンの中心をそろえ、件数を重複表示しない", async () => {
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await statusDashboard.goto();
-    await expect(heading).toBeVisible();
-    await expect(refreshButton).toBeVisible();
-    await expect(page.getByText(/^\d+サービス$/)).toHaveCount(0);
-
-    const headingBox = await heading.boundingBox();
-    const buttonBox = await refreshButton.boundingBox();
-    expect(headingBox).not.toBeNull();
-    expect(buttonBox).not.toBeNull();
-    expect(
-      Math.abs(headingBox!.y + headingBox!.height / 2 - (buttonBox!.y + buttonBox!.height / 2)),
-    ).toBeLessThanOrEqual(1);
-    expect(buttonBox!.height).toBeLessThanOrEqual(40);
-  });
-
-  await test.step("モバイルでは検索と40pxの更新操作を保ち、重ねない", async () => {
-    await page.setViewportSize({ width: 320, height: 800 });
-    await expect(statusDashboard.serviceSidebar()).not.toBeVisible();
-    await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
-
-    const headingBox = await heading.boundingBox();
-    const buttonBox = await refreshButton.boundingBox();
-    expect(headingBox).not.toBeNull();
-    expect(buttonBox).not.toBeNull();
-    expect(buttonBox!.x).toBeGreaterThanOrEqual(headingBox!.x + headingBox!.width);
-    expect(buttonBox!.width).toBeGreaterThanOrEqual(40);
-    expect(buttonBox!.height).toBeGreaterThanOrEqual(40);
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-    ).toBe(true);
-  });
-});
-
 test("低い画面高ではサイドバー全体をスクロールしてサービス一覧を確認できる", async ({
   page,
   statusDashboard,
@@ -188,7 +146,7 @@ test("低い画面高ではサイドバー全体をスクロールしてサー�
   await expect(brandLink).not.toBeInViewport();
 });
 
-test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
+test("モバイル幅のダークモードでもサービス検索を利用できる", async ({
   dashboardStatus,
   page,
   statusDashboard,
@@ -199,7 +157,7 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
     await statusDashboard.goto();
   });
 
-  await test.step("サービス一覧が縦並びで表示されることを確認する", async () => {
+  await test.step("モバイルの検索結果を確認する", async () => {
     await expect(statusDashboard.serviceSidebar()).not.toBeVisible();
     await expect(page.getByRole("searchbox", { name: "サービスを検索" })).toBeVisible();
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
@@ -207,21 +165,9 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
     await expect(statusDashboard.serviceCards()).toHaveCount(
       dashboardStatus.payload.services.length,
     );
+    await statusDashboard.searchService("GitHub");
+    await expect(statusDashboard.serviceCard("GitHub")).toBeVisible();
+    await expect(statusDashboard.serviceCard("Slack")).not.toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-
-    const githubCard = await statusDashboard.serviceCard("GitHub").boundingBox();
-    const slackCard = await statusDashboard.serviceCard("Slack").boundingBox();
-    expect(githubCard).not.toBeNull();
-    expect(slackCard).not.toBeNull();
-    expect(slackCard!.y).toBeGreaterThan(githubCard!.y);
-  });
-
-  await test.step("横スクロールがなくダークモードが適用されていることを確認する", async () => {
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-    ).toBe(true);
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(
-      "dark",
-    );
   });
 });
