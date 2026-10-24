@@ -10,12 +10,28 @@ type E2EFixtures = {
 export const test = base.extend<E2EFixtures>({
   dashboardStatus: async ({ page }, use) => {
     const dashboardStatus = createDashboardStatusFixture();
-    await page.route("**/api/status", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(dashboardStatus.payload),
-      }),
+    await page.route(
+      (url) => url.pathname === "/api/status",
+      (route) => {
+        const requestedServices = new URL(route.request().url()).searchParams.get("services");
+        const selectedIds =
+          requestedServices === null ? null : new Set(requestedServices.split(","));
+        const payload = {
+          ...dashboardStatus.payload,
+          services: dashboardStatus.payload.services.filter(
+            (service) => selectedIds === null || selectedIds.has(service.id),
+          ),
+          recentEvents: dashboardStatus.payload.recentEvents.filter(
+            (event) => selectedIds === null || selectedIds.has(event.serviceId),
+          ),
+        };
+
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(payload),
+        });
+      },
     );
     await use(dashboardStatus);
   },

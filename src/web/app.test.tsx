@@ -288,8 +288,10 @@ describe("dashboard", () => {
 
   it("keeps selection changes as a draft until apply", async () => {
     window.history.replaceState(null, "", "/?services=github");
-    render(<App load={async () => basePayload} />);
+    const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
+    render(<App load={load} />);
     await screen.findByRole("link", { name: githubLinkName });
+    expect(load).toHaveBeenNthCalledWith(1, ["github"]);
     expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("表示サービスを選択"));
@@ -303,7 +305,11 @@ describe("dashboard", () => {
 
     expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
     expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+    await waitFor(() => expect(load).toHaveBeenNthCalledWith(2, ["slack", "github"]));
     expect(screen.queryByText("未適用")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+    await waitFor(() => expect(load).toHaveBeenNthCalledWith(3, ["slack", "github"]));
   });
 
   it("shows an empty state for unknown URL services and disables applying no selection", async () => {
@@ -329,13 +335,20 @@ describe("dashboard", () => {
 
   it("updates applied services when browser history changes the URL", async () => {
     window.history.replaceState(null, "", "/?services=github");
-    render(<App load={async () => basePayload} />);
+    const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
+    render(<App load={load} />);
     await screen.findByRole("link", { name: githubLinkName });
 
     window.history.pushState(null, "", "/");
     fireEvent.popState(window);
 
     expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(load).toHaveBeenNthCalledWith(
+        2,
+        SERVICES.map(({ id }) => id),
+      ),
+    );
   });
 
   it("shows an empty data message when the selected service is missing from the response", async () => {

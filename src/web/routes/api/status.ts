@@ -26,16 +26,28 @@ export function createStatusRoutes(storeFactory: StoreFactory = createD1Store) {
   const app = new Hono<{ Bindings: StatusBindings }>();
 
   app.get("/api/status", async (context) => {
+    const selection = parseServiceSelection(new URL(context.req.url).searchParams);
+    if (!selection.valid) {
+      return context.json({ error: "invalid_services" }, 400, {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+    }
+
     try {
       const now = new Date();
-      const rows = await storeFactory(context.env.DB).getDashboardRows();
+      const rows = await storeFactory(context.env.DB).getDashboardRows(selection.serviceIds);
       const freshnessWarningSeconds = parseFreshnessWarningSeconds(
         context.env.FRESHNESS_WARNING_SECONDS,
       );
-      return context.json(buildDashboardPayload(rows, now, freshnessWarningSeconds), 200, {
-        "Cache-Control": "public, max-age=10, s-maxage=10, stale-while-revalidate=10",
-        "X-Content-Type-Options": "nosniff",
-      });
+      return context.json(
+        buildDashboardPayload(rows, now, freshnessWarningSeconds, selection.serviceIds),
+        200,
+        {
+          "Cache-Control": "public, max-age=10, s-maxage=10, stale-while-revalidate=10",
+          "X-Content-Type-Options": "nosniff",
+        },
+      );
     } catch {
       return context.json({ error: "dashboard_unavailable" }, 503, {
         "Cache-Control": "no-store",
@@ -51,10 +63,12 @@ export function buildDashboardPayload(
   rows: DashboardRows,
   now: Date,
   freshnessWarningSeconds = FRESHNESS_WARNING_SECONDS,
+  serviceIds?: readonly string[],
 ): DashboardPayload {
   const statusById = new Map(rows.statusRows.map((row) => [row.serviceId, row]));
   const componentsByService = new Map<string, DashboardComponent[]>();
   const incidentsByService = new Map<string, DashboardIncident[]>();
+  const selectedIds = serviceIds === undefined ? undefined : new Set(serviceIds);
 
   for (const row of rows.componentRows) {
     if (!SERVICES.some((service) => service.id === row.serviceId)) continue;
@@ -92,28 +106,34 @@ export function buildDashboardPayload(
     incidentsByService.set(row.serviceId, list);
   }
 
-  const services = SERVICES.map((service) => {
-    const state = statusById.get(service.id);
-    const lastSuccessAt = state?.lastSuccessAt ?? null;
-    const checkedAt = lastSuccessAt ? Date.parse(lastSuccessAt) : Number.NaN;
-    return {
-      id: service.id,
-      name: service.name,
-      status: state?.status ?? "unknown",
-      sourceStatus: state?.sourceStatus ?? null,
-      summary: state?.summary ?? null,
-      statusPageUrl: service.statusPageUrl,
-      lastSuccessAt,
-      hasFetchError: Boolean(state?.lastErrorAt),
-      isStale:
-        !Number.isFinite(checkedAt) || now.getTime() - checkedAt > freshnessWarningSeconds * 1_000,
-      components: componentsByService.get(service.id) ?? [],
-      incidents: incidentsByService.get(service.id) ?? [],
-    } satisfies DashboardPayload["services"][number];
-  });
+  const services = SERVICES.filter((service) => selectedIds?.has(service.id) ?? true).map(
+    (service) => {
+      const state = statusById.get(service.id);
+      const lastSuccessAt = state?.lastSuccessAt ?? null;
+      const checkedAt = lastSuccessAt ? Date.parse(lastSuccessAt) : Number.NaN;
+      return {
+        id: service.id,
+        name: service.name,
+        status: state?.status ?? "unknown",
+        sourceStatus: state?.sourceStatus ?? null,
+        summary: state?.summary ?? null,
+        statusPageUrl: service.statusPageUrl,
+        lastSuccessAt,
+        hasFetchError: Boolean(state?.lastErrorAt),
+        isStale:
+          !Number.isFinite(checkedAt) ||
+          now.getTime() - checkedAt > freshnessWarningSeconds * 1_000,
+        components: componentsByService.get(service.id) ?? [],
+        incidents: incidentsByService.get(service.id) ?? [],
+      } satisfies DashboardPayload["services"][number];
+    },
+  );
 
   const serviceNames = new Map<string, string>(
-    SERVICES.map((service) => [service.id, service.name]),
+    SERVICES.filter((service) => selectedIds?.has(service.id) ?? true).map((service) => [
+      service.id,
+      service.name,
+    ]),
   );
   const recentEvents: DashboardEvent[] = rows.eventRows
     .filter((row) => serviceNames.has(row.serviceId))
@@ -138,6 +158,26 @@ export function buildDashboardPayload(
     freshnessWarningSeconds,
     services,
     recentEvents,
+  };
+}
+
+function parseServiceSelection(
+  params: URLSearchParams,
+): { valid: true; serviceIds?: string[] } | { valid: false } {
+  if (!params.has("services")) return { valid: true };
+
+  const requestedIds = params.getAll("services").flatMap((value) => value.split(","));
+  const knownIds = new Set<string>(SERVICES.map((service) => service.id));
+  if (requestedIds.length === 0 || requestedIds.some((id) => !id || !knownIds.has(id))) {
+    return { valid: false };
+  }
+
+  const uniqueIds = new Set(requestedIds);
+  return {
+    valid: true,
+    serviceIds: SERVICES.filter((service) => uniqueIds.has(service.id)).map(
+      (service) => service.id,
+    ),
   };
 }
 

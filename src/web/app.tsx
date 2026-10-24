@@ -12,7 +12,19 @@ import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
 import { servicePriority } from "./presentation/status-presentation";
 
-type DashboardLoader = () => Promise<DashboardPayload>;
+type DashboardLoader = (serviceIds: readonly string[]) => Promise<DashboardPayload>;
+
+function completeDashboardLoad(
+  inFlight: { current: boolean },
+  inFlightServiceKey: { current: string | null },
+  pendingLoad: { current: (() => void) | null },
+) {
+  inFlight.current = false;
+  inFlightServiceKey.current = null;
+  const nextLoad = pendingLoad.current;
+  pendingLoad.current = null;
+  nextLoad?.();
+}
 
 export function App({ load: providedLoad }: { load?: DashboardLoader }) {
   const load = providedLoad ?? fetchDashboard;
@@ -22,6 +34,10 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const inFlight = useRef(false);
+  const inFlightServiceKey = useRef<string | null>(null);
+  const pendingLoad = useRef<(() => void) | null>(null);
+  const selectedServiceKey = getSelectedServiceIds(locationSearch).join(",");
+  const selectedServiceIds = selectedServiceKey ? selectedServiceKey.split(",") : [];
 
   useEffect(() => {
     const syncSelectionFromUrl = () => {
@@ -35,14 +51,16 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
   const refresh = async () => {
     if (inFlight.current) return;
     inFlight.current = true;
+    inFlightServiceKey.current = selectedServiceKey;
     try {
-      const result = await load();
+      const result = await load(selectedServiceIds);
       setPayload(result);
       setLoadError(false);
     } catch {
       setLoadError(true);
+    } finally {
+      completeDashboardLoad(inFlight, inFlightServiceKey, pendingLoad);
     }
-    inFlight.current = false;
   };
 
   const refreshManually = async () => {
@@ -54,10 +72,20 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
 
   useEffect(() => {
     let cancelled = false;
+    const serviceIds = selectedServiceKey ? selectedServiceKey.split(",") : [];
     const loadLatest = () => {
-      if (inFlight.current) return;
+      if (cancelled) return;
+      if (inFlight.current) {
+        if (inFlightServiceKey.current === selectedServiceKey) {
+          pendingLoad.current = null;
+        } else {
+          pendingLoad.current = loadLatest;
+        }
+        return;
+      }
       inFlight.current = true;
-      load()
+      inFlightServiceKey.current = selectedServiceKey;
+      load(serviceIds)
         .then((result) => {
           if (!cancelled) {
             setPayload(result);
@@ -68,7 +96,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
           if (!cancelled) setLoadError(true);
         })
         .finally(() => {
-          inFlight.current = false;
+          completeDashboardLoad(inFlight, inFlightServiceKey, pendingLoad);
         });
     };
 
@@ -78,7 +106,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [load]);
+  }, [inFlight, inFlightServiceKey, load, pendingLoad, selectedServiceKey]);
 
   const orderedServices = [...(payload?.services ?? [])];
   orderedServices.sort((left, right) => {
@@ -88,7 +116,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
   });
 
-  const selectedServiceIds = getSelectedServiceIds(locationSearch);
   const activeServiceIds = new Set(selectedServiceIds);
   const needle = query.trim().toLocaleLowerCase("ja");
   const filteredServices = orderedServices.filter(

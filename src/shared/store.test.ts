@@ -3,12 +3,13 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
 import type { NormalizedIncident, ProviderSnapshot } from "../domain";
-import { SERVICES } from "./config/services";
+import { INCIDENT_HISTORY_DISPLAY_LIMIT, SERVICES } from "./config/services";
 import { createD1Store, parseComponents } from "./store";
 
 const service = SERVICES.find(({ id }) => id === "github");
+const slackService = SERVICES.find(({ id }) => id === "slack");
 
-if (!service) throw new Error("GitHub service configuration is missing");
+if (!service || !slackService) throw new Error("Test service configuration is missing");
 
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
@@ -222,6 +223,32 @@ describe("createD1Store with local D1", () => {
 
     expect(await selectRows(`SELECT id FROM incidents`)).toHaveLength(51);
     expect(await selectRows(`SELECT id FROM incident_events`)).toHaveLength(51);
+  });
+
+  it("filters every dashboard table before limiting recent events", async () => {
+    const store = createD1Store(env.DB);
+    const eventCount = INCIDENT_HISTORY_DISPLAY_LIMIT + 3;
+
+    for (let index = 0; index < eventCount; index += 1) {
+      await store.saveSuccess(
+        slackService,
+        snapshot({ incidents: [incident({ title: `Slack update ${index}` })] }),
+        new Date(Date.parse("2026-10-01T05:00:00.000Z") + index * 60_000).toISOString(),
+      );
+    }
+    await store.saveSuccess(
+      service,
+      snapshot({ incidents: [incident({ title: "GitHub update" })] }),
+      "2026-10-01T04:00:00.000Z",
+    );
+
+    const rows = await store.getDashboardRows([service.id]);
+
+    expect(rows.statusRows.map(({ serviceId }) => serviceId)).toEqual([service.id]);
+    expect(rows.componentRows.map(({ serviceId }) => serviceId)).toEqual([service.id, service.id]);
+    expect(rows.incidentRows.map(({ serviceId }) => serviceId)).toEqual([service.id]);
+    expect(rows.eventRows.map(({ serviceId }) => serviceId)).toEqual([service.id]);
+    expect(rows.eventRows[0]?.title).toBe("GitHub update");
   });
 });
 
