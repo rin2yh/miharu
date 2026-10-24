@@ -2,27 +2,19 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
-import { App } from "../app";
-import {
-  basePayload,
-  component,
-  githubLinkName,
-  incident,
-  payload,
-  service,
-  slackLinkName,
-} from "../test-fixtures";
+import { ServiceCard } from "./service-card";
+import { component, githubLinkName, incident, service, slackLinkName } from "../test-fixtures";
 
-describe("service card icons", () => {
+describe("ServiceCard", () => {
   it.each([
     { id: "cloudflare", name: "Cloudflare", icon: siCloudflare, invertInDark: false },
     { id: "notion", name: "Notion", icon: siNotion, invertInDark: true },
     { id: "github", name: "GitHub", icon: siGithub, invertInDark: true },
     { id: "claude", name: "Claude", icon: siClaude, invertInDark: false },
-  ])("shows the $name brand icon", async ({ id, name, icon, invertInDark }) => {
-    render(<App load={async () => payload([service({ id, name })])} />);
+  ])("shows the $name brand icon", ({ id, name, icon, invertInDark }) => {
+    render(<ServiceCard service={service({ id, name })} />);
 
-    const card = await screen.findByRole("listitem", { name: `${name}のサービス状況` });
+    const card = screen.getByRole("listitem", { name: `${name}のサービス状況` });
     const iconWrapper = card.querySelector("header > span");
 
     expect(iconWrapper?.querySelector("svg path")).toHaveAttribute("d", icon.path);
@@ -30,10 +22,10 @@ describe("service card icons", () => {
     expect(iconWrapper?.classList.contains("dark:[&>svg]:invert")).toBe(invertInDark);
   });
 
-  it("uses a theme-colored SVG for ChatGPT", async () => {
-    render(<App load={async () => payload([service({ id: "chatgpt", name: "ChatGPT" })])} />);
+  it("uses a theme-colored SVG for ChatGPT", () => {
+    render(<ServiceCard service={service({ id: "chatgpt", name: "ChatGPT" })} />);
 
-    const card = await screen.findByRole("listitem", { name: "ChatGPTのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "ChatGPTのサービス状況" });
     const iconWrapper = card.querySelector("header > span");
     const iconPath = iconWrapper?.querySelector("svg path");
 
@@ -42,55 +34,48 @@ describe("service card icons", () => {
     expect(iconWrapper).not.toHaveAttribute("style");
     expect(iconWrapper).not.toHaveClass("dark:[&>svg]:invert");
   });
-});
 
-describe("service status links", () => {
-  it.each([
-    {
-      serviceName: "Slack",
-      linkName: slackLinkName,
-      statusPageUrl: "https://slack-status.com/",
-    },
-    {
-      serviceName: "GitHub",
-      linkName: githubLinkName,
-      statusPageUrl: "https://www.githubstatus.com/",
-    },
-  ])("$serviceName links to its official status page", async ({ linkName, statusPageUrl }) => {
-    render(<App load={async () => basePayload} />);
+  it("links directly to the official status page", () => {
+    render(<ServiceCard service={service()} />);
 
-    const statusPageLink = await screen.findByRole("link", { name: linkName });
-    expect(statusPageLink).toHaveAttribute("href", statusPageUrl);
+    const statusPageLink = screen.getByRole("link", { name: githubLinkName });
+    expect(statusPageLink).toHaveAttribute("href", "https://www.githubstatus.com/");
     expect(statusPageLink).toHaveAttribute("target", "_blank");
   });
-});
 
-describe("dashboard header", () => {
-  it("links the product name home without repeating the polling schedule", () => {
-    render(<App load={async () => basePayload} />);
+  it("links Slack to its official status page", () => {
+    render(
+      <ServiceCard
+        service={service({
+          id: "slack",
+          name: "Slack",
+          statusPageUrl: "https://slack-status.com/",
+        })}
+      />,
+    );
 
-    expect(screen.getByRole("link", { name: "miharu ホーム" })).toBeInTheDocument();
-    expect(screen.queryByText(/公式情報を1分ごとに確認|画面更新 1分/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: slackLinkName })).toHaveAttribute(
+      "href",
+      "https://slack-status.com/",
+    );
   });
-});
 
-describe("service card incidents", () => {
-  it("shows incidents even when the service has no component catalogue", async () => {
-    render(<App load={async () => basePayload} />);
+  it("shows incidents when the service has no component catalogue", () => {
+    render(<ServiceCard service={service({ incidents: [incident()] })} />);
 
-    const slackCard = await screen.findByRole("listitem", { name: "Slackのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     expect(
-      within(slackCard).getByRole("listitem", { name: "Messaging delays for some users" }),
+      within(card).getByRole("listitem", { name: "Messaging delays for some users" }),
     ).toBeInTheDocument();
     expect(
-      within(slackCard).queryByRole("list", { name: "表示中のコンポーネント" }),
+      within(card).queryByRole("list", { name: "表示中のコンポーネント" }),
     ).not.toBeInTheDocument();
   });
 
-  it("reveals an incident's official details when its summary is opened", async () => {
-    render(<App load={async () => payload([service({ incidents: [incident()] })])} />);
+  it("reveals official incident details when its summary is opened", () => {
+    render(<ServiceCard service={service({ incidents: [incident()] })} />);
 
-    const incidentItem = await screen.findByRole("listitem", {
+    const incidentItem = screen.getByRole("listitem", {
       name: "Messaging delays for some users",
     });
     const incidentBody = within(incidentItem).getByText("We are investigating.");
@@ -111,33 +96,29 @@ describe("service card incidents", () => {
     ).toEqual(["2026-10-23T04:55:00.000Z", "2026-10-23T04:50:00.000Z"]);
   });
 
-  it("shows Google Workspace as unknown when its history has no active incidents", async () => {
+  it("shows Google Workspace as unknown when history has no active incidents", () => {
     const summary =
       "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。";
     render(
-      <App
-        load={async () =>
-          payload([
-            service({
-              id: "google-workspace",
-              name: "Google Workspace",
-              statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
-              status: "unknown",
-              sourceStatus: "no_active_incidents",
-              summary,
-              components: [component("gmail", "Gmail", "unknown")],
-            }),
-          ])
-        }
+      <ServiceCard
+        service={service({
+          id: "google-workspace",
+          name: "Google Workspace",
+          statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+          status: "unknown",
+          sourceStatus: "no_active_incidents",
+          summary,
+          components: [component("gmail", "Gmail", "unknown")],
+        })}
       />,
     );
 
-    const card = await screen.findByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "Google Workspaceのサービス状況" });
     expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
     expect(within(card).getByText(summary)).toBeVisible();
   });
 
-  it("shows a missing Google Workspace incident as unknown with its recovery warning", async () => {
+  it("shows an unverified Google Workspace incident with a recovery warning", () => {
     const unknownIncident = incident({
       id: "unknown-google-workspace-incident",
       title: "Earlier Gmail issue",
@@ -151,41 +132,33 @@ describe("service card incidents", () => {
     });
     const summary = "公式の履歴フィードから現在の状態を判断できません。";
     render(
-      <App
-        load={async () =>
-          payload([
-            service({
-              id: "google-workspace",
-              name: "Google Workspace",
-              statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
-              status: "unknown",
-              sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
-              summary,
-              components: [component("gmail", "Gmail", "unknown")],
-              incidents: [unknownIncident],
-            }),
-          ])
-        }
+      <ServiceCard
+        service={service({
+          id: "google-workspace",
+          name: "Google Workspace",
+          statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+          status: "unknown",
+          sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+          summary,
+          components: [component("gmail", "Gmail", "unknown")],
+          incidents: [unknownIncident],
+        })}
       />,
     );
 
-    const card = await screen.findByRole("listitem", { name: "Google Workspaceのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "Google Workspaceのサービス状況" });
     expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
     expect(within(card).getByText(summary)).toBeVisible();
     const gmail = within(card).getByRole("listitem", { name: "Gmailコンポーネント" });
     expect(within(gmail).getAllByText("状態不明")).toHaveLength(2);
-    const incidentItem = await screen.findByRole("listitem", {
-      name: unknownIncident.title,
-    });
+    const incidentItem = within(gmail).getByRole("listitem", { name: unknownIncident.title });
     expect(within(incidentItem).getByText("状態不明")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
   });
-});
 
-describe("component lists", () => {
-  it("sorts affected components by severity and keeps healthy ones behind the toggle", async () => {
+  it("sorts affected components by severity and keeps healthy ones behind a toggle", () => {
     const github = service({
       components: [
         component("issues", "Issues", "major_outage"),
@@ -195,9 +168,9 @@ describe("component lists", () => {
         component("git", "Git Operations"),
       ],
     });
-    render(<App load={async () => payload([github])} />);
+    render(<ServiceCard service={github} />);
 
-    const card = await screen.findByRole("listitem", { name: "GitHubのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     const visibleList = within(card).getByRole("list", { name: "表示中のコンポーネント" });
     expect(
       within(visibleList)
@@ -209,41 +182,100 @@ describe("component lists", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps incident-bearing healthy components visible and separates unmatched incidents", async () => {
+  it("keeps a healthy component visible when it owns an incident", () => {
     const github = service({
       components: [
         component("actions", "Actions", "degraded_performance"),
-        component("packages", "Packages"),
         component("web", "Web"),
       ],
-      incidents: [
-        incident({ id: "package-1", title: "Package notice", components: ["Packages"] }),
-        incident({
-          id: "orphan-1",
-          title: "Unmatched incident",
-          componentIds: ["removed-id"],
-          components: ["Removed component"],
-        }),
-      ],
+      incidents: [incident({ id: "web-1", title: "Web notice", componentIds: ["web"] })],
     });
-    render(<App load={async () => payload([github])} />);
+    render(<ServiceCard service={github} />);
 
-    const card = await screen.findByRole("listitem", { name: "GitHubのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     const visibleList = within(card).getByRole("list", { name: "表示中のコンポーネント" });
     expect(
-      within(visibleList)
-        .getAllByRole("heading", { level: 4 })
-        .map((heading) => heading.textContent),
-    ).toEqual(["Actions", "Packages"]);
-    expect(within(card).getByRole("listitem", { name: "Package notice" })).toBeInTheDocument();
+      within(visibleList).getByRole("listitem", { name: "Webコンポーネント" }),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole("listitem", { name: "Web notice" })).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      name: "component IDs",
+      componentIds: ["actions"],
+      components: ["API Requests"],
+      expectedComponent: "Actions",
+    },
+    {
+      name: "component names when no ID matches",
+      componentIds: ["removed-id"],
+      components: ["API Requests"],
+      expectedComponent: "API Requests",
+    },
+  ])("assigns incidents using $name", ({ componentIds, components, expectedComponent }) => {
+    const github = service({
+      components: [
+        component("actions", "Actions", "partial_outage"),
+        component("api", "API Requests"),
+      ],
+      incidents: [incident({ componentIds, components })],
+    });
+    render(<ServiceCard service={github} />);
+
+    const componentRow = screen.getByRole("listitem", {
+      name: `${expectedComponent}コンポーネント`,
+    });
     expect(
-      within(
-        within(card).getByRole("region", { name: "GitHubの障害・メンテナンス情報" }),
-      ).getByRole("listitem", { name: "Unmatched incident" }),
+      within(componentRow).getByRole("listitem", { name: "Messaging delays for some users" }),
     ).toBeInTheDocument();
   });
 
-  it("expands one component incident without opening its sibling", async () => {
+  it("assigns an incident to an affected component with abnormal status among several matches", () => {
+    const github = service({
+      components: [component("actions", "Actions", "partial_outage"), component("api", "API")],
+      incidents: [
+        incident({
+          componentIds: ["api", "actions"],
+          components: ["Actions", "API"],
+        }),
+      ],
+    });
+    render(<ServiceCard service={github} />);
+
+    const affectedRow = screen.getByRole("listitem", { name: "Actionsコンポーネント" });
+    expect(
+      within(affectedRow).getByRole("listitem", { name: "Messaging delays for some users" }),
+    ).toBeInTheDocument();
+    const healthyList = document.getElementById("healthy-components-github")!;
+    expect(
+      within(healthyList).queryByRole("listitem", {
+        name: "Messaging delays for some users",
+        hidden: true,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows unmatched incidents separately and removes duplicate IDs", () => {
+    const github = service({
+      components: [component("actions", "Actions", "degraded_performance")],
+      incidents: [
+        incident({ id: "orphan-1", title: "Unmatched incident", componentIds: ["removed-id"] }),
+        incident({ id: "orphan-1", title: "Duplicate incident", componentIds: ["actions"] }),
+      ],
+    });
+    render(<ServiceCard service={github} />);
+
+    const section = screen.getByRole("region", { name: "GitHubの障害・メンテナンス情報" });
+    expect(
+      within(section).getByRole("listitem", { name: "Unmatched incident" }),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole("listitem", { name: "Duplicate incident" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("expands one component incident without opening its sibling", () => {
     const github = service({
       components: [component("actions", "Actions", "degraded_performance")],
       incidents: [
@@ -261,9 +293,9 @@ describe("component lists", () => {
         }),
       ],
     });
-    render(<App load={async () => payload([github])} />);
+    render(<ServiceCard service={github} />);
 
-    const actionsRow = await screen.findByRole("listitem", { name: "Actionsコンポーネント" });
+    const actionsRow = screen.getByRole("listitem", { name: "Actionsコンポーネント" });
     const selectedIncident = within(actionsRow).getByRole("listitem", { name: "Actions delay" });
     const siblingIncident = within(actionsRow).getByRole("listitem", {
       name: "Workflow queue delay",
@@ -280,10 +312,10 @@ describe("component lists", () => {
       count: 2,
       components: [component("api", "API Requests"), component("git", "Git Operations")],
     },
-  ])("toggles all $count healthy components together", async ({ count, components }) => {
-    render(<App load={async () => payload([service({ components })])} />);
+  ])("toggles all $count healthy components together", ({ count, components }) => {
+    render(<ServiceCard service={service({ components })} />);
 
-    const card = await screen.findByRole("listitem", { name: "GitHubのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     const showButton = within(card).getByRole("button", {
       name: `正常なコンポーネント ${count}件を表示`,
     });
@@ -301,15 +333,15 @@ describe("component lists", () => {
     expect(healthyList).toHaveAttribute("hidden");
   });
 
-  it("shows the official service status separately from each component status", async () => {
+  it("shows the official service status separately from each component status", () => {
     const affected = service({
       status: "major_outage",
       sourceStatus: "major_outage",
       components: [component("actions", "Actions", "partial_outage")],
     });
-    render(<App load={async () => payload([affected])} />);
+    render(<ServiceCard service={affected} />);
 
-    const card = await screen.findByRole("listitem", { name: "GitHubのサービス状況" });
+    const card = screen.getByRole("listitem", { name: "GitHubのサービス状況" });
     expect(within(card).getByLabelText("公式全体ステータス: 全面障害")).toBeInTheDocument();
     expect(
       within(within(card).getByRole("listitem", { name: "Actionsコンポーネント" })).getByText(

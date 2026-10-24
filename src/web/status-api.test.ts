@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DashboardRows } from "../../db/schema";
 import type { DashboardPayload } from "../domain";
 import { SERVICES } from "../shared/config/services";
-import { createStatusRoutes } from "./routes/api/status";
+import { buildDashboardPayload, createStatusRoutes } from "./routes/api/status";
 
 const slackService = SERVICES.find((service) => service.provider === "slack");
 const githubService = SERVICES.find(
@@ -84,6 +84,53 @@ const rows: DashboardRows = {
 };
 
 describe("status API", () => {
+  it("converts D1 rows directly into the public dashboard payload", () => {
+    const dashboard = buildDashboardPayload(rows, new Date("2026-10-23T05:03:00.000Z"), 180);
+    const slack = dashboard.services.find((service) => service.id === slackService.id);
+    const notion = dashboard.services.find((service) => service.id === "notion");
+    const github = dashboard.services.find((service) => service.id === githubService.id);
+
+    expect(dashboard.generatedAt).toBe("2026-10-23T05:03:00.000Z");
+    expect(dashboard.freshnessWarningSeconds).toBe(180);
+    expect(slack).toMatchObject({
+      isStale: false,
+      hasFetchError: true,
+      incidents: [{ body: "We are investigating.\nUpdate & details" }],
+    });
+    expect(notion).toMatchObject({
+      status: "unknown",
+      isStale: true,
+      components: [],
+      incidents: [],
+    });
+    expect(github).toMatchObject({
+      status: "unknown",
+      isStale: true,
+      components: [{ id: "actions", status: "degraded_performance" }],
+    });
+    expect(dashboard.recentEvents[0]).toMatchObject({ serviceName: "Slack" });
+    expect(dashboard.recentEvents[0]).not.toHaveProperty("body");
+  });
+
+  it("ignores rows belonging to services that are not registered", () => {
+    const dashboard = buildDashboardPayload(
+      {
+        ...rows,
+        componentRows: [
+          ...rows.componentRows,
+          { ...rows.componentRows[0]!, serviceId: "unregistered" },
+        ],
+        activeRows: [...rows.activeRows, { ...rows.activeRows[0]!, serviceId: "unregistered" }],
+        eventRows: [...rows.eventRows, { ...rows.eventRows[0]!, serviceId: "unregistered" }],
+      },
+      new Date("2026-10-23T05:00:00.000Z"),
+    );
+
+    expect(dashboard.services.flatMap((service) => service.components)).toHaveLength(1);
+    expect(dashboard.services.flatMap((service) => service.incidents)).toHaveLength(1);
+    expect(dashboard.recentEvents).toHaveLength(1);
+  });
+
   it("returns registered services, active incidents, and a small public history", async () => {
     const reader = { getDashboardRows: vi.fn<() => Promise<DashboardRows>>(async () => rows) };
     const app = createStatusRoutes(() => reader);

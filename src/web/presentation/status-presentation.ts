@@ -51,7 +51,9 @@ export function formatDateTime(value: string): string {
 }
 
 export function relativeTime(value: string): string {
-  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 60_000));
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "時刻不明";
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
   if (elapsedMinutes < 1) return "1分未満";
   if (elapsedMinutes < 60) return `${elapsedMinutes}分`;
   const hours = Math.floor(elapsedMinutes / 60);
