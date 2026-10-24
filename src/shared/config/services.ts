@@ -19,6 +19,7 @@ export type ServiceConfig = {
     }
   | {
       provider: "google-workspace";
+      dashboardUrl: string;
       productsUrl: string;
       incidentsUrl: string;
     }
@@ -97,6 +98,7 @@ export const SERVICES = [
     id: "google-workspace" as const,
     name: "Google Workspace",
     provider: "google-workspace",
+    dashboardUrl: "https://www.google.com/appsstatus/dashboard/?hl=en",
     productsUrl: "https://www.google.com/appsstatus/dashboard/products.json",
     incidentsUrl: "https://www.google.com/appsstatus/dashboard/incidents.json",
     statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
