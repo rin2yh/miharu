@@ -96,6 +96,7 @@ describe("D1 incident lifecycle persistence", () => {
       active: 0,
     });
     database.migrate("db/migrations/0003_incident_lifecycle.sql");
+    database.migrate("db/migrations/0004_incident_lifecycle_compat_recheck.sql");
 
     const store = createD1Store(database as unknown as D1Database);
     const known = await store.getUnresolvedIncidents("google-workspace");
@@ -112,6 +113,16 @@ describe("D1 incident lifecycle persistence", () => {
         .prepare("SELECT active, lifecycle FROM incidents WHERE id = 'legacy-unverified'")
         .get(),
     ).toMatchObject({ active: 1, lifecycle: "unverified" });
+    await database
+      .prepare(
+        "UPDATE incidents SET active = 1, state = 'investigating', source_status = 'SERVICE_DISRUPTION' WHERE id = 'legacy-unverified'",
+      )
+      .run();
+    expect(
+      database.sqlite
+        .prepare("SELECT active, lifecycle FROM incidents WHERE id = 'legacy-unverified'")
+        .get(),
+    ).toMatchObject({ active: 1, lifecycle: "active" });
     await database
       .prepare(
         "UPDATE incidents SET active = 0, state = 'resolved', source_status = 'resolved' WHERE id = 'legacy-unverified'",
