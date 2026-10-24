@@ -178,7 +178,8 @@ export function parseIncidentState(value: string): NormalizedIncident["state"] {
   ) {
     return "resolved";
   }
-  if (["scheduled", "in_progress", "in_progress_maintenance"].includes(raw)) return "scheduled";
+  if (raw === "scheduled") return "scheduled";
+  if (["in_progress", "in_progress_maintenance"].includes(raw)) return "in_progress";
   if (raw.includes("monitor")) return "monitoring";
   if (raw.includes("identif")) return "identified";
   if (raw.includes("investigat") || raw === "active" || raw === "open") return "investigating";

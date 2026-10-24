@@ -13,6 +13,7 @@ export type IncidentState =
   | "identified"
   | "monitoring"
   | "scheduled"
+  | "in_progress"
   | "resolved"
   | "unknown";
 export type IncidentLifecycle = "active" | "resolved" | "unverified";

@@ -22,44 +22,50 @@ export function isAbnormal(status: NormalizedStatus): boolean {
   return status !== "operational";
 }
 
+export function incidentKindLabel(kind: DashboardIncident["kind"]): string {
+  return kind === "maintenance" ? "メンテナンス" : "障害";
+}
+
 export function incidentStateLabel(
   kind: DashboardIncident["kind"],
   state: DashboardIncident["state"],
   lifecycle: DashboardIncident["lifecycle"],
-  sourceStatus?: string,
 ): string {
   if (lifecycle === "unverified") {
     return kind === "maintenance" ? "終了未確認" : "復旧未確認";
   }
 
-  if (kind === "maintenance") {
-    if (lifecycle === "resolved" || state === "resolved") return "メンテナンス完了";
-    const normalizedSourceStatus = sourceStatus
-      ?.toLowerCase()
-      .replaceAll("-", "_")
-      .replaceAll(" ", "_");
-    if (["in_progress", "in_progress_maintenance"].includes(normalizedSourceStatus ?? "")) {
-      return "メンテナンス中";
-    }
-    if (state === "scheduled") return "メンテナンス予定";
-    if (state === "investigating" || state === "identified" || state === "monitoring") {
-      return "メンテナンス中";
-    }
-    return "メンテナンス・状態不明";
+  if (lifecycle === "resolved" || state === "resolved") {
+    return kind === "maintenance" ? "完了" : "復旧済み";
   }
 
-  if (lifecycle === "resolved" || state === "resolved") return "復旧済み";
+  if (kind === "maintenance") {
+    switch (state) {
+      case "scheduled":
+        return "予定";
+      case "in_progress":
+      case "investigating":
+      case "identified":
+      case "monitoring":
+        return "実施中";
+      default:
+        return "状態不明";
+    }
+  }
+
   switch (state) {
     case "investigating":
-      return "障害・調査中";
+      return "調査中";
     case "identified":
-      return "障害・対応中";
+      return "対応中";
     case "monitoring":
-      return "障害・監視中";
+      return "監視中";
     case "scheduled":
-      return "障害・予定";
+      return "予定";
+    case "in_progress":
+      return "対応中";
     default:
-      return "障害・状態不明";
+      return "状態不明";
   }
 }
 

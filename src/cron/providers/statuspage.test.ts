@@ -51,6 +51,10 @@ const cloudflareSummaryFixture = JSON.parse(
 const cloudflareStorageMaintenanceFixture = JSON.parse(
   readFileSync("src/cron/providers/fixtures/cloudflare-storage-maintenance.json", "utf8"),
 ) as unknown;
+// Captured from Cloudflare's official summary API on 2026-10-24.
+const cloudflareInProgressMaintenanceFixture = JSON.parse(
+  readFileSync("src/cron/providers/fixtures/cloudflare-in-progress-maintenance.json", "utf8"),
+) as unknown;
 
 const cloudflareServiceGroupId = "1km35smx8p41";
 const cloudflareWorkersId = "57srcl8zcn7c";
@@ -261,6 +265,30 @@ describe("Cloudflare", () => {
       sourceImpact: "maintenance",
       severityStatus: "under_maintenance",
       components: expect.arrayContaining(["Custom Pages", "Log Explorer", "Workers Builds"]),
+    });
+  });
+
+  it("normalizes an official in-progress maintenance without changing overall status", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      { ...cloudflare, componentGroupId: undefined },
+      providerContext(
+        jsonFetcher({
+          status: { indicator: "none", description: "All Systems Operational" },
+          components: [],
+          incidents: [],
+          scheduled_maintenances: [cloudflareInProgressMaintenanceFixture],
+        }),
+      ),
+    );
+
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.incidents).toHaveLength(1);
+    expect(snapshot.incidents[0]).toMatchObject({
+      id: "7fxwn5qkz3b7",
+      kind: "maintenance",
+      state: "in_progress",
+      lifecycle: "active",
+      sourceStatus: "in_progress",
     });
   });
 
