@@ -3,6 +3,7 @@ import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
 import { AppSidebar } from "./components/app-sidebar";
+import { AppBrand } from "./components/app-brand";
 import { EventRow } from "./components/event-row";
 import { RefreshIcon } from "./components/icons";
 import ServiceCard from "./components/service-card";
@@ -108,22 +109,8 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-6 pt-8 pb-6 max-md:px-4 max-md:pt-5 max-sm:px-3">
-      <header className="mb-7 flex min-h-10 items-center justify-between max-md:mb-5">
-        <a
-          className="inline-flex items-center gap-2.5 text-base font-bold tracking-tight text-ink no-underline"
-          href="#top"
-          aria-label="miharu ホーム"
-        >
-          <span
-            className="flex h-5 w-5 items-end gap-0.5 rounded-md bg-forest px-1 py-1"
-            aria-hidden="true"
-          >
-            <span className="block h-1.5 flex-1 rounded-t-sm bg-green-100" />
-            <span className="block h-2.5 flex-1 rounded-t-sm bg-green-100" />
-            <span className="block h-2 flex-1 rounded-t-sm bg-green-100" />
-          </span>
-          <span>miharu</span>
-        </a>
+      <header className="mb-7 flex min-h-10 items-center justify-between max-md:mb-5 lg:hidden">
+        <AppBrand />
       </header>
 
       {loadError && (

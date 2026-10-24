@@ -125,6 +125,26 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   });
 });
 
+test("低い画面高ではサイドバー全体をスクロールしてサービス一覧を確認できる", async ({
+  page,
+  statusDashboard,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await statusDashboard.goto();
+
+  const sidebar = statusDashboard.serviceSidebar();
+  const brandLink = sidebar.getByRole("link", { name: "miharu ホーム" });
+  const lastService = sidebar.getByRole("button", { name: "Google Workspace" });
+
+  await expect(brandLink).toBeVisible();
+  await expect(lastService).not.toBeInViewport();
+
+  await lastService.scrollIntoViewIfNeeded();
+
+  await expect(lastService).toBeInViewport();
+  await expect(brandLink).not.toBeInViewport();
+});
+
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
   dashboardStatus,
   page,
