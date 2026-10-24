@@ -17,6 +17,11 @@ export type ServiceConfig = {
       incidentsUrl: string;
       components: Array<{ id: string; name: string }>;
     }
+  | {
+      provider: "google-workspace";
+      productsUrl: string;
+      incidentsUrl: string;
+    }
   | { provider: "slack"; currentUrl: string }
 );
 
@@ -87,6 +92,15 @@ export const SERVICES = [
       { id: "01JQ7EKW990MSPSWVXC7VPV2ZJ", name: "Image Generation" },
       { id: "01JSYVYQSWMJ9QG35XHP08BHA7", name: "Deep Research" },
     ],
+  },
+  {
+    id: "google-workspace" as const,
+    name: "Google Workspace",
+    provider: "google-workspace",
+    productsUrl: "https://www.google.com/appsstatus/dashboard/products.json",
+    incidentsUrl: "https://www.google.com/appsstatus/dashboard/incidents.json",
+    statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
+    allowedLinkHosts: ["www.google.com"],
   },
 ] satisfies ServiceConfig[];
 
