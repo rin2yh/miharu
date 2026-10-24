@@ -131,23 +131,15 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
       >
         <div className="min-w-0">
           <section id="top" aria-labelledby="services-title" aria-live="polite">
-            <div className="mb-3.5 flex items-baseline justify-between gap-4">
+            <div className="mb-3.5 flex items-center justify-between gap-4">
               <h1
                 className="m-0 text-2xl font-bold tracking-tighter text-ink max-sm:text-xl"
                 id="services-title"
               >
                 サービス稼働状況
               </h1>
-              <span className="whitespace-nowrap text-sm text-muted">
-                {payload ? `${filteredServices.length}サービス` : "読み込み中"}
-              </span>
-            </div>
-            <div className="mb-3.5 flex justify-end gap-2 max-md:justify-start max-sm:gap-2">
-              <div className="w-56 max-md:w-auto max-md:flex-1 lg:hidden">
-                <ServiceSearch query={query} onChange={setQuery} />
-              </div>
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-line-strong bg-surface px-3 text-xs font-semibold text-ink transition-colors duration-150 enabled:hover:border-line-strong enabled:hover:bg-control-hover disabled:cursor-wait disabled:opacity-70 max-sm:w-10 max-sm:px-0"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-line-strong bg-surface px-2.5 text-xs font-semibold text-ink transition-colors duration-150 enabled:hover:border-line-strong enabled:hover:bg-control-hover disabled:cursor-wait disabled:opacity-70 max-sm:size-10 max-sm:px-0"
                 type="button"
                 onClick={() => void refreshManually()}
                 disabled={refreshing}
@@ -155,6 +147,9 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
                 <RefreshIcon spinning={refreshing} />
                 <span className="max-sm:sr-only">{refreshing ? "更新中" : "手動更新"}</span>
               </button>
+            </div>
+            <div className="mb-3.5 lg:hidden">
+              <ServiceSearch query={query} onChange={setQuery} />
             </div>
             <ServiceSelector
               key={locationSearch}
