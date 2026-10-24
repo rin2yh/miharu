@@ -1,0 +1,96 @@
+[
+  {
+    "id": "BoKRw5LNb3Vb2NadUJRU",
+    "begin": "2026-09-25T15:47:00+00:00",
+    "created": "2026-09-25T16:29:32+00:00",
+    "end": "2026-09-25T16:40:00+00:00",
+    "modified": "2026-09-25T16:53:22+00:00",
+    "external_desc": "**Summary:**\nMitigating elevated error rate with Google Workspace Studio web.",
+    "updates": [
+      {
+        "created": "2026-09-25T16:52:54+00:00",
+        "modified": "2026-09-25T16:53:22+00:00",
+        "when": "2026-09-25T16:52:54+00:00",
+        "text": "**Summary:**\nMitigated elevated error rate with Google Workspace Studio web.",
+        "status": "AVAILABLE"
+      }
+    ],
+    "most_recent_update": {
+      "created": "2026-09-25T16:52:54+00:00",
+      "modified": "2026-09-25T16:53:22+00:00",
+      "when": "2026-09-25T16:52:54+00:00",
+      "text": "**Summary:**\nMitigated elevated error rate with Google Workspace Studio web.",
+      "status": "AVAILABLE"
+    },
+    "status_impact": "SERVICE_INFORMATION",
+    "severity": "low",
+    "affected_products": [
+      {
+        "title": "Google Workspace Studio",
+        "id": "m5tLdjJLc4EL8ZTnL5RZ"
+      }
+    ],
+    "service_key": "m5tLdjJLc4EL8ZTnL5RZ",
+    "service_name": "Google Workspace Studio",
+    "uri": "incidents/BoKRw5LNb3Vb2NadUJRU"
+  },
+  {
+    "id": "vagmms1y6yRxwg6RMQZp",
+    "begin": "2026-05-31T03:28:00+00:00",
+    "created": "2026-05-31T04:59:04+00:00",
+    "end": "2026-05-31T04:24:00+00:00",
+    "modified": "2026-06-04T20:11:26+00:00",
+    "external_desc": "**Title**\nMultiple Workspace Products experiencing Issues.\n**Description**\nWe are experiencing an issue with Google Voice, Google Meet, Google Drive, Google Chat, Google Calendar, Gmail, Google Docs beginning on Saturday, 2026-05-30 20:28 PDT.",
+    "updates": [
+      {
+        "created": "2026-06-04T20:11:26+00:00",
+        "modified": "2026-06-04T20:11:27+00:00",
+        "when": "2026-06-04T20:11:26+00:00",
+        "text": "# Incident Report\n## Summary\nStarting at 20:15 US/Pacific on Saturday, 30 May 2026, various Google Workspace services encountered service-level disruptions lasting approximately 75 minutes.",
+        "status": "AVAILABLE"
+      }
+    ],
+    "most_recent_update": {
+      "created": "2026-06-04T20:11:26+00:00",
+      "modified": "2026-06-04T20:11:27+00:00",
+      "when": "2026-06-04T20:11:26+00:00",
+      "text": "# Incident Report\n## Summary\nStarting at 20:15 US/Pacific on Saturday, 30 May 2026, various Google Workspace services encountered service-level disruptions lasting approximately 75 minutes.",
+      "status": "AVAILABLE"
+    },
+    "status_impact": "SERVICE_DISRUPTION",
+    "severity": "medium",
+    "affected_products": [
+      {
+        "title": "Gmail",
+        "id": "prPt2Yra2CbGsbEm9cpC"
+      },
+      {
+        "title": "Google Calendar",
+        "id": "n5hVexuq1PM9onY9qrmo"
+      },
+      {
+        "title": "Google Chat",
+        "id": "Ht9Vx5PFzDPHYvrnrvSk"
+      },
+      {
+        "title": "Google Docs",
+        "id": "wNHuVFtZEWU5Mmj2eRCK"
+      },
+      {
+        "title": "Google Drive",
+        "id": "VHNA7p3Z5p3iakj5sA8V"
+      },
+      {
+        "title": "Google Meet",
+        "id": "sUH4BQXzYXma7NiS94Hi"
+      },
+      {
+        "title": "Google Voice",
+        "id": "gh79SrQk6wqonWoxPdCm"
+      }
+    ],
+    "service_key": "zall",
+    "service_name": "Multiple Products",
+    "uri": "incidents/vagmms1y6yRxwg6RMQZp"
+  }
+]

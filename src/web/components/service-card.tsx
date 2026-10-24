@@ -173,10 +173,7 @@ export function ServiceCard({ service }: { service: DashboardService }) {
           <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">コンポーネント</h3>
           <div>
             {visibleComponents.length > 0 && (
-              <ul
-                className="m-0 list-none border-t border-line p-0"
-                aria-label="表示中のコンポーネント"
-              >
+              <ul className="m-0 list-none p-0" aria-label="表示中のコンポーネント">
                 {visibleComponents.map((component) => (
                   <ComponentItem
                     key={component.id}
@@ -189,7 +186,7 @@ export function ServiceCard({ service }: { service: DashboardService }) {
             {healthyComponents.length > 0 && (
               <>
                 <button
-                  className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 border-0 border-b border-line bg-transparent px-0.5 py-2 text-left text-xs font-semibold text-healthy underline-offset-2 hover:underline"
+                  className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 border-0 border-t border-line bg-transparent px-0.5 py-2 text-left text-xs font-semibold text-healthy underline-offset-2 hover:underline"
                   type="button"
                   aria-expanded={showHealthyComponents}
                   aria-controls={healthyComponentsId}
@@ -256,7 +253,7 @@ function ComponentItem({
   incidents: DashboardIncident[];
 }) {
   return (
-    <li className="border-b border-line" aria-label={`${component.name}コンポーネント`}>
+    <li className="border-t border-line" aria-label={`${component.name}コンポーネント`}>
       <div className="flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-2 px-0.5 py-2 text-xs text-ink max-sm:gap-1.5">
         <h4 className="m-0 min-w-0 [overflow-wrap:anywhere] font-semibold">{component.name}</h4>
         <span
@@ -283,7 +280,11 @@ function IncidentList({
   return (
     <ul className={`m-0 block list-none border-t border-line p-0 ${nested ? "mb-2 ml-5" : ""}`}>
       {incidents.map((incident) => (
-        <li className="border-b border-line" key={incident.id} aria-label={incident.title}>
+        <li
+          className="border-b border-line last:border-b-0"
+          key={incident.id}
+          aria-label={incident.title}
+        >
           <details className="group">
             <summary className="relative grid min-h-11 cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-3.5 gap-y-2 py-2 pr-1 pl-5 text-ink max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-x-2.5 max-sm:gap-y-1.5">
               <span

@@ -74,4 +74,29 @@ describe("provider dispatch", () => {
     expect(fetcher).toHaveBeenCalledWith(service.summaryUrl, expect.any(Object));
     expect(getActiveIncidents).toHaveBeenCalledOnce();
   });
+
+  it("dispatches Google Workspace through its product and incident feeds", async () => {
+    const service = getService("google-workspace");
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const payload =
+        String(input) === service.productsUrl
+          ? { products: [{ id: "gmail", title: "Gmail" }] }
+          : [];
+      return new Response(JSON.stringify(payload), {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const getActiveIncidents = vi.fn<ProviderContext["getActiveIncidents"]>(async () => []);
+
+    const snapshot = await fetchServiceSnapshot(service, {
+      signal,
+      fetcher,
+      getActiveIncidents,
+    });
+
+    expect(snapshot.status).toBe("unknown");
+    expect(fetcher).toHaveBeenCalledWith(service.productsUrl, expect.any(Object));
+    expect(fetcher).toHaveBeenCalledWith(service.incidentsUrl, expect.any(Object));
+    expect(getActiveIncidents).toHaveBeenCalledOnce();
+  });
 });
