@@ -6,9 +6,10 @@ import {
 } from "../../presentation/status-presentation";
 import { ExternalIcon, WarningIcon } from "../icons";
 import { assignIncidents } from "./assign-incidents";
-import { ComponentList, statusColors } from "./component-list";
+import { ComponentList } from "./component-list";
 import { IncidentList } from "./incident-list";
 import { ServiceIcon } from "./service-icon";
+import { statusColors } from "./status-colors";
 
 const statusBorders: Record<NormalizedStatus, string> = {
   operational: "border-t-line-strong",
@@ -19,7 +20,7 @@ const statusBorders: Record<NormalizedStatus, string> = {
   unknown: "border-t-unknown",
 };
 
-export function ServiceCard({ service }: { service: DashboardService }) {
+export default function ServiceCard({ service }: { service: DashboardService }) {
   const { assigned, unassigned } = assignIncidents(service);
 
   return (

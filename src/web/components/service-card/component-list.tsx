@@ -1,16 +1,8 @@
 import { useState } from "react";
-import type { DashboardComponent, DashboardIncident, NormalizedStatus } from "../../../domain";
+import type { DashboardComponent, DashboardIncident } from "../../../domain";
 import { isAbnormal, STATUS_LABELS, STATUS_RANK } from "../../presentation/status-presentation";
 import { IncidentList } from "./incident-list";
-
-export const statusColors: Record<NormalizedStatus, string> = {
-  operational: "bg-healthy-bg text-healthy",
-  degraded_performance: "bg-degraded-bg text-degraded",
-  partial_outage: "bg-partial-bg text-partial",
-  major_outage: "bg-outage-bg text-outage",
-  under_maintenance: "bg-maintenance-bg text-maintenance",
-  unknown: "bg-unknown-bg text-unknown",
-};
+import { statusColors } from "./status-colors";
 
 interface ComponentListProps {
   serviceId: string;

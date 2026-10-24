@@ -5,7 +5,7 @@ import { fetchDashboard } from "./api";
 import { AppSidebar } from "./components/app-sidebar";
 import { EventRow } from "./components/event-row";
 import { RefreshIcon } from "./components/icons";
-import { ServiceCard } from "./components/service-card/index";
+import ServiceCard from "./components/service-card";
 import { ServiceSearch } from "./components/service-search";
 import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
