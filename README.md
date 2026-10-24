@@ -20,20 +20,6 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
-## D1の実DB結合テスト
-
-`pnpm test`には、Cloudflare Workersのローカルランタイム上で既存のD1マイグレーションを適用するストアの結合テストも含まれます。テスト用DBは各ケースの前に初期化されます。
-
-```sh
-pnpm test
-```
-
-D1結合テストだけを実行する場合は、Vitestのproject指定を使います。
-
-```sh
-pnpm exec vitest run --project d1
-```
-
 ## ライセンス
 
 [MIT License](LICENSE)を適用しています。

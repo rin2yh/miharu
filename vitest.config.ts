@@ -12,7 +12,7 @@ export default defineConfig({
           name: "unit",
           environment: "jsdom",
           setupFiles: ["./src/web/test/setup.ts"],
-          exclude: [...configDefaults.exclude, "e2e/**", "src/shared/store.integration.test.ts"],
+          exclude: [...configDefaults.exclude, "e2e/**", "src/shared/store.test.ts"],
           restoreMocks: true,
           clearMocks: true,
         },
@@ -27,7 +27,7 @@ export default defineConfig({
         ],
         test: {
           name: "d1",
-          include: ["src/shared/store.integration.test.ts"],
+          include: ["src/shared/store.test.ts"],
           clearMocks: true,
           restoreMocks: true,
         },
