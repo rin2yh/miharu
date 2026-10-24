@@ -27,7 +27,6 @@ function providerContext(
   knownIncidents: KnownIncident[] = [],
   failHistory = false,
   catalogPayload: unknown = productCatalog,
-  detailResponse?: Response,
 ) {
   const fetcher = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
@@ -40,9 +39,6 @@ function providerContext(
       return new Response(JSON.stringify(history), {
         headers: { "content-type": "application/json" },
       });
-    }
-    if (url.startsWith(`${googleWorkspaceService.statusPageUrl}incidents/`)) {
-      return detailResponse ?? new Response("Unavailable", { status: 503 });
     }
     return new Response("Unavailable", { status: 503 });
   });
@@ -73,14 +69,12 @@ function fetchSnapshot(
   knownIncidents: KnownIncident[] = [],
   failHistory = false,
   catalogPayload: unknown = productCatalog,
-  detailResponse?: Response,
 ) {
   const { context, fetcher, getActiveIncidents } = providerContext(
     history,
     knownIncidents,
     failHistory,
     catalogPayload,
-    detailResponse,
   );
   return {
     result: fetchGoogleWorkspaceSnapshot(googleWorkspaceService, context),
@@ -179,62 +173,7 @@ describe("Google Workspace provider", () => {
     );
   });
 
-  it("keeps a known active incident when it is temporarily absent from the history feed", async () => {
-    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
-    const priorIncident = activeSnapshot.incidents[0];
-    if (!priorIncident) throw new Error("Expected active incident");
-    const knownIncident: KnownIncident = {
-      ...priorIncident,
-      lastObservedAt: "2026-05-31T05:00:00.000Z",
-    };
-
-    const snapshot = await fetchSnapshot(
-      [],
-      [knownIncident],
-      false,
-      productCatalog,
-      incidentDetailPage(),
-    ).result;
-
-    expect(snapshot.status).toBe("degraded_performance");
-    expect(snapshot.incidents[0]).toMatchObject({
-      id: knownIncident.id,
-      active: true,
-      sourceStatus: knownIncident.sourceStatus,
-    });
-    expect(snapshot.components?.find(({ id }) => id === "prPt2Yra2CbGsbEm9cpC")?.status).toBe(
-      "degraded_performance",
-    );
-  });
-
-  it("resolves an omitted incident only when its official detail page shows an end time", async () => {
-    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
-    const priorIncident = activeSnapshot.incidents[0];
-    if (!priorIncident) throw new Error("Expected active incident");
-    const knownIncident: KnownIncident = {
-      ...priorIncident,
-      lastObservedAt: "2026-05-31T05:00:00.000Z",
-    };
-
-    const snapshot = await fetchSnapshot(
-      [],
-      [knownIncident],
-      false,
-      productCatalog,
-      incidentDetailPage("2026-05-31 04:24"),
-    ).result;
-
-    expect(snapshot.incidents[0]).toMatchObject({
-      id: knownIncident.id,
-      state: "resolved",
-      sourceStatus: "RESOLVED",
-      active: false,
-      officialUpdatedAt: "2026-05-31T04:24:00.000Z",
-    });
-    expect(snapshot.status).toBe("unknown");
-  });
-
-  it("keeps a long-omitted incident unverifiable when its official detail page is unavailable", async () => {
+  it("marks a long-omitted incident unverifiable without requesting its detail page", async () => {
     const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_OUTAGE")]).result;
     const priorIncident = activeSnapshot.incidents[0];
     if (!priorIncident) throw new Error("Expected active incident");
@@ -243,18 +182,48 @@ describe("Google Workspace provider", () => {
       lastObservedAt: "2026-01-01T00:00:00.000Z",
     };
 
-    const snapshot = await fetchSnapshot([], [knownIncident]).result;
+    const { result, fetcher } = fetchSnapshot([], [knownIncident]);
+    const snapshot = await result;
 
+    expect(snapshot.status).toBe("unknown");
     expect(snapshot.incidents[0]).toMatchObject({
       id: knownIncident.id,
       state: "unknown",
-      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
       active: true,
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      sourceImpact: knownIncident.sourceImpact,
+      body: knownIncident.body,
     });
-    expect(snapshot.status).toBe("unknown");
     expect(snapshot.components?.find(({ id }) => id === "prPt2Yra2CbGsbEm9cpC")?.status).toBe(
       "unknown",
     );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores the feed's current incident state when the incident appears again", async () => {
+    const activeSnapshot = await fetchSnapshot([activeIncident("SERVICE_DISRUPTION")]).result;
+    const priorIncident = activeSnapshot.incidents[0];
+    if (!priorIncident) throw new Error("Expected active incident");
+    const knownIncident: KnownIncident = {
+      ...priorIncident,
+      state: "unknown",
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      active: true,
+      lastObservedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const { result, fetcher } = fetchSnapshot([activeIncident("SERVICE_OUTAGE")], [knownIncident]);
+    const snapshot = await result;
+
+    expect(snapshot.incidents[0]).toMatchObject({
+      id: knownIncident.id,
+      state: "investigating",
+      sourceStatus: "SERVICE_OUTAGE",
+      sourceImpact: "SERVICE_OUTAGE",
+      active: true,
+    });
+    expect(snapshot.status).toBe("major_outage");
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("retains affected product ids that are not in the current catalog", async () => {
@@ -291,7 +260,8 @@ describe("Google Workspace provider", () => {
 
     expect(snapshot.status).toBe("unknown");
     expect(snapshot.sourceStatus).toBe("no_incident_history");
-    expect(snapshot.summary).toContain("現在の状態を判断できません");
+    expect(snapshot.summary).toContain("進行中の障害はありません");
+    expect(snapshot.summary).toContain("現在の稼働状態は公開データから判断できません");
     expect(snapshot.components?.every(({ status }) => status === "unknown")).toBe(true);
   });
 
@@ -311,13 +281,3 @@ describe("Google Workspace provider", () => {
     });
   });
 });
-
-function incidentDetailPage(endTime?: string): Response {
-  return new Response(
-    `<h2 class="incident-header">Incident affecting Google Workspace</h2>
-    <strong class="start-time">2026-05-31 03:28</strong>
-    ${endTime ? `<strong class="end-time">${endTime}</strong>` : ""}
-    <strong class="timezone">Coordinated Universal Time (UTC)</strong>`,
-    { headers: { "content-type": "text/html; charset=utf-8" } },
-  );
-}

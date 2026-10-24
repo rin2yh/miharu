@@ -1,5 +1,4 @@
 import type {
-  KnownIncident,
   NormalizedComponent,
   NormalizedIncident,
   NormalizedStatus,
@@ -15,7 +14,6 @@ import type { ProviderContext } from "../provider-context";
 import {
   asRecord,
   boundedText,
-  fetchHtml,
   fetchJson,
   normalizeTimestamp,
   ProviderError,
@@ -23,11 +21,9 @@ import {
   safeIncidentUrl,
   statusText,
 } from "./shared";
-import type { FetchLike } from "./shared";
 
 type GoogleWorkspaceService = Extract<ServiceConfig, { provider: "google-workspace" }>;
 type KnownStatus = Exclude<NormalizedStatus, "unknown">;
-const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
 
 interface GoogleProduct {
   id: string;
@@ -79,23 +75,16 @@ export async function fetchGoogleWorkspaceSnapshot(
   const incidentsById = new Map(historyIncidents.map((incident) => [incident.id, incident]));
   const knownActiveById = new Map(knownActiveIncidents.map((incident) => [incident.id, incident]));
 
-  // The history feed can omit older incidents. Recheck a bounded rotating sample on its official
-  // detail page; an unavailable recheck remains explicitly unknown instead of implying recovery.
+  // The history feed can omit older incidents. Preserve them as unverifiable instead of
+  // implying recovery or treating their last reported impact as current.
   const omittedKnownActive = knownActiveIncidents.filter(
     (incident) => incident.active && !incidentsById.has(incident.id),
   );
-  const recheckedOmitted = await Promise.all(
-    selectOmittedIncidentsForRecheck(omittedKnownActive).map((incident) =>
-      recheckOmittedIncident(incident, service, context.signal, context.fetcher),
-    ),
-  );
-  const recheckedById = new Map(recheckedOmitted.map((incident) => [incident.id, incident]));
   const incidents: ParsedIncident[] = historyIncidents.filter(
     (incident) => incident.active || knownActiveById.has(incident.id),
   );
   for (const incident of omittedKnownActive) {
-    const rechecked = recheckedById.get(incident.id);
-    incidents.push(rechecked ?? { ...incident, statusImpact: incident.sourceImpact });
+    incidents.push(unverifiableIncident(incident));
   }
   if (incidents.length > INCIDENTS_PER_SERVICE_LIMIT) {
     throw new ProviderError(
@@ -164,7 +153,12 @@ export async function fetchGoogleWorkspaceSnapshot(
   return {
     status,
     sourceStatus,
-    summary: status === "unknown" ? "公式の履歴フィードから現在の状態を判断できません。" : null,
+    summary:
+      status !== "unknown"
+        ? null
+        : activeIncidents.length === 0
+          ? "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。"
+          : "公式の履歴フィードから現在の状態を判断できません。",
     components,
     incidents,
     // Google publishes a bounded history feed, so an incident omitted from it is not proof of recovery.
@@ -289,114 +283,14 @@ function parseAffectedProducts(
   return legacyId && legacyName ? [{ id: legacyId, name: legacyName }] : [];
 }
 
-async function recheckOmittedIncident(
-  incident: KnownIncident,
-  service: GoogleWorkspaceService,
-  signal: AbortSignal,
-  fetcher: FetchLike,
-): Promise<ParsedIncident> {
-  const parsedIncident: ParsedIncident = { ...incident, statusImpact: incident.sourceImpact };
-  const detailUrl = safeIncidentUrl(
-    new URL(`incidents/${encodeURIComponent(incident.id)}`, service.statusPageUrl).toString(),
-    service,
-  );
-  if (!detailUrl) return unknownIncident(parsedIncident);
-
-  try {
-    const html = await fetchHtml(detailUrl, signal, fetcher);
-    const detail = parseGoogleIncidentDetail(html, incident.officialCreatedAt);
-    if (detail.endAt) {
-      return {
-        ...parsedIncident,
-        state: "resolved",
-        sourceStatus: "RESOLVED",
-        officialUpdatedAt: detail.endAt,
-        active: false,
-      };
-    }
-    // A previous unavailable recheck has no trustworthy current impact to restore.
-    if (incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS) {
-      return unknownIncident(parsedIncident);
-    }
-    return parsedIncident;
-  } catch {
-    return unknownIncident(parsedIncident);
-  }
-}
-
-function unknownIncident(incident: ParsedIncident): ParsedIncident {
+function unverifiableIncident(incident: NormalizedIncident): ParsedIncident {
   return {
     ...incident,
-    body: null,
     state: "unknown",
     sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
     active: true,
+    statusImpact: incident.sourceImpact,
   };
-}
-
-function parseGoogleIncidentDetail(
-  html: string,
-  expectedStartTime: string | null,
-): { endAt: string | null } {
-  if (!elementTextByClass(html, "h2", "incident-header")) {
-    throw new ProviderError("invalid_payload", "Google Workspace incident page is invalid");
-  }
-  const startText = elementTextByClass(html, "strong", "start-time");
-  const timezone = elementTextByClass(html, "strong", "timezone");
-  if (!startText || !timezone?.includes("UTC")) {
-    throw new ProviderError(
-      "invalid_payload",
-      "Google Workspace incident page has no UTC start time",
-    );
-  }
-  const startAt = parseGoogleUtcDateTime(startText);
-  if (!startAt)
-    throw new ProviderError("invalid_payload", "Google Workspace incident start time is invalid");
-  if (expectedStartTime && startAt.slice(0, 16) !== expectedStartTime.slice(0, 16)) {
-    throw new ProviderError(
-      "invalid_payload",
-      "Google Workspace incident page did not match the incident",
-    );
-  }
-
-  const endText = elementTextByClass(html, "strong", "end-time");
-  if (!endText) return { endAt: null };
-  const endAt = parseGoogleUtcDateTime(endText);
-  if (!endAt)
-    throw new ProviderError("invalid_payload", "Google Workspace incident end time is invalid");
-  return { endAt };
-}
-
-function elementTextByClass(html: string, tag: string, className: string): string | null {
-  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`<${escapedTag}\\b([^>]*)>([\\s\\S]*?)<\\/${escapedTag}>`, "gi");
-  for (const match of html.matchAll(pattern)) {
-    const classes = match[1]?.match(/\bclass=["']([^"']*)["']/i)?.[1]?.split(/\s+/) ?? [];
-    if (!classes.includes(className)) continue;
-    const text = (match[2] ?? "")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .trim();
-    return text || null;
-  }
-  return null;
-}
-
-function parseGoogleUtcDateTime(value: string): string | null {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const timestamp = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:00.000Z`;
-  const parsed = new Date(timestamp);
-  return Number.isNaN(parsed.getTime()) || parsed.toISOString() !== timestamp ? null : timestamp;
-}
-
-function selectOmittedIncidentsForRecheck(incidents: KnownIncident[]): KnownIncident[] {
-  if (incidents.length <= OMITTED_INCIDENT_RECHECKS_PER_POLL) return incidents;
-  const firstIndex = Math.floor(Date.now() / 60_000) % incidents.length;
-  return Array.from(
-    { length: OMITTED_INCIDENT_RECHECKS_PER_POLL },
-    (_, offset) => incidents[(firstIndex + offset) % incidents.length]!,
-  );
 }
 
 function statusForActiveIncident(incident: ParsedIncident): NormalizedStatus {
