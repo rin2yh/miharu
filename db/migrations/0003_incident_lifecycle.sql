@@ -34,21 +34,25 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS incidents_lifecycle_compat_active_update
-AFTER UPDATE OF active ON incidents
+AFTER UPDATE OF active, state, source_status ON incidents
 WHEN NEW.lifecycle = OLD.lifecycle AND (
-  NEW.active <> OLD.active OR NEW.source_status = 'recheck_unavailable' OR NEW.state = 'resolved'
+  NEW.active IS NOT OLD.active
+  OR NEW.state IS NOT OLD.state
+  OR NEW.source_status IS NOT OLD.source_status
 )
 BEGIN
   UPDATE incidents
   SET
     active = CASE
-      WHEN NEW.source_status = 'recheck_unavailable'
-        OR (OLD.lifecycle = 'unverified' AND NEW.state <> 'resolved') THEN 1
+      WHEN NEW.state = 'resolved' THEN 0
+      WHEN NEW.source_status = 'recheck_unavailable' OR NEW.state = 'unknown' THEN 1
+      WHEN OLD.lifecycle = 'unverified' AND NEW.active = 0 THEN 1
       ELSE NEW.active
     END,
     lifecycle = CASE
-      WHEN NEW.source_status = 'recheck_unavailable'
-        OR (OLD.lifecycle = 'unverified' AND NEW.state <> 'resolved') THEN 'unverified'
+      WHEN NEW.state = 'resolved' THEN 'resolved'
+      WHEN NEW.source_status = 'recheck_unavailable' OR NEW.state = 'unknown' THEN 'unverified'
+      WHEN OLD.lifecycle = 'unverified' AND NEW.active = 0 THEN 'unverified'
       WHEN NEW.active = 0 THEN 'resolved'
       ELSE 'active'
     END

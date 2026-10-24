@@ -96,7 +96,6 @@ describe("D1 incident lifecycle persistence", () => {
       active: 0,
     });
     database.migrate("db/migrations/0003_incident_lifecycle.sql");
-    database.migrate("db/migrations/0004_incident_lifecycle_compat_recheck.sql");
 
     const store = createD1Store(database as unknown as D1Database);
     const known = await store.getUnresolvedIncidents("google-workspace");
