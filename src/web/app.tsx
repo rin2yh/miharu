@@ -100,7 +100,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     visibleServiceIds.has(event.serviceId),
   );
   const applyServiceSelection = (selectedIds: string[]) => {
-    if (selectedIds.length === 0) return;
     const nextUrl = getServiceSelectionUrl(window.location.href, selectedIds);
     window.history.pushState(null, "", nextUrl);
     setLocationSearch(window.location.search);

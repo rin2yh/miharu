@@ -40,7 +40,9 @@ export function ServiceSidebar({ selectedServiceIds, onSelect }: ServiceSidebarP
               aria-pressed={allServicesSelected}
               className={`${selectionButtonClass} ${allServicesSelected ? "bg-healthy-bg font-semibold text-ink" : "text-muted"}`}
               type="button"
-              onClick={() => onSelect(SERVICES.map((service) => service.id))}
+              onClick={() =>
+                onSelect(allServicesSelected ? [] : SERVICES.map((service) => service.id))
+              }
             >
               <span
                 aria-hidden="true"

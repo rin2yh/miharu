@@ -111,6 +111,16 @@ test("PCではサイドバーの選択がURL、サービス一覧、最近の更
     "background-color",
     "rgba(0, 0, 0, 0)",
   );
+  await statusDashboard.serviceSelection("すべて").click();
+  await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "false");
+  expect(new URL(page.url()).searchParams.get("services")).toBe("");
+  await expect(statusDashboard.serviceCount(0)).toBeVisible();
+  await expect(page.getByText("条件に一致するサービスはありません。")).toBeVisible();
+  await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute("aria-pressed", "false");
+  await statusDashboard.serviceSelection("すべて").click();
+  await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "true");
+  await expect(page).not.toHaveURL(/services=/);
+  await expect(statusDashboard.serviceCount(3)).toBeVisible();
   await expect(statusDashboard.serviceSelection("GitHub")).toHaveCSS(
     "background-color",
     "rgba(0, 0, 0, 0)",
