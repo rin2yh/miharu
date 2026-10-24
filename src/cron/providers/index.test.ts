@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
@@ -5,6 +6,13 @@ import type { ProviderContext } from "../provider-context";
 import { fetchServiceSnapshot } from "./index";
 
 const signal = new AbortController().signal;
+const googleWorkspaceProducts = JSON.parse(
+  readFileSync("src/cron/providers/fixtures/google-workspace-products.json", "utf8"),
+) as unknown;
+const googleWorkspaceDashboard = readFileSync(
+  "src/cron/providers/fixtures/google-workspace-dashboard.html",
+  "utf8",
+);
 
 type ConfiguredService = (typeof SERVICES)[number];
 
@@ -75,28 +83,37 @@ describe("provider dispatch", () => {
     expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
   });
 
-  it("dispatches Google Workspace through its product and incident feeds", async () => {
+  it("dispatches Google Workspace through its current dashboard and history feeds", async () => {
     const service = getService("google-workspace");
+    vi.useFakeTimers({ now: new Date("2026-10-24T06:08:00.000Z") });
     const fetcher = vi.fn<typeof fetch>(async (input) => {
-      const payload =
-        String(input) === service.productsUrl
-          ? { products: [{ id: "gmail", title: "Gmail" }] }
-          : [];
+      const url = String(input);
+      if (url === service.dashboardUrl) {
+        return new Response(googleWorkspaceDashboard, {
+          headers: { "content-type": "text/html" },
+        });
+      }
+      const payload = url === service.productsUrl ? googleWorkspaceProducts : [];
       return new Response(JSON.stringify(payload), {
         headers: { "content-type": "application/json" },
       });
     });
     const getUnresolvedIncidents = vi.fn<ProviderContext["getUnresolvedIncidents"]>(async () => []);
 
-    const snapshot = await fetchServiceSnapshot(service, {
-      signal,
-      fetcher,
-      getUnresolvedIncidents,
-    });
+    try {
+      const snapshot = await fetchServiceSnapshot(service, {
+        signal,
+        fetcher,
+        getUnresolvedIncidents,
+      });
 
-    expect(snapshot.status).toBe("unknown");
-    expect(fetcher).toHaveBeenCalledWith(service.productsUrl, expect.any(Object));
-    expect(fetcher).toHaveBeenCalledWith(service.incidentsUrl, expect.any(Object));
-    expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
+      expect(snapshot.status).toBe("operational");
+      expect(fetcher).toHaveBeenCalledWith(service.productsUrl, expect.any(Object));
+      expect(fetcher).toHaveBeenCalledWith(service.incidentsUrl, expect.any(Object));
+      expect(fetcher).toHaveBeenCalledWith(service.dashboardUrl, expect.any(Object));
+      expect(getUnresolvedIncidents).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

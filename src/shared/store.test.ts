@@ -1,112 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
-import type { IncidentRow } from "../../db/schema";
+import { applyD1Migrations, reset } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { D1Migration } from "@cloudflare/vitest-plugin";
 import type { NormalizedIncident, ProviderSnapshot } from "../domain";
 import { SERVICES } from "./config/services";
 import { createD1Store, parseComponents } from "./store";
 
-interface PreparedCall {
-  sql: string;
-  args: unknown[];
-  all: ReturnType<typeof vi.fn>;
-  run: ReturnType<typeof vi.fn>;
-}
+const service = SERVICES.find(({ id }) => id === "github");
 
-function createDatabase(
-  options: {
-    existingIncidents?: IncidentRow[];
-    resultsForSql?: (sql: string) => unknown[];
-  } = {},
-) {
-  const calls: PreparedCall[] = [];
-  const batches: PreparedCall[][] = [];
-  const database = {
-    prepare(sql: string) {
-      const statement = {
-        sql,
-        args: [] as unknown[],
-        bind(...args: unknown[]) {
-          statement.args = args;
-          return statement;
-        },
-        all: vi.fn<() => Promise<{ results: unknown[] }>>(async () => ({
-          results: (options.resultsForSql?.(sql) ??
-            (sql.includes("FROM incidents") ? (options.existingIncidents ?? []) : [])) as unknown[],
-        })),
-        run: vi.fn<() => Promise<{ success: boolean; meta: { changes: number } }>>(async () => ({
-          success: true,
-          meta: { changes: 1 },
-        })),
-      };
-      calls.push(statement);
-      return statement;
-    },
-    batch: vi.fn<(statements: PreparedCall[]) => Promise<unknown[]>>(async (statements) => {
-      batches.push([...statements]);
-      return [];
-    }),
-  };
-  return { database: database as unknown as D1Database, calls, batches };
-}
+if (!service) throw new Error("GitHub service configuration is missing");
 
-function existingIncidentRow(overrides: Partial<IncidentRow> = {}): IncidentRow {
-  return {
-    serviceId: "github",
-    id: "incident-1",
-    title: "Old title",
-    body: "Old update",
-    kind: "incident",
-    state: "investigating",
-    sourceStatus: "investigating",
-    sourceType: "incident",
-    sourceImpact: "major",
-    severityStatus: "partial_outage",
-    componentIdsJson: '["actions"]',
-    componentsJson: '["Actions"]',
-    officialCreatedAt: "2026-10-23T04:50:00.000Z",
-    officialUpdatedAt: "2026-10-23T04:55:00.000Z",
-    url: "https://www.githubstatus.com/incidents/incident-1",
-    lifecycle: "active",
-    firstSeenAt: "2026-10-23T04:50:00.000Z",
-    resolvedDetectedAt: null,
-    fingerprint: "old-fingerprint",
-    revision: 1,
-    lastObservedAt: "2026-10-23T05:00:00.000Z",
-    ...overrides,
-  };
-}
+const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
-function normalizedIncident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncident {
-  return {
-    id: "incident-1",
-    title: "Updated title",
-    body: "The service is recovering.",
-    kind: "incident",
-    state: "monitoring",
-    sourceStatus: "monitoring",
-    sourceType: "incident",
-    sourceImpact: "major",
-    severityStatus: "partial_outage",
-    componentIds: ["actions"],
-    components: ["Actions"],
-    officialCreatedAt: "2026-10-23T04:50:00.000Z",
-    officialUpdatedAt: "2026-10-23T05:05:00.000Z",
-    url: "https://www.githubstatus.com/incidents/incident-1",
-    lifecycle: "active",
-    ...overrides,
-  };
-}
+beforeEach(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, testEnv.TEST_MIGRATIONS);
+});
 
-function snapshot(overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
-  return {
-    status: "partial_outage",
-    sourceStatus: "major_outage",
-    summary: "Partial disruption",
-    incidents: [normalizedIncident()],
-    ...overrides,
-  };
-}
-
-describe("D1 store", () => {
+describe("parseComponents", () => {
   it.each([
     { input: '["api",4,null,"web"]', expected: ["api", "web"] },
     { input: "{}", expected: [] },
@@ -114,150 +25,229 @@ describe("D1 store", () => {
   ])("parses component JSON safely: $input", ({ input, expected }) => {
     expect(parseComponents(input)).toEqual(expected);
   });
+});
 
-  it("records a fetch failure without replacing the previous service status", async () => {
-    const mock = createDatabase();
-    const store = createD1Store(mock.database);
+describe("createD1Store with local D1", () => {
+  it("persists a successful status, components, incident, and opened event", async () => {
+    const store = createD1Store(env.DB);
 
-    await store.saveFailure(SERVICES[2]!, "2026-10-23T05:10:00.000Z", "timeout");
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:00:00.000Z");
 
-    expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0]?.sql).toContain("last_error_at = excluded.last_error_at");
-    expect(mock.calls[0]?.sql).toContain("last_checked_at <= excluded.last_checked_at");
-    expect(mock.calls[0]?.args).toEqual([
-      "github",
-      "2026-10-23T05:10:00.000Z",
-      "2026-10-23T05:10:00.000Z",
-      "timeout",
-    ]);
-    expect(mock.calls[0]?.run).toHaveBeenCalledOnce();
-  });
-
-  it("loads all dashboard row groups", async () => {
-    const statusRow = { serviceId: "github", status: "operational" };
-    const componentRow = { serviceId: "github", id: "actions" };
-    const incidentRow = existingIncidentRow();
-    const eventRow = { id: "event-1", serviceId: "github", incidentId: "incident-1" };
-    const mock = createDatabase({
-      resultsForSql(sql) {
-        if (sql.includes("FROM service_status")) return [statusRow];
-        if (sql.includes("FROM service_components")) return [componentRow];
-        if (sql.includes("FROM incidents")) return [incidentRow];
-        if (sql.includes("FROM incident_events")) return [eventRow];
-        return [];
-      },
-    });
-    const store = createD1Store(mock.database);
-
-    const result = await store.getDashboardRows();
-
-    expect(result).toEqual({
-      statusRows: [statusRow],
-      componentRows: [componentRow],
-      incidentRows: [incidentRow],
-      eventRows: [eventRow],
-    });
-    expect(mock.calls).toHaveLength(4);
-    expect(mock.calls.every((call) => call.all.mock.calls.length === 1)).toBe(true);
-    expect(mock.calls.find((call) => call.sql.includes("FROM incident_events"))?.args).toEqual([8]);
-  });
-
-  it("loads active known incidents for a single service", async () => {
-    const row = existingIncidentRow();
-    const mock = createDatabase({ existingIncidents: [row] });
-    const store = createD1Store(mock.database);
-
-    const incidents = await store.getUnresolvedIncidents("github");
-
-    expect(incidents).toMatchObject([
+    const statuses = await selectRows(
+      `SELECT service_id, status, source_status, summary, last_checked_at,
+        last_success_at, last_error_at, error_code FROM service_status`,
+    );
+    expect(statuses).toEqual([
       {
-        serviceId: "github",
-        id: "incident-1",
-        componentIds: ["actions"],
-        components: ["Actions"],
-        lifecycle: "active",
-        lastObservedAt: row.lastObservedAt,
+        service_id: "github",
+        status: "partial_outage",
+        source_status: "major_outage",
+        summary: "Partial disruption",
+        last_checked_at: "2026-10-01T05:00:00.000Z",
+        last_success_at: "2026-10-01T05:00:00.000Z",
+        last_error_at: null,
+        error_code: null,
       },
     ]);
-    expect(mock.calls[0]?.sql).toContain("lifecycle IN ('active', 'unverified')");
-    expect(mock.calls[0]?.args).toEqual(["github"]);
-  });
 
-  it("prunes events and resolved incidents older than the retention window", async () => {
-    const mock = createDatabase();
-    const store = createD1Store(mock.database);
-
-    await store.pruneHistory(new Date("2026-10-24T00:00:00.000Z"));
-
-    expect(mock.batches).toHaveLength(1);
-    expect(mock.batches[0]?.map(({ sql }) => sql)).toEqual([
-      "DELETE FROM incident_events WHERE detected_at < ?",
-      expect.stringContaining("DELETE FROM incidents"),
-    ]);
-    expect(mock.batches[0]?.map(({ args }) => args)).toEqual([
-      ["2026-10-17T00:00:00.000Z"],
-      ["2026-10-17T00:00:00.000Z"],
-    ]);
-  });
-
-  it("updates an incident, records its revision, syncs components, and removes stale components", async () => {
-    const mock = createDatabase({ existingIncidents: [existingIncidentRow()] });
-    const store = createD1Store(mock.database);
-
-    await store.saveSuccess(
-      SERVICES[2]!,
-      snapshot({
-        components: [
-          {
-            id: "actions",
-            name: "Actions",
-            status: "partial_outage",
-            sourceStatus: "partial_outage",
-          },
-        ],
-      }),
-      "2026-10-23T05:10:00.000Z",
+    const components = await selectRows(
+      `SELECT id, name, status FROM service_components ORDER BY id`,
     );
+    expect(components).toEqual([
+      { id: "api", name: "API", status: "partial_outage" },
+      { id: "web", name: "Web", status: "operational" },
+    ]);
 
-    expect(mock.batches.map((batch) => batch.map(({ sql }) => sql))).toEqual([
-      [expect.stringContaining("INSERT INTO service_status")],
-      [expect.stringContaining("INSERT INTO service_components")],
-      [
-        expect.stringContaining("INSERT INTO incidents"),
-        expect.stringContaining("INSERT INTO incident_events"),
+    const incidents = await selectRows(
+      `SELECT id, title, lifecycle, revision, component_ids_json, components_json
+        FROM incidents`,
+    );
+    expect(incidents).toEqual([
+      {
+        id: "incident-1",
+        title: "API requests are failing",
+        lifecycle: "active",
+        revision: 1,
+        component_ids_json: '["api"]',
+        components_json: '["API"]',
+      },
+    ]);
+
+    const events = await selectRows(
+      `SELECT id, event_kind, incident_id, detected_at FROM incident_events`,
+    );
+    expect(events).toEqual([
+      {
+        id: '["github","incident-1",1]',
+        event_kind: "opened",
+        incident_id: "incident-1",
+        detected_at: "2026-10-01T05:00:00.000Z",
+      },
+    ]);
+    await expect(store.getDashboardRows()).resolves.toMatchObject({
+      statusRows: [
+        {
+          serviceId: "github",
+          status: "partial_outage",
+          lastSuccessAt: "2026-10-01T05:00:00.000Z",
+        },
       ],
-    ]);
-    const componentCleanup = mock.calls.find((call) =>
-      call.sql.includes("DELETE FROM service_components"),
-    );
-    expect(componentCleanup?.args).toEqual(["github", '["actions"]', "2026-10-23T05:10:00.000Z"]);
-    expect(mock.batches[2]?.[0]?.args.slice(0, 3)).toEqual([
-      "github",
-      "incident-1",
-      "Updated title",
-    ]);
-    expect(mock.batches[2]?.[1]?.args.slice(0, 6)).toEqual([
-      '["github","incident-1",2]',
-      "github",
-      "incident-1",
-      "incident",
-      "updated",
-      "Updated title",
+      componentRows: [{ id: "api" }, { id: "web" }],
+      incidentRows: [{ id: "incident-1", revision: 1, lifecycle: "active" }],
+      eventRows: [{ id: '["github","incident-1",1]', eventKind: "opened" }],
+    });
+    await expect(store.getUnresolvedIncidents("github")).resolves.toMatchObject([
+      { id: "incident-1", revision: 1, componentIds: ["api"], components: ["API"] },
     ]);
   });
 
-  it("splits incident persistence into batches of at most 100 statements", async () => {
-    const incidents = Array.from({ length: 51 }, (_, index) =>
-      normalizedIncident({ id: `incident-${index}`, title: `Incident ${index}` }),
+  it("increments revision on change and does not add an event for a repeat snapshot", async () => {
+    const store = createD1Store(env.DB);
+    const original = snapshot();
+    const updated = snapshot({
+      incidents: [
+        incident({
+          title: "API requests are recovering",
+          body: "The error rate is decreasing.",
+          state: "monitoring",
+          sourceStatus: "monitoring",
+        }),
+      ],
+    });
+
+    await store.saveSuccess(service, original, "2026-10-01T05:00:00.000Z");
+    await store.saveSuccess(service, updated, "2026-10-01T05:01:00.000Z");
+
+    let persisted = await selectRows(
+      `SELECT title, revision, last_observed_at FROM incidents WHERE id = 'incident-1'`,
     );
-    const mock = createDatabase();
-    const store = createD1Store(mock.database);
+    expect(persisted).toEqual([
+      {
+        title: "API requests are recovering",
+        revision: 2,
+        last_observed_at: "2026-10-01T05:01:00.000Z",
+      },
+    ]);
+    await expect(
+      selectRows(`SELECT event_kind, id FROM incident_events ORDER BY detected_at`),
+    ).resolves.toEqual([
+      { event_kind: "opened", id: '["github","incident-1",1]' },
+      { event_kind: "updated", id: '["github","incident-1",2]' },
+    ]);
 
-    await store.saveSuccess(SERVICES[2]!, snapshot({ incidents }), "2026-10-23T05:10:00.000Z");
+    await store.saveSuccess(service, updated, "2026-10-01T05:02:00.000Z");
 
-    expect(mock.batches.map((batch) => batch.length)).toEqual([1, 100, 2]);
-    expect(
-      mock.batches.flatMap((batch) => batch).filter(({ sql }) => sql.includes("incident_events")),
-    ).toHaveLength(51);
+    persisted = await selectRows(
+      `SELECT title, revision, last_observed_at FROM incidents WHERE id = 'incident-1'`,
+    );
+    expect(persisted).toEqual([
+      {
+        title: "API requests are recovering",
+        revision: 2,
+        last_observed_at: "2026-10-01T05:01:00.000Z",
+      },
+    ]);
+    expect(await selectRows(`SELECT id FROM incident_events`)).toHaveLength(2);
+  });
+
+  it("preserves the last successful status after a fetch failure", async () => {
+    const store = createD1Store(env.DB);
+
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:00:00.000Z");
+    await store.saveFailure(service, "2026-10-01T05:01:00.000Z", "timeout");
+
+    const statuses = await selectRows(
+      `SELECT status, source_status, summary, last_checked_at, last_success_at,
+        last_error_at, error_code FROM service_status WHERE service_id = 'github'`,
+    );
+    expect(statuses).toEqual([
+      {
+        status: "partial_outage",
+        source_status: "major_outage",
+        summary: "Partial disruption",
+        last_checked_at: "2026-10-01T05:01:00.000Z",
+        last_success_at: "2026-10-01T05:00:00.000Z",
+        last_error_at: "2026-10-01T05:01:00.000Z",
+        error_code: "timeout",
+      },
+    ]);
+    expect(await selectRows(`SELECT id FROM service_components`)).toHaveLength(2);
+    expect(await selectRows(`SELECT id FROM incidents`)).toHaveLength(1);
+  });
+
+  it("removes stale components and prunes expired resolved incidents and events", async () => {
+    const store = createD1Store(env.DB);
+
+    await store.saveSuccess(service, snapshot(), "2026-10-01T05:00:00.000Z");
+    await store.saveSuccess(
+      service,
+      snapshot({ components: [], incidents: [] }),
+      "2026-10-03T05:00:00.000Z",
+    );
+
+    expect(await selectRows(`SELECT id FROM service_components`)).toEqual([]);
+    expect(await selectRows(`SELECT lifecycle, resolved_detected_at FROM incidents`)).toEqual([
+      { lifecycle: "resolved", resolved_detected_at: "2026-10-03T05:00:00.000Z" },
+    ]);
+    expect(await selectRows(`SELECT event_kind FROM incident_events ORDER BY detected_at`)).toEqual(
+      [{ event_kind: "opened" }, { event_kind: "resolved" }],
+    );
+
+    await store.pruneHistory(new Date("2026-10-12T05:00:00.000Z"));
+
+    expect(await selectRows(`SELECT id FROM incidents`)).toEqual([]);
+    expect(await selectRows(`SELECT id FROM incident_events`)).toEqual([]);
+  });
+
+  it("persists incidents and events across D1 batch limits", async () => {
+    const store = createD1Store(env.DB);
+    const incidents = Array.from({ length: 51 }, (_, index) =>
+      incident({ id: `incident-${index}`, title: `Incident ${index}` }),
+    );
+
+    await store.saveSuccess(service, snapshot({ incidents }), "2026-10-01T05:00:00.000Z");
+
+    expect(await selectRows(`SELECT id FROM incidents`)).toHaveLength(51);
+    expect(await selectRows(`SELECT id FROM incident_events`)).toHaveLength(51);
   });
 });
+
+async function selectRows<T extends Record<string, unknown>>(query: string): Promise<T[]> {
+  const { results } = await env.DB.prepare(query).all<T>();
+  return results;
+}
+
+function snapshot(overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
+  return {
+    status: "partial_outage",
+    sourceStatus: "major_outage",
+    summary: "Partial disruption",
+    components: [
+      { id: "api", name: "API", status: "partial_outage", sourceStatus: "degraded_performance" },
+      { id: "web", name: "Web", status: "operational", sourceStatus: "operational" },
+    ],
+    incidents: [incident()],
+    ...overrides,
+  };
+}
+
+function incident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncident {
+  return {
+    id: "incident-1",
+    title: "API requests are failing",
+    body: "Requests are returning errors.",
+    kind: "incident",
+    state: "investigating",
+    sourceStatus: "investigating",
+    sourceType: "incident",
+    sourceImpact: "major",
+    severityStatus: "partial_outage",
+    componentIds: ["api"],
+    components: ["API"],
+    officialCreatedAt: "2026-10-01T04:55:00.000Z",
+    officialUpdatedAt: "2026-10-01T04:55:00.000Z",
+    url: "https://www.githubstatus.com/incidents/incident-1",
+    lifecycle: "active",
+    ...overrides,
+  };
+}

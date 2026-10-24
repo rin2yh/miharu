@@ -44,26 +44,29 @@ describe("ServiceCard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows Google Workspace as unknown when history has no active incidents", () => {
-    const summary =
-      "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。";
+  it("shows Google Workspace as normal and collapses its healthy products", () => {
     render(
       <ServiceCard
         service={service({
           id: "google-workspace",
           name: "Google Workspace",
           statusPageUrl: "https://www.google.com/appsstatus/dashboard/",
-          status: "unknown",
-          sourceStatus: "no_active_incidents",
-          summary,
-          components: [component("gmail", "Gmail", "unknown")],
+          status: "operational",
+          sourceStatus: "AVAILABLE",
+          components: Array.from({ length: 35 }, (_, index) =>
+            component(`product-${index}`, `Product ${index + 1}`),
+          ),
         })}
       />,
     );
 
     const card = screen.getByRole("listitem", { name: "Google Workspaceのサービス状況" });
-    expect(within(card).getByLabelText("公式全体ステータス: 状態不明")).toBeVisible();
-    expect(within(card).getByText(summary)).toBeVisible();
+    expect(within(card).getByLabelText("公式全体ステータス: 正常")).toBeVisible();
+    expect(
+      within(card).getByRole("button", { name: "正常なコンポーネント 35件を表示" }),
+    ).toBeVisible();
+    expect(within(card).queryByRole("list", { name: "表示中のコンポーネント" })).toBeNull();
+    expect(within(card).queryByText("状態不明")).toBeNull();
   });
 
   it("shows the official service status separately from each component status", () => {
