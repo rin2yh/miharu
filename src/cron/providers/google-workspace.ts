@@ -7,6 +7,7 @@ import type {
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
+  FRESHNESS_WARNING_SECONDS,
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
 } from "../../shared/config/services";
@@ -14,6 +15,7 @@ import type { ProviderContext } from "../provider-context";
 import {
   asRecord,
   boundedText,
+  fetchHtml,
   fetchJson,
   normalizeTimestamp,
   ProviderError,
@@ -44,7 +46,7 @@ const statusPriority: Record<NormalizedStatus, number> = {
 };
 
 const impactStatuses: Record<string, NormalizedStatus> = {
-  SERVICE_INFORMATION: "unknown",
+  SERVICE_INFORMATION: "operational",
   SERVICE_DISRUPTION: "degraded_performance",
   SERVICE_OUTAGE: "major_outage",
 };
@@ -54,13 +56,21 @@ const severityStatuses: Partial<Record<string, NormalizedStatus>> = {
   SERVICE_OUTAGE: "major_outage",
 };
 
+// The JSON catalog still includes these retired products, but the current dashboard does not.
+const historicalOnlyProductIds = new Set([
+  "8qvqBSzo9ksVXYtWwe5g", // Classic Hangouts
+  "dmLd9pmXmkuNNFZXo8a5", // Currents
+]);
+const dashboardTimestampPrecisionMs = 60_000;
+
 export async function fetchGoogleWorkspaceSnapshot(
   service: GoogleWorkspaceService,
   context: ProviderContext,
 ): Promise<ProviderSnapshot> {
-  const [catalogPayload, historyPayload] = await Promise.all([
+  const [catalogPayload, historyPayload, dashboardHtml] = await Promise.all([
     fetchJson(service.productsUrl, context.signal, context.fetcher),
     fetchJson(service.incidentsUrl, context.signal, context.fetcher),
+    fetchHtml(service.dashboardUrl, context.signal, context.fetcher),
   ]);
   const catalog = asRecord(catalogPayload);
   const history = historyPayload;
@@ -70,6 +80,7 @@ export async function fetchGoogleWorkspaceSnapshot(
 
   const products = parseProducts(catalog.products);
   const productNames = new Map(products.map(({ id, name }) => [id, name]));
+  const dashboardProducts = parseCurrentDashboard(dashboardHtml, products);
   const historyIncidents = history.map((value) => parseIncident(value, service, productNames));
   const knownActiveIncidents = await context.getActiveIncidents();
   const incidentsById = new Map(historyIncidents.map((incident) => [incident.id, incident]));
@@ -93,77 +104,184 @@ export async function fetchGoogleWorkspaceSnapshot(
     );
   }
 
-  const activeByProductId = new Map<
-    string,
-    Array<{ status: NormalizedStatus; sourceStatus: string }>
-  >();
+  const activeByProductId = new Map<string, StatusObservation[]>();
   for (const incident of incidents) {
+    if (!incident.active) continue;
+    const status = statusForActiveIncident(incident);
+    const sourceStatus =
+      incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+        ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+        : (incident.statusImpact ?? "unknown");
     for (const id of incident.componentIds) {
-      if (incident.active) {
-        const status = statusForActiveIncident(incident);
-        addActiveProductStatus(
-          activeByProductId,
-          id,
-          status,
-          incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
-            ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
-            : (incident.statusImpact ?? "unknown"),
-        );
-      }
+      const observations = activeByProductId.get(id) ?? [];
+      observations.push({ status, sourceStatus });
+      activeByProductId.set(id, observations);
     }
   }
 
-  const components: NormalizedComponent[] = products.map(({ id, name }) => {
-    const activeStatuses = activeByProductId.get(id) ?? [];
-    const status = activeStatuses.length
-      ? combineActiveStatuses(activeStatuses.map(({ status: componentStatus }) => componentStatus))
-      : "unknown";
-    const sourceStatus =
-      status === "unknown"
-        ? activeStatuses.find(({ status: impactStatus }) => impactStatus === "unknown")
-            ?.sourceStatus
-        : activeStatuses.toSorted(
-            (left, right) => statusPriority[right.status] - statusPriority[left.status],
-          )[0]?.sourceStatus;
+  const components: NormalizedComponent[] = dashboardProducts.map((product) => {
+    const status = combineObservations([
+      { status: product.status, sourceStatus: product.sourceStatus },
+      ...(activeByProductId.get(product.id) ?? []),
+    ]);
     return {
-      id,
-      name,
-      status,
-      sourceStatus: activeStatuses.length ? (sourceStatus ?? "unknown") : "no_current_status",
+      id: product.id,
+      name: product.name,
+      status: status.status,
+      sourceStatus: status.sourceStatus,
     };
   });
 
   const activeIncidents = incidents.filter((incident) => incident.active);
-  const activeStatuses = activeIncidents.map(statusForActiveIncident);
-  const incidentStatus = activeIncidents.length ? combineActiveStatuses(activeStatuses) : "unknown";
-  const status = incidentStatus;
-  const sourceStatus = activeIncidents.length
-    ? incidentStatus === "unknown"
-      ? (activeIncidents.find((incident) => statusForActiveIncident(incident) === "unknown")
-          ?.sourceStatus ?? "unknown")
-      : (activeIncidents.toSorted(
-          (left, right) =>
-            statusPriority[statusForActiveIncident(right)] -
-            statusPriority[statusForActiveIncident(left)],
-        )[0]?.statusImpact ?? "unknown")
-    : historyIncidents.length > 0
-      ? "no_active_incidents"
-      : "no_incident_history";
+  const overallStatus = combineObservations([
+    ...components.map(({ status, sourceStatus }) => ({ status, sourceStatus })),
+    ...activeIncidents.map((incident) => ({
+      status: statusForActiveIncident(incident),
+      sourceStatus:
+        incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+          ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+          : (incident.statusImpact ?? "unknown"),
+    })),
+  ]);
 
   return {
-    status,
-    sourceStatus,
+    status: overallStatus.status,
+    sourceStatus: overallStatus.sourceStatus,
     summary:
-      status !== "unknown"
-        ? null
-        : activeIncidents.length === 0
-          ? "公式の履歴に進行中の障害はありません。製品の現在の稼働状態は公開データから判断できません。"
-          : "公式の履歴フィードから現在の状態を判断できません。",
+      overallStatus.status === "unknown"
+        ? "公式ダッシュボードの現在状態を確認できない製品または障害があります。"
+        : null,
     components,
     incidents,
     // Google publishes a bounded history feed, so an incident omitted from it is not proof of recovery.
     incidentListComplete: false,
   };
+}
+
+interface GoogleProductStatus extends GoogleProduct {
+  status: NormalizedStatus;
+  sourceStatus: string;
+}
+
+interface StatusObservation {
+  status: NormalizedStatus;
+  sourceStatus: string;
+}
+
+function parseCurrentDashboard(html: string, products: GoogleProduct[]): GoogleProductStatus[] {
+  const updatedText = html.match(/Last updated:\s*([^<]+)/i)?.[1];
+  const updatedAt = updatedText ? Date.parse(decodeHtmlText(updatedText)) : Number.NaN;
+  const ageMs = Date.now() - updatedAt;
+  if (
+    !Number.isFinite(updatedAt) ||
+    ageMs < -dashboardTimestampPrecisionMs ||
+    ageMs > FRESHNESS_WARNING_SECONDS * 1_000 + dashboardTimestampPrecisionMs
+  ) {
+    throw new ProviderError(
+      "invalid_payload",
+      "Google Workspace dashboard data is missing or stale",
+    );
+  }
+
+  const table = html.match(
+    /<table\b(?=[^>]*\bclass=["'][^"']*\bmain-dashboard-table\b[^"']*["'])[^>]*>([\s\S]*?)<\/table>/i,
+  )?.[1];
+  if (!table) {
+    throw new ProviderError("invalid_payload", "Google Workspace current status table is missing");
+  }
+
+  const productsByName = new Map(
+    products.map((product) => [normalizeProductName(product.name), product]),
+  );
+  if (productsByName.size !== products.length) {
+    throw new ProviderError("invalid_payload", "Google Workspace product names are ambiguous");
+  }
+
+  const rows = [
+    ...table.matchAll(
+      /<tr\b[^>]*\bclass=["'][^"']*\bproduct-row\b[^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi,
+    ),
+  ];
+  if (rows.length === 0 || rows.length > COMPONENTS_PER_SERVICE_LIMIT) {
+    throw new ProviderError("invalid_payload", "Google Workspace current product list is invalid");
+  }
+
+  const seenProductIds = new Set<string>();
+  const currentProducts = rows.map(([, row]) => {
+    const rawName = row.match(
+      /<td\b(?=[^>]*\bclass=["'][^"']*\bproduct-name\b[^"']*["'])[^>]*>([\s\S]*?)<\/td>/i,
+    )?.[1];
+    const name = rawName ? decodeHtmlText(rawName.replace(/<[^>]*>/g, " ")) : "";
+    const product = productsByName.get(normalizeProductName(name));
+    if (!product || seenProductIds.has(product.id)) {
+      throw new ProviderError(
+        "invalid_payload",
+        "Google Workspace current product is unknown or duplicated",
+      );
+    }
+
+    const endMarker = row.match(
+      /<div\b(?=[^>]*\bclass=["'][^"']*\bend-marker\b[^"']*["'])[^>]*>([\s\S]*?)<\/div>/i,
+    )?.[1];
+    const label = endMarker?.match(/\baria-label=["']([^"']+)["']/i)?.[1];
+    const observation = dashboardStatus(label);
+    if (!observation) {
+      throw new ProviderError(
+        "invalid_payload",
+        "Google Workspace current product status is missing or unknown",
+      );
+    }
+
+    seenProductIds.add(product.id);
+    return { ...product, ...observation };
+  });
+
+  const missingCurrentProducts = products.filter(
+    ({ id }) => !historicalOnlyProductIds.has(id) && !seenProductIds.has(id),
+  );
+  if (missingCurrentProducts.length > 0) {
+    throw new ProviderError(
+      "invalid_payload",
+      "Google Workspace current product list is incomplete",
+    );
+  }
+  return currentProducts;
+}
+
+function dashboardStatus(label: string | undefined): StatusObservation | null {
+  if (!label) return null;
+  const rawStatus = label
+    .replace(/\s+status$/i, "")
+    .trim()
+    .toLowerCase();
+  switch (rawStatus) {
+    case "available":
+    case "service information":
+      return { status: "operational", sourceStatus: rawStatus.replaceAll(" ", "_").toUpperCase() };
+    case "service disruption":
+      return { status: "degraded_performance", sourceStatus: "SERVICE_DISRUPTION" };
+    case "service outage":
+      return { status: "major_outage", sourceStatus: "SERVICE_OUTAGE" };
+    default:
+      return null;
+  }
+}
+
+function decodeHtmlText(value: string): string {
+  return value
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/[\u00a0\u202f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeProductName(value: string): string {
+  return decodeHtmlText(value).toLocaleLowerCase("en-US");
 }
 
 function parseProducts(values: unknown[]): GoogleProduct[] {
@@ -341,24 +459,27 @@ function incidentTitle(description: string | null): string | null {
   return statusText(labeled?.[1] ?? firstLine, 300);
 }
 
-function maxKnownStatus(left: KnownStatus, right: KnownStatus): KnownStatus {
-  return statusPriority[right] > statusPriority[left] ? right : left;
-}
+function combineObservations(observations: StatusObservation[]): StatusObservation {
+  const known = observations.filter(
+    (observation): observation is StatusObservation & { status: KnownStatus } =>
+      observation.status !== "unknown",
+  );
+  if (known.length === 0) {
+    return {
+      status: "unknown",
+      sourceStatus: observations[0]?.sourceStatus ?? "unknown",
+    };
+  }
 
-function combineActiveStatuses(statuses: NormalizedStatus[]): NormalizedStatus {
-  const knownStatuses = statuses.filter((status): status is KnownStatus => status !== "unknown");
-  if (knownStatuses.length === 0) return "unknown";
-  const highest = knownStatuses.reduce(maxKnownStatus);
-  return highest === "operational" && statuses.includes("unknown") ? "unknown" : highest;
-}
-
-function addActiveProductStatus(
-  statusesByProductId: Map<string, Array<{ status: NormalizedStatus; sourceStatus: string }>>,
-  productId: string,
-  status: NormalizedStatus,
-  sourceStatus: string,
-): void {
-  const statuses = statusesByProductId.get(productId) ?? [];
-  statuses.push({ status, sourceStatus });
-  statusesByProductId.set(productId, statuses);
+  const highest = known.reduce((left, right) =>
+    statusPriority[right.status] > statusPriority[left.status] ? right : left,
+  );
+  if (highest.status === "operational" && observations.some(({ status }) => status === "unknown")) {
+    return {
+      status: "unknown",
+      sourceStatus:
+        observations.find(({ status }) => status === "unknown")?.sourceStatus ?? "unknown",
+    };
+  }
+  return highest;
 }

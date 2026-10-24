@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS, type KnownIncident } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
 import type { ProviderContext } from "../provider-context";
@@ -15,6 +15,10 @@ const productCatalog = JSON.parse(
 const historyFixture = JSON.parse(
   readFileSync("src/cron/providers/fixtures/google-workspace-history.json", "utf8"),
 ) as unknown[];
+const dashboardHtml = readFileSync(
+  "src/cron/providers/fixtures/google-workspace-dashboard.html",
+  "utf8",
+);
 const multiProductIncident = historyFixture.find(
   (incident) => (incident as Record<string, unknown>).id === "vagmms1y6yRxwg6RMQZp",
 ) as Record<string, unknown> | undefined;
@@ -27,6 +31,8 @@ function providerContext(
   knownIncidents: KnownIncident[] = [],
   failHistory = false,
   catalogPayload: unknown = productCatalog,
+  currentDashboard = dashboardHtml,
+  failDashboard = false,
 ) {
   const fetcher = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
@@ -39,6 +45,9 @@ function providerContext(
       return new Response(JSON.stringify(history), {
         headers: { "content-type": "application/json" },
       });
+    }
+    if (url === googleWorkspaceService.dashboardUrl && !failDashboard) {
+      return new Response(currentDashboard, { headers: { "content-type": "text/html" } });
     }
     return new Response("Unavailable", { status: 503 });
   });
@@ -69,12 +78,16 @@ function fetchSnapshot(
   knownIncidents: KnownIncident[] = [],
   failHistory = false,
   catalogPayload: unknown = productCatalog,
+  currentDashboard = dashboardHtml,
+  failDashboard = false,
 ) {
   const { context, fetcher, getActiveIncidents } = providerContext(
     history,
     knownIncidents,
     failHistory,
     catalogPayload,
+    currentDashboard,
+    failDashboard,
   );
   return {
     result: fetchGoogleWorkspaceSnapshot(googleWorkspaceService, context),
@@ -84,6 +97,14 @@ function fetchSnapshot(
 }
 
 describe("Google Workspace provider", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date("2026-10-24T06:08:00.000Z") });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it.each([
     {
       impact: "SERVICE_DISRUPTION",
@@ -99,8 +120,8 @@ describe("Google Workspace provider", () => {
     },
     {
       impact: "SERVICE_INFORMATION",
-      expectedStatus: "unknown",
-      expectedComponentStatus: "unknown",
+      expectedStatus: "operational",
+      expectedComponentStatus: "operational",
       expectedSeverityStatus: null,
     },
     {
@@ -117,9 +138,7 @@ describe("Google Workspace provider", () => {
       const incident = snapshot.incidents[0];
 
       expect(snapshot.status).toBe(expectedStatus);
-      expect(snapshot.components).toHaveLength(
-        (productCatalog as { products: unknown[] }).products.length,
-      );
+      expect(snapshot.components).toHaveLength(35);
       expect(incident).toMatchObject({
         id: "vagmms1y6yRxwg6RMQZp",
         state: "investigating",
@@ -138,6 +157,7 @@ describe("Google Workspace provider", () => {
       });
       expect(fetcher).toHaveBeenCalledWith(googleWorkspaceService.productsUrl, expect.any(Object));
       expect(fetcher).toHaveBeenCalledWith(googleWorkspaceService.incidentsUrl, expect.any(Object));
+      expect(fetcher).toHaveBeenCalledWith(googleWorkspaceService.dashboardUrl, expect.any(Object));
       expect(getActiveIncidents).toHaveBeenCalledOnce();
       expect(snapshot.incidentListComplete).toBe(false);
       expect(snapshot.components?.find(({ id }) => id === "prPt2Yra2CbGsbEm9cpC")?.status).toBe(
@@ -177,9 +197,9 @@ describe("Google Workspace provider", () => {
       expectedState: "resolved",
       expectedSourceStatus: "AVAILABLE",
       expectedActive: false,
-      expectedServiceStatus: "unknown",
+      expectedServiceStatus: "operational",
       expectedOfficialUpdatedAt: "2026-05-31T04:24:00.000Z",
-      expectedDriveStatus: "unknown",
+      expectedDriveStatus: "operational",
     },
   ])(
     "handles a known incident that is $name",
@@ -217,7 +237,7 @@ describe("Google Workspace provider", () => {
         active: expectedActive,
       });
       expect(snapshot.status).toBe(expectedServiceStatus);
-      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher).toHaveBeenCalledTimes(3);
       expect(currentIncident?.officialUpdatedAt).toBe(expectedOfficialUpdatedAt);
       expect(snapshot.components?.find(({ id }) => id === "VHNA7p3Z5p3iakj5sA8V")?.status).toBe(
         expectedDriveStatus,
@@ -253,15 +273,30 @@ describe("Google Workspace provider", () => {
     expect(snapshot.incidents).toHaveLength(2);
   });
 
-  it("marks products unknown when the history feed has no evidence of their state", async () => {
+  it("uses the current dashboard status when the history feed has no active incidents", async () => {
     const { result } = fetchSnapshot([]);
     const snapshot = await result;
 
-    expect(snapshot.status).toBe("unknown");
-    expect(snapshot.sourceStatus).toBe("no_incident_history");
-    expect(snapshot.summary).toContain("進行中の障害はありません");
-    expect(snapshot.summary).toContain("現在の稼働状態は公開データから判断できません");
-    expect(snapshot.components?.every(({ status }) => status === "unknown")).toBe(true);
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.sourceStatus).toBe("AVAILABLE");
+    expect(snapshot.summary).toBeNull();
+    expect(snapshot.components).toHaveLength(35);
+    expect(snapshot.components?.every(({ status }) => status === "operational")).toBe(true);
+    expect(snapshot.components?.map(({ name }) => name)).not.toContain("Classic Hangouts");
+    expect(snapshot.components?.map(({ name }) => name)).not.toContain("Currents");
+  });
+
+  it("reports a current product outage even when history has no incident", async () => {
+    const currentDashboard = dashboardWithStatus("Google Drive", "Service outage status");
+    const snapshot = await fetchSnapshot([], [], false, productCatalog, currentDashboard).result;
+
+    expect(snapshot.status).toBe("major_outage");
+    expect(snapshot.components?.find(({ name }) => name === "Google Drive")).toMatchObject({
+      status: "major_outage",
+      sourceStatus: "SERVICE_OUTAGE",
+    });
+    expect(snapshot.components?.find(({ name }) => name === "Gmail")?.status).toBe("operational");
+    expect(snapshot.incidents).toEqual([]);
   });
 
   it.each([
@@ -280,16 +315,96 @@ describe("Google Workspace provider", () => {
       expectedCode: "invalid_payload",
     },
     {
+      name: "dashboard request fails",
+      history: [],
+      failHistory: false,
+      catalogPayload: productCatalog,
+      currentDashboard: dashboardHtml,
+      failDashboard: true,
+      expectedCode: "upstream_http_error",
+    },
+    {
+      name: "dashboard status is stale",
+      history: [],
+      failHistory: false,
+      catalogPayload: productCatalog,
+      currentDashboard: dashboardHtml.replace("6:07", "5:00"),
+      failDashboard: false,
+      expectedCode: "invalid_payload",
+    },
+    {
+      name: "dashboard omits a current product",
+      history: [],
+      failHistory: false,
+      catalogPayload: productCatalog,
+      currentDashboard: dashboardWithoutProduct("Google Drive"),
+      failDashboard: false,
+      expectedCode: "invalid_payload",
+    },
+    {
+      name: "dashboard status is unknown",
+      history: [],
+      failHistory: false,
+      catalogPayload: productCatalog,
+      currentDashboard: dashboardHtml.replace(
+        'aria-label="Available status"',
+        'aria-label="Unknown status"',
+      ),
+      failDashboard: false,
+      expectedCode: "invalid_payload",
+    },
+    {
       name: "history has an invalid shape",
       history: { incidents: [] },
       failHistory: false,
       catalogPayload: productCatalog,
+      currentDashboard: dashboardHtml,
+      failDashboard: false,
       expectedCode: "invalid_payload",
     },
-  ])("rejects input when $name", async ({ history, failHistory, catalogPayload, expectedCode }) => {
-    const { result, fetcher } = fetchSnapshot(history, [], failHistory, catalogPayload);
+  ])(
+    "rejects input when $name",
+    async ({
+      history,
+      failHistory,
+      catalogPayload,
+      currentDashboard = dashboardHtml,
+      failDashboard = false,
+      expectedCode,
+    }) => {
+      const { result, fetcher } = fetchSnapshot(
+        history,
+        [],
+        failHistory,
+        catalogPayload,
+        currentDashboard,
+        failDashboard,
+      );
 
-    await expect(result).rejects.toMatchObject({ code: expectedCode });
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
+      await expect(result).rejects.toMatchObject({ code: expectedCode });
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    },
+  );
 });
+
+function dashboardWithStatus(productName: string, statusLabel: string): string {
+  const { rowStart, rowEnd } = dashboardRowOffsets(dashboardHtml, productName);
+  const row = dashboardHtml.slice(rowStart, rowEnd);
+  const updatedRow = row.replace('aria-label="Available status"', `aria-label="${statusLabel}"`);
+  if (row === updatedRow)
+    throw new Error(`Google Workspace dashboard row has no status for ${productName}`);
+  return dashboardHtml.slice(0, rowStart) + updatedRow + dashboardHtml.slice(rowEnd);
+}
+
+function dashboardWithoutProduct(productName: string): string {
+  const { rowStart, rowEnd } = dashboardRowOffsets(dashboardHtml, productName);
+  return dashboardHtml.slice(0, rowStart) + dashboardHtml.slice(rowEnd);
+}
+
+function dashboardRowOffsets(html: string, productName: string) {
+  const nameIndex = html.indexOf(productName);
+  if (nameIndex < 0) throw new Error(`Google Workspace dashboard fixture lacks ${productName}`);
+  const rowStart = html.lastIndexOf("<tr", nameIndex);
+  const rowEnd = html.indexOf("</tr>", nameIndex) + "</tr>".length;
+  return { rowStart, rowEnd };
+}
