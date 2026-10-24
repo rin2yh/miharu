@@ -63,7 +63,12 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await test.step("共有URLを開いてSlackとGitHubの選択を確認する", async () => {
+    const statusRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/status" && url.searchParams.get("services") === "slack,github";
+    });
     await statusDashboard.goto("/?services=github,slack");
+    await statusRequest;
     await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
     await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
@@ -76,12 +81,24 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   });
 
   await test.step("Notionを追加してからGitHubを解除する", async () => {
+    const notionRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        url.pathname === "/api/status" && url.searchParams.get("services") === "slack,notion,github"
+      );
+    });
     await statusDashboard.serviceSelection("Notion").click();
+    await notionRequest;
     await expect(statusDashboard.selectedServiceCount(3)).toBeVisible();
     await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
     await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
 
+    const withoutGithubRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/status" && url.searchParams.get("services") === "slack,notion";
+    });
     await statusDashboard.serviceSelection("GitHub").click();
+    await withoutGithubRequest;
     await expect(statusDashboard.selectedServiceCount(2)).toBeVisible();
     await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
     await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);

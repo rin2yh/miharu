@@ -187,6 +187,43 @@ describe("status API", () => {
     expect(payload.recentEvents[0]).not.toHaveProperty("body");
   });
 
+  it("returns only requested services and deduplicates IDs before reading the store", async () => {
+    const reader = {
+      getDashboardRows: vi.fn<(serviceIds?: readonly string[]) => Promise<DashboardRows>>(
+        async () => rows,
+      ),
+    };
+    const app = createStatusRoutes(() => reader);
+    const response = await app.request(
+      "/api/status?services=github,slack,github",
+      {},
+      { DB: {} as D1Database },
+    );
+    const payload = (await response.json()) as DashboardPayload;
+
+    expect(response.status).toBe(200);
+    expect(reader.getDashboardRows).toHaveBeenCalledWith([slackService.id, githubService.id]);
+    expect(payload.services.map(({ id }) => id)).toEqual([slackService.id, githubService.id]);
+    expect(payload.recentEvents.map(({ serviceId }) => serviceId)).toEqual([slackService.id]);
+  });
+
+  it.each(["", "slack,", "slack,unknown", "unknown"])(
+    "rejects empty or unknown service IDs before reading D1: %s",
+    async (serviceQuery) => {
+      const reader = { getDashboardRows: vi.fn<() => Promise<DashboardRows>>(async () => rows) };
+      const app = createStatusRoutes(() => reader);
+      const response = await app.request(
+        `/api/status?services=${encodeURIComponent(serviceQuery)}`,
+        {},
+        { DB: {} as D1Database },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({ error: "invalid_services" });
+      expect(reader.getDashboardRows).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     { environment: "production", seconds: 180, ageSeconds: 600, isStale: true },
     { environment: "preview", seconds: 2_700, ageSeconds: 600, isStale: false },

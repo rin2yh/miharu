@@ -30,7 +30,7 @@ export interface CollectionStore {
 }
 
 export interface DashboardStore extends CollectionStore {
-  getDashboardRows(): Promise<DashboardRows>;
+  getDashboardRows(serviceIds?: readonly string[]): Promise<DashboardRows>;
   pruneHistory(now: Date): Promise<void>;
 }
 
@@ -167,7 +167,11 @@ export function createD1Store(database: D1Database): DashboardStore {
       ]);
     },
 
-    async getDashboardRows() {
+    async getDashboardRows(serviceIds) {
+      const statusFilter = serviceFilter(serviceIds);
+      const componentFilter = serviceFilter(serviceIds);
+      const incidentFilter = serviceFilter(serviceIds, "AND");
+      const eventFilter = serviceFilter(serviceIds);
       const [statuses, components, incidents, events] = await Promise.all([
         database
           .prepare(
@@ -175,17 +179,19 @@ export function createD1Store(database: D1Database): DashboardStore {
               service_id AS serviceId, status, source_status AS sourceStatus,
               summary, last_checked_at AS lastCheckedAt, last_success_at AS lastSuccessAt,
               last_error_at AS lastErrorAt, error_code AS errorCode
-            FROM service_status`,
+            FROM service_status${statusFilter.sql}`,
           )
+          .bind(...statusFilter.values)
           .all<ServiceStatusRow>(),
         database
           .prepare(
             `SELECT
               service_id AS serviceId, id, name, status,
               source_status AS sourceStatus, last_changed_at AS lastChangedAt
-            FROM service_components
+            FROM service_components${componentFilter.sql}
             ORDER BY service_id, name COLLATE NOCASE, id`,
           )
+          .bind(...componentFilter.values)
           .all<ServiceComponentRow>(),
         database
           .prepare(
@@ -200,8 +206,10 @@ export function createD1Store(database: D1Database): DashboardStore {
               fingerprint, revision, last_observed_at AS lastObservedAt
             FROM incidents
             WHERE lifecycle IN ('active', 'unverified')
+              ${incidentFilter.sql}
             ORDER BY service_id, official_created_at DESC`,
           )
+          .bind(...incidentFilter.values)
           .all<IncidentRow>(),
         database
           .prepare(
@@ -211,11 +219,11 @@ export function createD1Store(database: D1Database): DashboardStore {
               severity_status AS severityStatus, component_ids_json AS componentIdsJson,
               components_json AS componentsJson,
               detected_at AS detectedAt, official_event_at AS officialEventAt, url
-            FROM incident_events
+            FROM incident_events${eventFilter.sql}
             ORDER BY detected_at DESC
             LIMIT ?`,
           )
-          .bind(INCIDENT_HISTORY_DISPLAY_LIMIT)
+          .bind(...eventFilter.values, INCIDENT_HISTORY_DISPLAY_LIMIT)
           .all<IncidentEventRow>(),
       ]);
       return {
@@ -240,6 +248,18 @@ export function createD1Store(database: D1Database): DashboardStore {
           .bind(cutoff),
       ]);
     },
+  };
+}
+
+function serviceFilter(
+  serviceIds: readonly string[] | undefined,
+  conjunction: "AND" | "WHERE" = "WHERE",
+): { sql: string; values: string[] } {
+  if (serviceIds === undefined) return { sql: "", values: [] };
+  if (serviceIds.length === 0) return { sql: ` ${conjunction} 1 = 0`, values: [] };
+  return {
+    sql: ` ${conjunction} service_id IN (${serviceIds.map(() => "?").join(", ")})`,
+    values: [...serviceIds],
   };
 }
 
