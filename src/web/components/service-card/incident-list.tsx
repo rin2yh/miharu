@@ -22,8 +22,6 @@ function incidentStateColor(incident: DashboardIncident): string {
   switch (incident.state) {
     case "monitoring":
       return "bg-degraded-bg text-degraded";
-    case "scheduled":
-      return "bg-partial-bg text-partial";
     default:
       return "bg-partial-bg text-partial";
   }
