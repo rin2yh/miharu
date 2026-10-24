@@ -30,7 +30,7 @@ export function ServiceSelector({ selectedServiceIds, onApply }: ServiceSelector
   };
 
   return (
-    <details className="group mb-6 rounded-lg border border-line-strong bg-surface dark:border-line">
+    <details className="group mb-6 rounded-lg border border-line-strong bg-surface dark:border-line lg:hidden">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-healthy">
         <span>表示サービスを選択</span>
         <span className="flex items-center gap-2 whitespace-nowrap text-xs font-normal text-muted">
