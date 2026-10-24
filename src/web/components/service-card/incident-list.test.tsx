@@ -13,7 +13,7 @@ describe("IncidentList", () => {
     );
 
     const incidentItem = screen.getByRole("listitem", { name: "History entry missing" });
-    expect(within(incidentItem).getByText("障害・確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
     expect(within(incidentItem).queryByText("復旧", { exact: true })).not.toBeInTheDocument();
   });
 
@@ -58,10 +58,27 @@ describe("IncidentList", () => {
     render(<IncidentList incidents={[unknownIncident]} />);
 
     const incidentItem = screen.getByRole("listitem", { name: unknownIncident.title });
-    expect(within(incidentItem).getByText("障害・確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("復旧未確認")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
+  });
+
+  it("labels unverified maintenance as not yet confirmed ended", () => {
+    const unverifiedMaintenance = incident({
+      title: "Earlier maintenance status unavailable",
+      kind: "maintenance",
+      state: "unknown",
+      sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+      lifecycle: "unverified",
+      severityStatus: null,
+    });
+    render(<IncidentList incidents={[unverifiedMaintenance]} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: unverifiedMaintenance.title });
+    expect(within(incidentItem).getByText("終了未確認")).toBeVisible();
+    fireEvent.click(within(incidentItem).getByText(unverifiedMaintenance.title));
+    expect(within(incidentItem).getByText("メンテナンス")).toBeVisible();
   });
 
   it("expands one incident without opening its sibling", () => {

@@ -76,9 +76,9 @@ describe("status presentation", () => {
   });
 
   it.each([
-    { kind: "incident", label: "障害・確認不能" },
-    { kind: "maintenance", label: "メンテナンス・確認不能" },
-  ] as const)("labels an unverified $kind as $label", ({ kind, label }) => {
+    { kind: "incident", label: "復旧未確認" },
+    { kind: "maintenance", label: "終了未確認" },
+  ] as const)("uses a lifecycle label for an unverified $kind", ({ kind, label }) => {
     expect(incidentStateLabel(kind, "investigating", "unverified")).toBe(label);
   });
 

@@ -29,7 +29,7 @@ export function incidentStateLabel(
   sourceStatus?: string,
 ): string {
   if (lifecycle === "unverified") {
-    return kind === "maintenance" ? "メンテナンス・確認不能" : "障害・確認不能";
+    return kind === "maintenance" ? "終了未確認" : "復旧未確認";
   }
 
   if (kind === "maintenance") {
