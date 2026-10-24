@@ -124,6 +124,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
       )}
 
       <AppSidebar
+        orderedServices={orderedServices}
         selectedServiceIds={selectedServiceIds}
         onSelect={applyServiceSelection}
         query={query}
