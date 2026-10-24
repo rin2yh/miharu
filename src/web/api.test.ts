@@ -50,6 +50,34 @@ describe("dashboard API client", () => {
     });
   });
 
+  it("forwards TanStack Query's abort signal to fetch", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn<() => Promise<Response>>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            generatedAt: "now",
+            services: [],
+            recentEvents: [],
+            freshnessWarningSeconds: 180,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchDashboard(["github"], controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/status?services=github", {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  });
+
   it("reports a failed API response to the caller", async () => {
     vi.stubGlobal(
       "fetch",

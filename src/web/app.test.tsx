@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS, SERVICES } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
 import { App } from "./app";
+import { createQueryClient } from "./query-client";
 import {
   basePayload,
   githubLinkName,
@@ -12,6 +14,37 @@ import {
   service,
   slackLinkName,
 } from "./test-fixtures";
+
+type DashboardLoader = (
+  serviceIds: readonly string[],
+  signal?: AbortSignal,
+) => Promise<DashboardPayload>;
+type DeferredDashboardRequest = {
+  serviceIds: readonly string[];
+  signal?: AbortSignal;
+  resolve: (result: DashboardPayload) => void;
+};
+
+function renderDashboard(load: DashboardLoader) {
+  const queryClient = createQueryClient({ gcTime: 0 });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <App load={load} />
+    </QueryClientProvider>,
+  );
+}
+
+function createDeferredDashboardLoader() {
+  const requests: DeferredDashboardRequest[] = [];
+  const load = vi.fn<DashboardLoader>(
+    (serviceIds, signal) =>
+      new Promise((resolve) => {
+        requests.push({ serviceIds: [...serviceIds], signal, resolve });
+      }),
+  );
+  return { load, requests };
+}
 
 function getSidebarOrder() {
   return within(screen.getByRole("complementary", { name: "サービス選択" }))
@@ -36,7 +69,7 @@ describe("dashboard", () => {
       .fn<() => Promise<DashboardPayload>>()
       .mockResolvedValueOnce(basePayload)
       .mockRejectedValueOnce(new Error("unavailable"));
-    render(<App load={load} />);
+    renderDashboard(load);
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
@@ -49,7 +82,7 @@ describe("dashboard", () => {
       .fn<() => Promise<DashboardPayload>>()
       .mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValueOnce(basePayload);
-    render(<App load={load} />);
+    renderDashboard(load);
 
     expect(await screen.findByText("一覧を読み込めませんでした。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "もう一度取得する" }));
@@ -61,7 +94,7 @@ describe("dashboard", () => {
 
   it("renders the shared brand in the mobile header and desktop sidebar with a home link", () => {
     window.history.replaceState(null, "", "/?services=github");
-    render(<App load={async () => basePayload} />);
+    renderDashboard(async () => basePayload);
 
     const brandLinks = screen.getAllByRole("link", { name: "miharu ホーム" });
     expect(brandLinks).toHaveLength(2);
@@ -89,7 +122,7 @@ describe("dashboard", () => {
       officialEventAt: "2026-10-23T04:50:00.000Z",
       url: "https://www.githubstatus.com/incidents/incident-1",
     };
-    render(<App load={async () => payload([service()], [event])} />);
+    renderDashboard(async () => payload([service()], [event]));
 
     expect(await screen.findByText("障害発生")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Actions delay" })).toHaveAttribute("href", event.url);
@@ -115,7 +148,7 @@ describe("dashboard", () => {
       .mockResolvedValueOnce(basePayload)
       .mockResolvedValueOnce(updatedPayload)
       .mockResolvedValueOnce(recoveredPayload);
-    render(<App load={load} />);
+    renderDashboard(load);
     expect(await screen.findByText("Messaging delays for some users")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
@@ -150,7 +183,7 @@ describe("dashboard", () => {
       title: "GitHub update",
       url: "https://www.githubstatus.com/incidents/github-incident",
     };
-    render(<App load={async () => payload(basePayload.services, [slackEvent, githubEvent])} />);
+    renderDashboard(async () => payload(basePayload.services, [slackEvent, githubEvent]));
     await screen.findByRole("link", { name: githubLinkName });
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
       target: { value: "slack" },
@@ -190,7 +223,7 @@ describe("dashboard", () => {
           }),
       )
       .mockResolvedValueOnce(updatedPayload);
-    render(<App load={load} />);
+    renderDashboard(load);
 
     expect(getSidebarOrder()).toEqual(SERVICES.map(({ name }) => name));
 
@@ -226,7 +259,7 @@ describe("dashboard", () => {
       officialEventAt: lastSuccessAt,
       url: "https://www.githubstatus.com/incidents/github-incident",
     };
-    render(<App load={async () => payload(basePayload.services, [githubEvent])} />);
+    renderDashboard(async () => payload(basePayload.services, [githubEvent]));
     await screen.findByRole("link", { name: githubLinkName });
 
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
@@ -261,7 +294,7 @@ describe("dashboard", () => {
       title: "GitHub update",
       url: "https://www.githubstatus.com/incidents/github-incident",
     };
-    render(<App load={async () => payload(basePayload.services, [slackEvent, githubEvent])} />);
+    renderDashboard(async () => payload(basePayload.services, [slackEvent, githubEvent]));
 
     const serviceList = await screen.findByRole("list", { name: "サービス一覧" });
     const serviceLinks = within(serviceList)
@@ -289,9 +322,9 @@ describe("dashboard", () => {
   it("keeps selection changes as a draft until apply", async () => {
     window.history.replaceState(null, "", "/?services=github");
     const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
-    render(<App load={load} />);
+    renderDashboard(load);
     await screen.findByRole("link", { name: githubLinkName });
-    expect(load).toHaveBeenNthCalledWith(1, ["github"]);
+    expect(load).toHaveBeenNthCalledWith(1, ["github"], expect.any(AbortSignal));
     expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("表示サービスを選択"));
@@ -305,18 +338,24 @@ describe("dashboard", () => {
 
     expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
     expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
-    await waitFor(() => expect(load).toHaveBeenNthCalledWith(2, ["slack", "github"]));
+    await waitFor(() =>
+      expect(load).toHaveBeenNthCalledWith(2, ["slack", "github"], expect.any(AbortSignal)),
+    );
     expect(screen.queryByText("未適用")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
-    await waitFor(() => expect(load).toHaveBeenNthCalledWith(3, ["slack", "github"]));
+    await waitFor(() =>
+      expect(load).toHaveBeenNthCalledWith(3, ["slack", "github"], expect.any(AbortSignal)),
+    );
   });
 
   it("shows an empty state for unknown URL services and disables applying no selection", async () => {
     window.history.replaceState(null, "", "/?services=missing,unknown");
-    render(<App load={async () => basePayload} />);
+    const load = vi.fn<DashboardLoader>(async () => basePayload);
+    renderDashboard(load);
 
     expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
+    expect(load).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: githubLinkName })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "この条件で表示" })).toBeDisabled();
     expect(
@@ -336,7 +375,7 @@ describe("dashboard", () => {
   it("updates applied services when browser history changes the URL", async () => {
     window.history.replaceState(null, "", "/?services=github");
     const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
-    render(<App load={load} />);
+    renderDashboard(load);
     await screen.findByRole("link", { name: githubLinkName });
 
     window.history.pushState(null, "", "/");
@@ -347,13 +386,80 @@ describe("dashboard", () => {
       expect(load).toHaveBeenNthCalledWith(
         2,
         SERVICES.map(({ id }) => id),
+        expect.any(AbortSignal),
       ),
     );
   });
 
+  it("refetches when the selection changes from A to B and back to A", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    const { load, requests } = createDeferredDashboardLoader();
+    renderDashboard(load);
+    await waitFor(() => expect(requests).toHaveLength(1));
+
+    window.history.pushState(null, "", "/?services=slack");
+    fireEvent.popState(window);
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[0]?.signal?.aborted).toBe(true);
+
+    window.history.pushState(null, "", "/?services=github");
+    fireEvent.popState(window);
+    await waitFor(() => expect(requests).toHaveLength(3));
+    expect(requests.map(({ serviceIds }) => serviceIds)).toEqual([
+      ["github"],
+      ["slack"],
+      ["github"],
+    ]);
+    expect(requests[1]?.signal?.aborted).toBe(true);
+
+    await act(async () => {
+      requests[0]?.resolve(payload([service({ name: "Stale GitHub" })]));
+      requests[1]?.resolve(payload([service({ id: "slack", name: "Stale Slack" })]));
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Stale GitHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stale Slack")).not.toBeInTheDocument();
+
+    await act(async () => {
+      requests[2]?.resolve(payload([service({ name: "Latest GitHub" })]));
+    });
+    expect(await screen.findByText("Latest GitHub")).toBeInTheDocument();
+  });
+
+  it("ignores a manual refresh result after the service selection changes", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    const { load, requests } = createDeferredDashboardLoader();
+    renderDashboard(load);
+    await waitFor(() => expect(requests).toHaveLength(1));
+    await act(async () => {
+      requests[0]?.resolve(basePayload);
+    });
+    await screen.findByRole("link", { name: githubLinkName });
+
+    fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
+    await waitFor(() => expect(requests).toHaveLength(2));
+
+    window.history.pushState(null, "", "/?services=slack");
+    fireEvent.popState(window);
+    await waitFor(() => expect(requests).toHaveLength(3));
+    expect(requests[1]?.signal?.aborted).toBe(true);
+
+    await act(async () => {
+      requests[2]?.resolve(payload([service({ id: "slack", name: "Current Slack" })]));
+    });
+    expect(await screen.findByText("Current Slack")).toBeInTheDocument();
+
+    await act(async () => {
+      requests[1]?.resolve(payload([service({ name: "Stale manual GitHub" })]));
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Stale manual GitHub")).not.toBeInTheDocument();
+    expect(screen.getByText("Current Slack")).toBeInTheDocument();
+  });
+
   it("shows an empty data message when the selected service is missing from the response", async () => {
     window.history.replaceState(null, "", "/?services=github");
-    render(<App load={async () => payload([service({ id: "slack", name: "Slack" })])} />);
+    renderDashboard(async () => payload([service({ id: "slack", name: "Slack" })]));
 
     expect(await screen.findByText("条件に一致するサービスはありません。")).toBeInTheDocument();
     expect(screen.queryByText("「」に一致するサービスはありません。")).not.toBeInTheDocument();
@@ -363,7 +469,7 @@ describe("dashboard", () => {
     vi.useFakeTimers();
     try {
       const load = vi.fn<() => Promise<DashboardPayload>>(async () => basePayload);
-      render(<App load={load} />);
+      renderDashboard(load);
       await act(async () => await Promise.resolve());
       expect(load).toHaveBeenCalledTimes(1);
       await act(async () => await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_INTERVAL_MS));
@@ -386,7 +492,7 @@ describe("dashboard", () => {
               finishManualRequest = resolve;
             }),
         );
-      render(<App load={load} />);
+      renderDashboard(load);
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -418,7 +524,7 @@ describe("dashboard", () => {
             finishRequest = resolve;
           }),
       );
-      const { unmount } = render(<App load={load} />);
+      const { unmount } = renderDashboard(load);
       expect(load).toHaveBeenCalledTimes(1);
       unmount();
 
@@ -437,7 +543,7 @@ describe("dashboard", () => {
 
   it("makes stale information visible", async () => {
     const stalePayload = payload(basePayload.services.map((item) => ({ ...item, isStale: true })));
-    render(<App load={async () => stalePayload} />);
+    renderDashboard(async () => stalePayload);
     expect(await screen.findAllByText(/最新の状態と異なる可能性があります/)).toHaveLength(2);
   });
 });
