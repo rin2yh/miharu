@@ -18,7 +18,6 @@
     "preview:deploy": "pnpm build && wrangler preview",
     "lint": "oxlint . && oxfmt --check .",
     "test": "vitest run --coverage",
-    "test:d1": "vitest run --config vitest.d1.config.ts",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "typecheck": "pnpm typegen && tsc --noEmit"

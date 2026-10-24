@@ -2,9 +2,9 @@ import { applyD1Migrations, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { D1Migration } from "@cloudflare/vitest-plugin";
-import type { NormalizedIncident, ProviderSnapshot } from "../src/domain";
-import { SERVICES } from "../src/shared/config/services";
-import { createD1Store } from "../src/shared/store";
+import type { NormalizedIncident, ProviderSnapshot } from "../domain";
+import { SERVICES } from "./config/services";
+import { createD1Store } from "./store";
 
 const service = SERVICES.find(({ id }) => id === "github");
 

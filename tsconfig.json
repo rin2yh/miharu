@@ -14,10 +14,8 @@
     "worker-configuration.d.ts",
     "src",
     "e2e",
-    "integration-tests",
     "playwright.config.ts",
     "vite.config.mts",
-    "vitest.config.ts",
-    "vitest.d1.config.ts"
+    "vitest.config.ts"
   ]
 }

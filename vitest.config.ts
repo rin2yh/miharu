@@ -1,12 +1,38 @@
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { configDefaults, defineConfig } from "vitest/config";
+
+const migrations = await readD1Migrations(new URL("./db/migrations", import.meta.url).pathname);
 
 export default defineConfig({
   test: {
-    environment: "jsdom",
-    setupFiles: ["./src/web/test/setup.ts"],
-    exclude: [...configDefaults.exclude, "e2e/**", "integration-tests/**"],
-    restoreMocks: true,
-    clearMocks: true,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          environment: "jsdom",
+          setupFiles: ["./src/web/test/setup.ts"],
+          exclude: [...configDefaults.exclude, "e2e/**", "src/shared/store.integration.test.ts"],
+          restoreMocks: true,
+          clearMocks: true,
+        },
+      },
+      {
+        extends: true,
+        plugins: [
+          cloudflareTest({
+            wrangler: { configPath: "./wrangler.jsonc" },
+            miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+          }),
+        ],
+        test: {
+          name: "d1",
+          include: ["src/shared/store.integration.test.ts"],
+          clearMocks: true,
+          restoreMocks: true,
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "json"],
