@@ -54,23 +54,91 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
   });
 });
 
-test("PCでサービスを追加・解除すると一覧と最近の更新が切り替わる", async ({
+test("共有URLからサービスを追加・解除し、再読み込みと戻る操作で選択を復元できる", async ({
+  dashboardStatus,
+  page,
+  statusDashboard,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await test.step("共有URLを開いてSlackとGitHubの選択を確認する", async () => {
+    await statusDashboard.goto("/?services=github,slack");
+    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
+    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
+    await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
+    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
+      "aria-pressed",
+      "mixed",
+    );
+  });
+
+  await test.step("Notionを追加してからGitHubを解除する", async () => {
+    await statusDashboard.serviceSelection("Notion").click();
+    await expect(statusDashboard.serviceCount(3)).toBeVisible();
+    await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
+    await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
+
+    await statusDashboard.serviceSelection("GitHub").click();
+    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
+    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
+    await expect(page).toHaveURL(/services=slack%2Cnotion/);
+  });
+
+  await test.step("再読み込み後も変更後の選択を表示する", async () => {
+    await page.reload();
+    expect(new URL(page.url()).searchParams.get("services")).toBe("slack,notion");
+    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
+    await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
+    await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await expect(statusDashboard.serviceSelection("Notion")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
+  });
+
+  await test.step("戻る操作でGitHubを含む一つ前の選択を復元する", async () => {
+    await page.goBack();
+    await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
+    await expect(statusDashboard.serviceCount(3)).toBeVisible();
+    await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
+    await expect(statusDashboard.serviceSelection("GitHub")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+
+    await page.goBack();
+    expect(new URL(page.url()).searchParams.get("services")).toBe("github,slack");
+    await expect(statusDashboard.serviceCount(2)).toBeVisible();
+    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
+    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
+    await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
+    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+  });
+});
+
+test("PCのサイドバーで選択状態とメインコンテンツを区別できる", async ({
   dashboardStatus,
   page,
   statusDashboard,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await statusDashboard.goto("/?services=github,slack");
+  const selectedServiceCount = dashboardStatus.payload.services.filter((service) =>
+    ["github", "slack"].includes(service.id),
+  ).length;
 
   const sidebar = statusDashboard.serviceSidebar();
   await expect(sidebar).toBeVisible();
-  await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "mixed");
-  await expect(statusDashboard.serviceCount(2)).toBeVisible();
-  await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-  await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
-  await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
-  await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
-
+  await expect(statusDashboard.serviceCount(selectedServiceCount)).toBeVisible();
   const sidebarBox = await sidebar.boundingBox();
   const dividerBox = await page.getByRole("separator").boundingBox();
   const serviceListBox = await page.getByRole("list", { name: "サービス一覧" }).boundingBox();
@@ -90,74 +158,6 @@ test("PCでサービスを追加・解除すると一覧と最近の更新が切
     "background-color",
     "rgba(0, 0, 0, 0)",
   );
-
-  await test.step("Notionを追加して表示とURLを更新する", async () => {
-    await statusDashboard.serviceSelection("Notion").click();
-    await expect(statusDashboard.serviceCount(3)).toBeVisible();
-    await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
-    await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
-  });
-
-  await test.step("GitHubを解除して一覧と最近の更新から除く", async () => {
-    await statusDashboard.serviceSelection("GitHub").click();
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
-    await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
-    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
-    await expect(page).toHaveURL(/services=slack%2Cnotion/);
-  });
-});
-
-test("共有URLを再読み込みすると選択サービスと最近の更新が復元される", async ({
-  dashboardStatus,
-  page,
-  statusDashboard,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-
-  await test.step("SlackとGitHubを選んだURLを開く", async () => {
-    await statusDashboard.goto("/?services=github,slack");
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
-    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
-    await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
-    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
-    await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute(
-      "aria-pressed",
-      "mixed",
-    );
-  });
-
-  await test.step("ページを再読み込みして同じ表示を確認する", async () => {
-    await page.reload();
-    expect(new URL(page.url()).searchParams.get("services")).toBe("github,slack");
-    await expect(statusDashboard.serviceCount(2)).toBeVisible();
-    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-    await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
-    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
-  });
-});
-
-test("サービス選択を変更した後、戻る操作で前の一覧を開く", async ({
-  dashboardStatus,
-  page,
-  statusDashboard,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-
-  await test.step("GitHubとSlackの一覧からGitHubを解除する", async () => {
-    await statusDashboard.goto("/?services=github,slack");
-    await statusDashboard.serviceSelection("GitHub").click();
-    await expect(page).toHaveURL(/services=slack/);
-    await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
-    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
-  });
-
-  await test.step("戻る操作でGitHubとその更新を再表示する", async () => {
-    await page.goBack();
-    expect(new URL(page.url()).searchParams.get("services")).toBe("github,slack");
-    await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
-    await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
-  });
 });
 
 test("一部選択中に「すべて」を押すと全選択と全解除を切り替えられる", async ({
