@@ -1,9 +1,11 @@
 import type {
+  KnownIncident,
   NormalizedComponent,
   NormalizedIncident,
   NormalizedStatus,
   ProviderSnapshot,
 } from "../../domain";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
@@ -13,6 +15,7 @@ import type { ProviderContext } from "../provider-context";
 import {
   asRecord,
   boundedText,
+  fetchHtml,
   fetchJson,
   normalizeTimestamp,
   ProviderError,
@@ -20,9 +23,11 @@ import {
   safeIncidentUrl,
   statusText,
 } from "./shared";
+import type { FetchLike } from "./shared";
 
 type GoogleWorkspaceService = Extract<ServiceConfig, { provider: "google-workspace" }>;
 type KnownStatus = Exclude<NormalizedStatus, "unknown">;
+const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
 
 interface GoogleProduct {
   id: string;
@@ -43,7 +48,7 @@ const statusPriority: Record<NormalizedStatus, number> = {
 };
 
 const impactStatuses: Record<string, NormalizedStatus> = {
-  SERVICE_INFORMATION: "operational",
+  SERVICE_INFORMATION: "unknown",
   SERVICE_DISRUPTION: "degraded_performance",
   SERVICE_OUTAGE: "major_outage",
 };
@@ -74,17 +79,24 @@ export async function fetchGoogleWorkspaceSnapshot(
   const incidentsById = new Map(historyIncidents.map((incident) => [incident.id, incident]));
   const knownActiveById = new Map(knownActiveIncidents.map((incident) => [incident.id, incident]));
 
-  // The history feed may lag or omit older entries. Keep a previously observed active incident
-  // until Google publishes its resolution instead of resolving it just because it disappeared.
+  // The history feed can omit older incidents. Recheck a bounded rotating sample on its official
+  // detail page; an unavailable recheck remains explicitly unknown instead of implying recovery.
   const omittedKnownActive = knownActiveIncidents.filter(
-    (incident) => !incidentsById.has(incident.id),
+    (incident) => incident.active && !incidentsById.has(incident.id),
   );
-  const incidents = historyIncidents.filter(
+  const recheckedOmitted = await Promise.all(
+    selectOmittedIncidentsForRecheck(omittedKnownActive).map((incident) =>
+      recheckOmittedIncident(incident, service, context.signal, context.fetcher),
+    ),
+  );
+  const recheckedById = new Map(recheckedOmitted.map((incident) => [incident.id, incident]));
+  const incidents: ParsedIncident[] = historyIncidents.filter(
     (incident) => incident.active || knownActiveById.has(incident.id),
   );
-  incidents.push(
-    ...omittedKnownActive.map((incident) => ({ ...incident, statusImpact: incident.sourceImpact })),
-  );
+  for (const incident of omittedKnownActive) {
+    const rechecked = recheckedById.get(incident.id);
+    incidents.push(rechecked ?? { ...incident, statusImpact: incident.sourceImpact });
+  }
   if (incidents.length > INCIDENTS_PER_SERVICE_LIMIT) {
     throw new ProviderError(
       "invalid_payload",
@@ -96,22 +108,19 @@ export async function fetchGoogleWorkspaceSnapshot(
     string,
     Array<{ status: NormalizedStatus; sourceStatus: string }>
   >();
-  const resolvedProductIds = new Set<string>();
-  for (const incident of historyIncidents) {
+  for (const incident of incidents) {
     for (const id of incident.componentIds) {
       if (incident.active) {
-        const status = impactStatuses[incident.statusImpact ?? ""] ?? "unknown";
-        addActiveProductStatus(activeByProductId, id, status, incident.statusImpact ?? "unknown");
-      } else {
-        // A resolved history entry is evidence that the product was available after that incident.
-        resolvedProductIds.add(id);
+        const status = statusForActiveIncident(incident);
+        addActiveProductStatus(
+          activeByProductId,
+          id,
+          status,
+          incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+            ? INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS
+            : (incident.statusImpact ?? "unknown"),
+        );
       }
-    }
-  }
-  for (const incident of omittedKnownActive) {
-    for (const id of incident.componentIds) {
-      const status = incident.severityStatus ?? "unknown";
-      addActiveProductStatus(activeByProductId, id, status, incident.sourceImpact ?? "unknown");
     }
   }
 
@@ -119,9 +128,7 @@ export async function fetchGoogleWorkspaceSnapshot(
     const activeStatuses = activeByProductId.get(id) ?? [];
     const status = activeStatuses.length
       ? combineActiveStatuses(activeStatuses.map(({ status: componentStatus }) => componentStatus))
-      : resolvedProductIds.has(id)
-        ? "operational"
-        : "unknown";
+      : "unknown";
     const sourceStatus =
       status === "unknown"
         ? activeStatuses.find(({ status: impactStatus }) => impactStatus === "unknown")
@@ -133,44 +140,26 @@ export async function fetchGoogleWorkspaceSnapshot(
       id,
       name,
       status,
-      sourceStatus: activeStatuses.length
-        ? (sourceStatus ?? "unknown")
-        : resolvedProductIds.has(id)
-          ? "AVAILABLE"
-          : "no_incident_history",
+      sourceStatus: activeStatuses.length ? (sourceStatus ?? "unknown") : "no_current_status",
     };
   });
 
-  const activeIncidents = [
-    ...historyIncidents.filter((incident) => incident.active),
-    ...omittedKnownActive.map((incident) => ({ ...incident, statusImpact: incident.sourceImpact })),
-  ];
-  const activeStatuses = activeIncidents.map(
-    (incident) => impactStatuses[incident.statusImpact ?? ""] ?? "unknown",
-  );
-  const incidentStatus = activeIncidents.length
-    ? combineActiveStatuses(activeStatuses)
-    : "operational";
-  const hasUnknownComponents = components.some((component) => component.status === "unknown");
-  const status =
-    incidentStatus === "operational" && hasUnknownComponents ? "unknown" : incidentStatus;
+  const activeIncidents = incidents.filter((incident) => incident.active);
+  const activeStatuses = activeIncidents.map(statusForActiveIncident);
+  const incidentStatus = activeIncidents.length ? combineActiveStatuses(activeStatuses) : "unknown";
+  const status = incidentStatus;
   const sourceStatus = activeIncidents.length
-    ? activeStatuses.includes("unknown")
-      ? (activeIncidents.find(
-          (incident) => impactStatuses[incident.statusImpact ?? ""] === "unknown",
-        )?.statusImpact ?? "unknown")
-      : status === "unknown"
-        ? "incomplete_product_history"
-        : (activeIncidents.toSorted(
-            (left, right) =>
-              statusPriority[impactStatuses[right.statusImpact ?? ""] ?? "unknown"] -
-              statusPriority[impactStatuses[left.statusImpact ?? ""] ?? "unknown"],
-          )[0]?.statusImpact ?? "unknown")
-    : !hasUnknownComponents
+    ? incidentStatus === "unknown"
+      ? (activeIncidents.find((incident) => statusForActiveIncident(incident) === "unknown")
+          ?.sourceStatus ?? "unknown")
+      : (activeIncidents.toSorted(
+          (left, right) =>
+            statusPriority[statusForActiveIncident(right)] -
+            statusPriority[statusForActiveIncident(left)],
+        )[0]?.statusImpact ?? "unknown")
+    : historyIncidents.length > 0
       ? "no_active_incidents"
-      : historyIncidents.length > 0
-        ? "incomplete_product_history"
-        : "no_incident_history";
+      : "no_incident_history";
 
   return {
     status,
@@ -282,8 +271,13 @@ function parseAffectedProducts(
     .map((value) => {
       const product = asRecord(value);
       const id = boundedText(product?.id, 200);
-      if (!id || !productNames.has(id)) return null;
-      return { id, name: productNames.get(id)! };
+      if (!id) {
+        throw new ProviderError(
+          "invalid_payload",
+          "Google Workspace affected product id is missing",
+        );
+      }
+      return { id, name: productNames.get(id) ?? `不明な製品 (${id})` };
     })
     .filter((product): product is { id: string; name: string } => product !== null);
   if (directProducts.length > 0) {
@@ -291,8 +285,123 @@ function parseAffectedProducts(
   }
 
   const legacyId = boundedText(row.service_key, 200);
-  const legacyName = legacyId ? productNames.get(legacyId) : null;
+  const legacyName = legacyId ? (productNames.get(legacyId) ?? `不明な製品 (${legacyId})`) : null;
   return legacyId && legacyName ? [{ id: legacyId, name: legacyName }] : [];
+}
+
+async function recheckOmittedIncident(
+  incident: KnownIncident,
+  service: GoogleWorkspaceService,
+  signal: AbortSignal,
+  fetcher: FetchLike,
+): Promise<ParsedIncident> {
+  const parsedIncident: ParsedIncident = { ...incident, statusImpact: incident.sourceImpact };
+  const detailUrl = safeIncidentUrl(
+    new URL(`incidents/${encodeURIComponent(incident.id)}`, service.statusPageUrl).toString(),
+    service,
+  );
+  if (!detailUrl) return unknownIncident(parsedIncident);
+
+  try {
+    const html = await fetchHtml(detailUrl, signal, fetcher);
+    const detail = parseGoogleIncidentDetail(html, incident.officialCreatedAt);
+    if (detail.endAt) {
+      return {
+        ...parsedIncident,
+        state: "resolved",
+        sourceStatus: "RESOLVED",
+        officialUpdatedAt: detail.endAt,
+        active: false,
+      };
+    }
+    // A previous unavailable recheck has no trustworthy current impact to restore.
+    if (incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS) {
+      return unknownIncident(parsedIncident);
+    }
+    return parsedIncident;
+  } catch {
+    return unknownIncident(parsedIncident);
+  }
+}
+
+function unknownIncident(incident: ParsedIncident): ParsedIncident {
+  return {
+    ...incident,
+    body: null,
+    state: "unknown",
+    sourceStatus: INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS,
+    active: true,
+  };
+}
+
+function parseGoogleIncidentDetail(
+  html: string,
+  expectedStartTime: string | null,
+): { endAt: string | null } {
+  if (!elementTextByClass(html, "h2", "incident-header")) {
+    throw new ProviderError("invalid_payload", "Google Workspace incident page is invalid");
+  }
+  const startText = elementTextByClass(html, "strong", "start-time");
+  const timezone = elementTextByClass(html, "strong", "timezone");
+  if (!startText || !timezone?.includes("UTC")) {
+    throw new ProviderError(
+      "invalid_payload",
+      "Google Workspace incident page has no UTC start time",
+    );
+  }
+  const startAt = parseGoogleUtcDateTime(startText);
+  if (!startAt)
+    throw new ProviderError("invalid_payload", "Google Workspace incident start time is invalid");
+  if (expectedStartTime && startAt.slice(0, 16) !== expectedStartTime.slice(0, 16)) {
+    throw new ProviderError(
+      "invalid_payload",
+      "Google Workspace incident page did not match the incident",
+    );
+  }
+
+  const endText = elementTextByClass(html, "strong", "end-time");
+  if (!endText) return { endAt: null };
+  const endAt = parseGoogleUtcDateTime(endText);
+  if (!endAt)
+    throw new ProviderError("invalid_payload", "Google Workspace incident end time is invalid");
+  return { endAt };
+}
+
+function elementTextByClass(html: string, tag: string, className: string): string | null {
+  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`<${escapedTag}\\b([^>]*)>([\\s\\S]*?)<\\/${escapedTag}>`, "gi");
+  for (const match of html.matchAll(pattern)) {
+    const classes = match[1]?.match(/\bclass=["']([^"']*)["']/i)?.[1]?.split(/\s+/) ?? [];
+    if (!classes.includes(className)) continue;
+    const text = (match[2] ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .trim();
+    return text || null;
+  }
+  return null;
+}
+
+function parseGoogleUtcDateTime(value: string): string | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const timestamp = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:00.000Z`;
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString() !== timestamp ? null : timestamp;
+}
+
+function selectOmittedIncidentsForRecheck(incidents: KnownIncident[]): KnownIncident[] {
+  if (incidents.length <= OMITTED_INCIDENT_RECHECKS_PER_POLL) return incidents;
+  const firstIndex = Math.floor(Date.now() / 60_000) % incidents.length;
+  return Array.from(
+    { length: OMITTED_INCIDENT_RECHECKS_PER_POLL },
+    (_, offset) => incidents[(firstIndex + offset) % incidents.length]!,
+  );
+}
+
+function statusForActiveIncident(incident: ParsedIncident): NormalizedStatus {
+  if (incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS) return "unknown";
+  return impactStatuses[incident.statusImpact ?? ""] ?? "unknown";
 }
 
 function uniqueProducts(

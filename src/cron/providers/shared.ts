@@ -89,6 +89,38 @@ export async function fetchText(
   return readLimitedText(response);
 }
 
+export async function fetchHtml(
+  url: string,
+  signal: AbortSignal,
+  fetcher: FetchLike = fetch,
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetcher(url, {
+      signal,
+      headers: {
+        accept: "text/html",
+        "user-agent": "saas-status-dashboard/0.1",
+      },
+    });
+  } catch {
+    if (signal.aborted) throw new ProviderError("timeout", "Status source request timed out");
+    throw new ProviderError("network_error", "Status source request failed");
+  }
+
+  if (!response.ok) {
+    throw new ProviderError(
+      "upstream_http_error",
+      `Status source returned HTTP ${response.status}`,
+    );
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!/\btext\/html\b/i.test(contentType)) {
+    throw new ProviderError("invalid_response", "Status source did not return HTML");
+  }
+  return readLimitedText(response);
+}
+
 async function readLimitedText(response: Response): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";
