@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NORMALIZED_STATUSES } from "../../domain";
-import type { DashboardIncident, NormalizedStatus } from "../../domain";
+import type { IncidentState, NormalizedStatus } from "../../domain";
 import {
   formatDateTime,
   incidentKindLabel,
@@ -27,7 +27,7 @@ describe("status presentation", () => {
     { kind: "incident", state: "monitoring", lifecycle: "active", label: "監視中" },
     { kind: "incident", state: "scheduled", lifecycle: "active", label: "予定" },
     { kind: "incident", state: "in_progress", lifecycle: "active", label: "対応中" },
-    { kind: "incident", state: "resolved", lifecycle: "resolved", label: "復旧済み" },
+    { kind: "incident", state: "resolved", lifecycle: "active", label: "復旧済み" },
     {
       kind: "maintenance",
       state: "scheduled",
@@ -43,9 +43,16 @@ describe("status presentation", () => {
     { kind: "maintenance", state: "investigating", lifecycle: "active", label: "実施中" },
     { kind: "maintenance", state: "identified", lifecycle: "active", label: "実施中" },
     { kind: "maintenance", state: "monitoring", lifecycle: "active", label: "実施中" },
-    { kind: "maintenance", state: "resolved", lifecycle: "resolved", label: "完了" },
+    { kind: "maintenance", state: "resolved", lifecycle: "active", label: "完了" },
   ] as const)("labels $kind $state as $label", ({ kind, state, lifecycle, label }) => {
-    expect(incidentStateLabel(kind, state as DashboardIncident["state"], lifecycle)).toBe(label);
+    expect(incidentStateLabel(kind, state as IncidentState, lifecycle)).toBe(label);
+  });
+
+  it.each([
+    { kind: "incident", label: "復旧済み" },
+    { kind: "maintenance", label: "完了" },
+  ] as const)("uses the resolved $kind lifecycle label", ({ kind, label }) => {
+    expect(incidentStateLabel(kind, "investigating", "resolved")).toBe(label);
   });
 
   it.each([
@@ -59,9 +66,7 @@ describe("status presentation", () => {
     { kind: "incident", label: "状態不明" },
     { kind: "maintenance", label: "状態不明" },
   ] as const)("labels an unknown $kind state independently", ({ kind, label }) => {
-    expect(incidentStateLabel(kind, "unrecognized" as DashboardIncident["state"], "active")).toBe(
-      label,
-    );
+    expect(incidentStateLabel(kind, "unrecognized" as IncidentState, "active")).toBe(label);
   });
 
   it.each([

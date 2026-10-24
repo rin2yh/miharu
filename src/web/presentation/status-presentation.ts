@@ -1,4 +1,10 @@
-import type { DashboardIncident, DashboardService, NormalizedStatus } from "../../domain";
+import type {
+  DashboardService,
+  IncidentKind,
+  IncidentLifecycle,
+  IncidentState,
+  NormalizedStatus,
+} from "../../domain";
 
 export const STATUS_LABELS: Record<NormalizedStatus, string> = {
   operational: "正常",
@@ -18,55 +24,49 @@ export const STATUS_RANK: Record<NormalizedStatus, number> = {
   major_outage: 5,
 };
 
+const INCIDENT_STATE_LABELS: Record<IncidentState, string> = {
+  investigating: "調査中",
+  identified: "対応中",
+  monitoring: "監視中",
+  scheduled: "予定",
+  in_progress: "対応中",
+  resolved: "復旧済み",
+  unknown: "状態不明",
+};
+
+const MAINTENANCE_STATE_LABELS: Record<IncidentState, string> = {
+  investigating: "実施中",
+  identified: "実施中",
+  monitoring: "実施中",
+  scheduled: "予定",
+  in_progress: "実施中",
+  resolved: "完了",
+  unknown: "状態不明",
+};
+
 export function isAbnormal(status: NormalizedStatus): boolean {
   return status !== "operational";
 }
 
-export function incidentKindLabel(kind: DashboardIncident["kind"]): string {
+export function incidentKindLabel(kind: IncidentKind): string {
   return kind === "maintenance" ? "メンテナンス" : "障害";
 }
 
 export function incidentStateLabel(
-  kind: DashboardIncident["kind"],
-  state: DashboardIncident["state"],
-  lifecycle: DashboardIncident["lifecycle"],
+  kind: IncidentKind,
+  state: IncidentState,
+  lifecycle: IncidentLifecycle,
 ): string {
   if (lifecycle === "unverified") {
     return kind === "maintenance" ? "終了未確認" : "復旧未確認";
   }
 
-  if (lifecycle === "resolved" || state === "resolved") {
+  if (lifecycle === "resolved") {
     return kind === "maintenance" ? "完了" : "復旧済み";
   }
 
-  if (kind === "maintenance") {
-    switch (state) {
-      case "scheduled":
-        return "予定";
-      case "in_progress":
-      case "investigating":
-      case "identified":
-      case "monitoring":
-        return "実施中";
-      default:
-        return "状態不明";
-    }
-  }
-
-  switch (state) {
-    case "investigating":
-      return "調査中";
-    case "identified":
-      return "対応中";
-    case "monitoring":
-      return "監視中";
-    case "scheduled":
-      return "予定";
-    case "in_progress":
-      return "対応中";
-    default:
-      return "状態不明";
-  }
+  const labels = kind === "maintenance" ? MAINTENANCE_STATE_LABELS : INCIDENT_STATE_LABELS;
+  return labels[state] ?? "状態不明";
 }
 
 export function formatDateTime(value: string): string {
