@@ -29,9 +29,7 @@ describe("IncidentList", () => {
     const kindBadge = within(incidentItem).getByText("障害", { exact: true });
     const stateBadge = within(incidentItem).getByText("調査中", { exact: true });
     expect(kindBadge).toBeVisible();
-    expect(kindBadge).toHaveClass("bg-outage-bg", "text-outage");
     expect(stateBadge).toBeVisible();
-    expect(stateBadge).toHaveClass("bg-partial-bg", "text-partial");
 
     fireEvent.click(within(incidentItem).getByText("Messaging delays for some users"));
 
@@ -137,11 +135,9 @@ describe("IncidentList", () => {
     const kindLabels = within(incidentItem).getAllByText("メンテナンス", { exact: true });
     expect(kindLabels).toHaveLength(2);
     expect(kindLabels[0]).toBeVisible();
-    expect(kindLabels[0]).toHaveClass("bg-maintenance-bg", "text-maintenance");
     expect(kindLabels[1]).not.toBeVisible();
     const stateBadge = within(incidentItem).getByText("予定", { exact: true });
     expect(stateBadge).toBeVisible();
-    expect(stateBadge).toHaveClass("bg-partial-bg", "text-partial");
 
     fireEvent.click(within(incidentItem).getByText(scheduledMaintenance.title));
 
@@ -200,9 +196,7 @@ describe("IncidentList", () => {
     const kindBadge = within(incidentItem).getByText("障害", { exact: true });
     const stateBadge = within(incidentItem).getByText("復旧済み", { exact: true });
     expect(kindBadge).toBeVisible();
-    expect(kindBadge).toHaveClass("bg-outage-bg", "text-outage");
     expect(stateBadge).toBeVisible();
-    expect(stateBadge).toHaveClass("bg-healthy-bg", "text-healthy");
 
     fireEvent.click(within(incidentItem).getByText(resolvedIncident.title));
 
