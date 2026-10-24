@@ -32,14 +32,12 @@ export interface CollectionAlertSender {
 
 interface DiscordAlertConfig {
   webhookUrl?: string;
-  enabled: boolean;
-  environment: string;
   fetcher?: typeof fetch;
 }
 
 export function createDiscordAlertSender(config: DiscordAlertConfig): CollectionAlertSender {
   const webhookUrl = config.webhookUrl;
-  const enabled = config.enabled && isDiscordWebhookUrl(webhookUrl);
+  const enabled = isDiscordWebhookUrl(webhookUrl);
 
   return {
     enabled,
@@ -49,7 +47,7 @@ export function createDiscordAlertSender(config: DiscordAlertConfig): Collection
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          content: formatAlert(alert, config.environment),
+          content: formatAlert(alert),
           allowed_mentions: { parse: [] },
         }),
         signal: AbortSignal.timeout(5_000),
@@ -263,10 +261,7 @@ async function sendCollectionAlert(
   }
 }
 
-function formatAlert(
-  alert: CollectionAlert | CriticalCollectionAlert,
-  environment: string,
-): string {
+function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
   if ("firstFailedAt" in alert) {
     const headline = alert.kind === "failure" ? "収集失敗が継続" : "収集が復旧";
     return [
@@ -276,7 +271,7 @@ function formatAlert(
       `エラーコード: ${alert.errorCode}`,
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
-      `環境: ${environment}`,
+      "環境: miharu",
     ].join("\n");
   }
 
@@ -288,7 +283,7 @@ function formatAlert(
     `エラー種別: ${alert.errorType}`,
     `発生時刻: ${alert.occurredAt}`,
     "失敗回数: 1",
-    `環境: ${alert.environment}`,
+    "環境: miharu",
   ].join("\n");
 }
 

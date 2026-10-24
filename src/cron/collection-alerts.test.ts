@@ -72,8 +72,6 @@ describe("Discord collection alerts with KV state", () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
       fetcher,
     });
     const store = stateStore();
@@ -117,6 +115,7 @@ describe("Discord collection alerts with KV state", () => {
     expect(payload.content).toContain("収集失敗が継続");
     expect(payload.content).toContain("Slack (slack)");
     expect(payload.content).toContain("失敗回数: 3");
+    expect(payload.content).toContain("環境: miharu");
     expect(payload.allowed_mentions).toEqual({ parse: [] });
   });
 
@@ -124,8 +123,6 @@ describe("Discord collection alerts with KV state", () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
       fetcher,
     });
     const store = stateStore();
@@ -194,8 +191,6 @@ describe("Discord collection alerts with KV state", () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
       fetcher,
     });
     const store = stateStore();
@@ -237,8 +232,6 @@ describe("Discord collection alerts with KV state", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const sender = createDiscordAlertSender({
       webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: true,
-      environment: "production",
       fetcher,
     });
     const store = stateStore();
@@ -285,9 +278,7 @@ describe("Discord collection alerts with KV state", () => {
   it("does not send without an enabled webhook", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const sender = createDiscordAlertSender({
-      webhookUrl: "https://discord.com/api/webhooks/123/token",
-      enabled: false,
-      environment: "preview",
+      webhookUrl: undefined,
       fetcher,
     });
     const store = stateStore();
