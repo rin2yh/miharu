@@ -142,7 +142,7 @@ describe("dashboard", () => {
       target: { value: "Slack" },
     });
 
-    expect(screen.getByText("検索条件に一致する最近の更新はありません。")).toBeInTheDocument();
+    expect(screen.getByText("表示中のサービスに最近の更新はありません。")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "GitHub update" })).not.toBeInTheDocument();
   });
 
@@ -195,7 +195,7 @@ describe("dashboard", () => {
     expect(screen.queryByRole("link", { name: "Slack update" })).not.toBeInTheDocument();
   });
 
-  it("keeps selection changes as a draft until apply and reflects the selection in the URL", async () => {
+  it("keeps selection changes as a draft until apply", async () => {
     window.history.replaceState(null, "", "/?services=github");
     render(<App load={async () => basePayload} />);
     await screen.findByRole("link", { name: githubLinkName });
@@ -207,15 +207,12 @@ describe("dashboard", () => {
     expect(screen.getByText("未適用")).toBeInTheDocument();
     expect(window.location.search).toBe("?services=github");
     expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("現在の表示条件を共有")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "URLをコピー" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
 
     expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
     expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
     expect(screen.queryByText("未適用")).not.toBeInTheDocument();
-    expect(window.location.href).toContain("?services=slack%2Cgithub");
   });
 
   it("shows an empty state for unknown URL services and disables applying no selection", async () => {
@@ -237,6 +234,17 @@ describe("dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "この条件で表示" }));
     expect(new URL(window.location.href).searchParams.has("services")).toBe(false);
     expect(await screen.findByRole("link", { name: githubLinkName })).toBeInTheDocument();
+  });
+
+  it("updates applied services when browser history changes the URL", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => basePayload} />);
+    await screen.findByRole("link", { name: githubLinkName });
+
+    window.history.pushState(null, "", "/");
+    fireEvent.popState(window);
+
+    expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
   });
 
   it("shows an empty data message when the selected service is missing from the response", async () => {

@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
-import { EventRow } from "./event-row";
-import { RefreshIcon, SearchIcon } from "./icons";
-import { ServiceCard } from "./service-card";
-import { ServiceSelector } from "./service-selector";
-import { getSelectedServiceIds, getServiceSelectionUrl } from "./service-filter";
-import { servicePriority } from "./status-presentation";
+import { EventRow } from "./components/event-row";
+import { RefreshIcon, SearchIcon } from "./components/icons";
+import { ServiceCard } from "./components/service-card";
+import { ServiceSelector } from "./components/service-selector";
+import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
+import { servicePriority } from "./presentation/status-presentation";
 
 type DashboardLoader = () => Promise<DashboardPayload>;
 
@@ -233,9 +233,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
           </ol>
         ) : (
           <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
-            {query.trim()
-              ? "検索条件に一致する最近の更新はありません。"
-              : "最近の障害・メンテナンスの更新はありません。"}
+            表示中のサービスに最近の更新はありません。
           </div>
         )}
       </section>

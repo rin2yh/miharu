@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import type {
   DashboardIncident,
   DashboardComponent,
   DashboardService,
   NormalizedStatus,
-} from "../domain";
+} from "../../domain";
 import { ExternalIcon, WarningIcon } from "./icons";
 import {
   formatDateTime,
@@ -15,7 +15,7 @@ import {
   relativeTime,
   STATUS_LABELS,
   STATUS_RANK,
-} from "./status-presentation";
+} from "../presentation/status-presentation";
 
 const serviceIcons: Record<string, SimpleIcon> = {
   cloudflare: siCloudflare,

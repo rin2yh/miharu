@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
-import { App } from "./app";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
+import { App } from "../app";
 import {
   basePayload,
   component,
@@ -10,7 +10,7 @@ import {
   payload,
   service,
   slackLinkName,
-} from "./test-fixtures";
+} from "../test-fixtures";
 
 describe("service status links", () => {
   it.each([
