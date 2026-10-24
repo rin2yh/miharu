@@ -119,18 +119,33 @@ describe("D1 store", () => {
     const mock = createDatabase();
     const store = createD1Store(mock.database);
 
-    await store.saveFailure(SERVICES[2]!, "2026-10-23T05:10:00.000Z", "timeout");
+    await store.saveFailure(SERVICES[2]!, "2026-10-23T05:10:00.000Z", "timeout", "TimeoutError");
 
-    expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0]?.sql).toContain("last_error_at = excluded.last_error_at");
-    expect(mock.calls[0]?.sql).toContain("last_checked_at <= excluded.last_checked_at");
-    expect(mock.calls[0]?.args).toEqual([
+    expect(mock.batches).toHaveLength(1);
+    expect(mock.batches[0]).toHaveLength(3);
+    expect(mock.batches[0]?.[0]?.sql).toContain("last_error_at = excluded.last_error_at");
+    expect(mock.batches[0]?.[0]?.sql).toContain("last_checked_at < excluded.last_checked_at");
+    expect(mock.batches[0]?.[0]?.args).toEqual([
       "github",
       "2026-10-23T05:10:00.000Z",
       "2026-10-23T05:10:00.000Z",
       "timeout",
     ]);
-    expect(mock.calls[0]?.run).toHaveBeenCalledOnce();
+    expect(mock.batches[0]?.[1]?.sql).toContain("INSERT INTO collection_failures");
+    expect(mock.batches[0]?.[1]?.args).toEqual([
+      "github",
+      "2026-10-23T05:10:00.000Z",
+      "2026-10-23T05:10:00.000Z",
+      "timeout",
+      "TimeoutError",
+      "github",
+      "2026-10-23T05:10:00.000Z",
+      "2026-10-23T05:10:00.000Z",
+      "timeout",
+    ]);
+    expect(mock.batches[0]?.[2]?.sql).toContain(
+      "INSERT OR IGNORE INTO collection_alert_notifications",
+    );
   });
 
   it("loads all dashboard row groups", async () => {
@@ -192,9 +207,11 @@ describe("D1 store", () => {
     expect(mock.batches).toHaveLength(1);
     expect(mock.batches[0]?.map(({ sql }) => sql)).toEqual([
       "DELETE FROM incident_events WHERE detected_at < ?",
+      expect.stringContaining("DELETE FROM collection_alert_notifications"),
       expect.stringContaining("DELETE FROM incidents"),
     ]);
     expect(mock.batches[0]?.map(({ args }) => args)).toEqual([
+      ["2026-10-17T00:00:00.000Z"],
       ["2026-10-17T00:00:00.000Z"],
       ["2026-10-17T00:00:00.000Z"],
     ]);
@@ -220,7 +237,11 @@ describe("D1 store", () => {
     );
 
     expect(mock.batches.map((batch) => batch.map(({ sql }) => sql))).toEqual([
-      [expect.stringContaining("INSERT INTO service_status")],
+      [
+        expect.stringContaining("INSERT INTO service_status"),
+        expect.stringContaining("INSERT OR IGNORE INTO collection_alert_notifications"),
+        expect.stringContaining("DELETE FROM collection_failures"),
+      ],
       [expect.stringContaining("INSERT INTO service_components")],
       [
         expect.stringContaining("INSERT INTO incidents"),
@@ -255,7 +276,7 @@ describe("D1 store", () => {
 
     await store.saveSuccess(SERVICES[2]!, snapshot({ incidents }), "2026-10-23T05:10:00.000Z");
 
-    expect(mock.batches.map((batch) => batch.length)).toEqual([1, 100, 2]);
+    expect(mock.batches.map((batch) => batch.length)).toEqual([3, 100, 2]);
     expect(
       mock.batches.flatMap((batch) => batch).filter(({ sql }) => sql.includes("incident_events")),
     ).toHaveLength(51);

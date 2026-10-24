@@ -5,6 +5,8 @@
   "compatibility_date": "2026-10-19",
   "vars": {
     "FRESHNESS_WARNING_SECONDS": "180",
+    "DISCORD_ALERTS_ENABLED": "true",
+    "APP_ENV": "production",
   },
   "assets": {
     "binding": "ASSETS",
@@ -34,6 +36,8 @@
   "previews": {
     "vars": {
       "FRESHNESS_WARNING_SECONDS": "2700",
+      "DISCORD_ALERTS_ENABLED": "false",
+      "APP_ENV": "preview",
     },
     "assets": {
       "binding": "ASSETS",
