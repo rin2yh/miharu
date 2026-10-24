@@ -195,6 +195,33 @@ describe("dashboard", () => {
     expect(screen.queryByRole("link", { name: "Slack update" })).not.toBeInTheDocument();
   });
 
+  it("shows a divider beside the desktop sidebar and highlights selected services only", async () => {
+    window.history.replaceState(null, "", "/?services=github");
+    render(<App load={async () => basePayload} />);
+
+    const sidebar = screen.getByRole("complementary", { name: "サービス選択" });
+    const githubButton = within(sidebar).getByRole("button", { name: "GitHub" });
+    const slackButton = within(sidebar).getByRole("button", { name: "Slack" });
+    expect(sidebar).toHaveClass("hidden", "lg:block");
+    expect(githubButton).toHaveAttribute("aria-pressed", "true");
+    expect(githubButton).toHaveClass("bg-healthy-bg");
+    expect(slackButton).toHaveAttribute("aria-pressed", "false");
+    expect(slackButton).not.toHaveClass("bg-healthy-bg");
+    expect(await screen.findByRole("link", { name: githubLinkName })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: slackLinkName })).not.toBeInTheDocument();
+
+    const divider = screen.getByRole("separator", { orientation: "vertical" });
+    expect(divider).toHaveClass("hidden", "h-full", "w-px", "bg-line", "lg:block");
+    expect(divider.parentElement).toHaveClass("grid", "lg:grid-cols-[13rem_1px_minmax(0,1fr)]");
+
+    fireEvent.click(slackButton);
+
+    expect(new URL(window.location.href).searchParams.get("services")).toBe("slack,github");
+    expect(slackButton).toHaveAttribute("aria-pressed", "true");
+    expect(slackButton).toHaveClass("bg-healthy-bg");
+    expect(await screen.findByRole("link", { name: slackLinkName })).toBeInTheDocument();
+  });
+
   it("keeps selection changes as a draft until apply", async () => {
     window.history.replaceState(null, "", "/?services=github");
     render(<App load={async () => basePayload} />);

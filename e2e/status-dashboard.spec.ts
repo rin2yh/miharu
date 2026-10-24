@@ -125,41 +125,6 @@ test("共有URLからサービスを追加・解除し、再読み込みと戻�
   });
 });
 
-test("PCのサイドバーで選択状態とメインコンテンツを区別できる", async ({
-  dashboardStatus,
-  page,
-  statusDashboard,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await statusDashboard.goto("/?services=github,slack");
-  const selectedServiceCount = dashboardStatus.payload.services.filter((service) =>
-    ["github", "slack"].includes(service.id),
-  ).length;
-
-  const sidebar = statusDashboard.serviceSidebar();
-  await expect(sidebar).toBeVisible();
-  await expect(statusDashboard.serviceCount(selectedServiceCount)).toBeVisible();
-  const sidebarBox = await sidebar.boundingBox();
-  const dividerBox = await page.getByRole("separator").boundingBox();
-  const serviceListBox = await page.getByRole("list", { name: "サービス一覧" }).boundingBox();
-  const historyBox = await statusDashboard.recentUpdates().boundingBox();
-  expect(sidebarBox).not.toBeNull();
-  expect(dividerBox).not.toBeNull();
-  expect(serviceListBox).not.toBeNull();
-  expect(historyBox).not.toBeNull();
-  expect(dividerBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width);
-  expect(serviceListBox!.x).toBeGreaterThan(dividerBox!.x + dividerBox!.width);
-  expect(dividerBox!.y + dividerBox!.height).toBe(historyBox!.y + historyBox!.height);
-  await expect(statusDashboard.serviceSelection("GitHub")).not.toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
-  );
-  await expect(statusDashboard.serviceSelection("Notion")).toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
-  );
-});
-
 test("一部選択中に「すべて」を押すと全選択と全解除を切り替えられる", async ({
   dashboardStatus,
   page,
