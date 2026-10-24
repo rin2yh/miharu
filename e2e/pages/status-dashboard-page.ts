@@ -3,8 +3,16 @@ import type { Locator, Page } from "@playwright/test";
 export class StatusDashboardPage {
   constructor(private readonly page: Page) {}
 
-  async goto() {
-    await this.page.goto("/");
+  async goto(path = "/") {
+    await this.page.goto(path);
+  }
+
+  serviceSidebar(): Locator {
+    return this.page.getByRole("complementary", { name: "サービス選択" });
+  }
+
+  serviceSelection(name: string): Locator {
+    return this.serviceSidebar().getByRole("button", { name, exact: true });
   }
 
   async searchService(name: string) {

@@ -48,6 +48,48 @@ test("サービス名で障害サービスを検索し、障害詳細と最近�
   });
 });
 
+test("PCではサイドバーの選択がURL、サービス一覧、最近の更新に反映される", async ({
+  dashboardStatus,
+  page,
+  statusDashboard,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await statusDashboard.goto("/?services=github,slack");
+
+  const sidebar = statusDashboard.serviceSidebar();
+  await expect(sidebar).toBeVisible();
+  await expect(statusDashboard.serviceCount(2)).toBeVisible();
+  await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
+  await expect(statusDashboard.serviceLink("Slack")).toBeVisible();
+  await expect(statusDashboard.serviceLink("Notion")).toHaveCount(0);
+  await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+  const sidebarBox = await sidebar.boundingBox();
+  const serviceListBox = await page.getByRole("list", { name: "サービス一覧" }).boundingBox();
+  expect(sidebarBox).not.toBeNull();
+  expect(serviceListBox).not.toBeNull();
+  expect(serviceListBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width);
+
+  await statusDashboard.serviceSelection("Notion").click();
+  await expect(statusDashboard.serviceCount(3)).toBeVisible();
+  await expect(statusDashboard.serviceLink("Notion")).toBeVisible();
+  await expect(page).toHaveURL(/services=slack%2Cnotion%2Cgithub/);
+
+  await statusDashboard.serviceSelection("GitHub").click();
+  await expect(statusDashboard.serviceCount(2)).toBeVisible();
+  await expect(statusDashboard.serviceLink("GitHub")).toHaveCount(0);
+  await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toHaveCount(0);
+  await expect(page).toHaveURL(/services=slack%2Cnotion/);
+
+  await page.goBack();
+  await expect(statusDashboard.serviceLink("GitHub")).toBeVisible();
+  await expect(statusDashboard.recentIncidentLink(dashboardStatus.incidentTitle)).toBeVisible();
+  await page.reload();
+  await expect(statusDashboard.serviceCount(3)).toBeVisible();
+  await statusDashboard.serviceSelection("すべて").click();
+  await expect(page).not.toHaveURL(/services=/);
+  await expect(statusDashboard.serviceSelection("すべて")).toHaveAttribute("aria-pressed", "true");
+});
+
 test("モバイル幅とダークモードでも横スクロールせず一覧を確認できる", async ({
   dashboardStatus,
   page,
@@ -60,6 +102,7 @@ test("モバイル幅とダークモードでも横スクロールせず一覧�
   });
 
   await test.step("サービス一覧が縦並びで表示されることを確認する", async () => {
+    await expect(statusDashboard.serviceSidebar()).not.toBeVisible();
     const serviceList = page.getByRole("list", { name: "サービス一覧" });
     await expect(serviceList).toBeVisible();
     await expect(
