@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { siClaude, siCloudflare, siGithub, siNotion } from "simple-icons";
 import { describe, expect, it } from "vitest";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import { App } from "./app";
@@ -11,6 +12,34 @@ import {
   service,
   slackLinkName,
 } from "./test-fixtures";
+
+describe("service card icons", () => {
+  it.each([
+    { id: "cloudflare", name: "Cloudflare", path: siCloudflare.path },
+    { id: "notion", name: "Notion", path: siNotion.path },
+    { id: "github", name: "GitHub", path: siGithub.path },
+    { id: "claude", name: "Claude", path: siClaude.path },
+  ])("shows the $name Simple Icons glyph", async ({ id, name, path }) => {
+    render(<App load={async () => payload([service({ id, name })])} />);
+
+    const card = await screen.findByRole("listitem", { name: `${name}のサービス状況` });
+    expect(card.querySelector("header > span svg path")).toHaveAttribute("d", path);
+  });
+
+  it("uses OpenAI's black and white marks for ChatGPT's light and dark themes", async () => {
+    render(<App load={async () => payload([service({ id: "chatgpt", name: "ChatGPT" })])} />);
+
+    const card = await screen.findByRole("listitem", { name: "ChatGPTのサービス状況" });
+    const picture = card.querySelector("header > span picture");
+    const darkSource = picture?.querySelector("source");
+    const lightImage = picture?.querySelector("img");
+
+    expect(darkSource).toHaveAttribute("media", "(prefers-color-scheme: dark)");
+    expect(decodeURIComponent(darkSource?.getAttribute("srcset") ?? "")).toContain("fill='white'");
+    expect(decodeURIComponent(lightImage?.getAttribute("src") ?? "")).toContain("fill='black'");
+    expect(lightImage).toHaveAttribute("alt", "");
+  });
+});
 
 describe("service status links", () => {
   it.each([

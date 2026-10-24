@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
+import { siClaude, siCloudflare, siGithub, siNotion, type SimpleIcon } from "simple-icons";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
 import type {
   DashboardIncident,
@@ -17,10 +17,23 @@ import {
   STATUS_RANK,
 } from "./status-presentation";
 
-const serviceIcons: Record<string, SimpleIcon> = {
-  cloudflare: siCloudflare,
-  notion: siNotion,
-  github: siGithub,
+type ServiceIcon =
+  | { kind: "simple"; icon: SimpleIcon }
+  | { kind: "themed-svg"; lightSrc: string; darkSrc: string };
+
+const serviceIcons: Record<string, ServiceIcon> = {
+  cloudflare: { kind: "simple", icon: siCloudflare },
+  notion: { kind: "simple", icon: siNotion },
+  github: { kind: "simple", icon: siGithub },
+  claude: { kind: "simple", icon: siClaude },
+  // The pinned simple-icons version has no ChatGPT or OpenAI icon. These
+  // monochrome marks come from OpenAI's official logo archive:
+  // https://cdn.openai.com/brand/OpenAI-Logos-2025.zip
+  chatgpt: {
+    kind: "themed-svg",
+    lightSrc: new URL("./icons/chatgpt-black.svg", import.meta.url).href,
+    darkSrc: new URL("./icons/chatgpt-white.svg", import.meta.url).href,
+  },
 };
 
 const statusColors: Record<NormalizedStatus, string> = {
@@ -62,7 +75,7 @@ const incidentImpactColors: Record<NormalizedStatus, string> = {
 export function ServiceCard({ service }: { service: DashboardService }) {
   const [showHealthyComponents, setShowHealthyComponents] = useState(false);
   const icon = serviceIcons[service.id];
-  const iconColor = icon ? `#${icon.hex}` : "currentColor";
+  const iconColor = icon?.kind === "simple" ? `#${icon.icon.hex}` : "currentColor";
   const { assigned, unassigned } = assignIncidents(service);
   const components = service.components.toSorted((left, right) => {
     const abnormalDifference = Number(isAbnormal(right.status)) - Number(isAbnormal(left.status));
@@ -96,10 +109,15 @@ export function ServiceCard({ service }: { service: DashboardService }) {
           style={{ color: iconColor }}
           aria-hidden="true"
         >
-          {icon ? (
+          {icon?.kind === "simple" ? (
             <svg viewBox="0 0 24 24">
-              <path d={icon.path} />
+              <path d={icon.icon.path} />
             </svg>
+          ) : icon?.kind === "themed-svg" ? (
+            <picture className="block h-7 w-7 max-sm:h-6 max-sm:w-6">
+              <source media="(prefers-color-scheme: dark)" srcSet={icon.darkSrc} />
+              <img className="block h-full w-full" src={icon.lightSrc} alt="" />
+            </picture>
           ) : (
             service.name.slice(0, 1)
           )}
