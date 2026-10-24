@@ -15,7 +15,7 @@ import {
   relativeTime,
   STATUS_LABELS,
   STATUS_RANK,
-} from "../status-presentation";
+} from "../presentation/status-presentation";
 
 const serviceIcons: Record<string, SimpleIcon> = {
   cloudflare: siCloudflare,

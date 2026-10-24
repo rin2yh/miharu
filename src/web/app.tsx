@@ -6,8 +6,8 @@ import { EventRow } from "./components/event-row";
 import { RefreshIcon, SearchIcon } from "./components/icons";
 import { ServiceCard } from "./components/service-card";
 import { ServiceSelector } from "./components/service-selector";
-import { getSelectedServiceIds, getServiceSelectionUrl } from "./service-filter";
-import { servicePriority } from "./status-presentation";
+import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
+import { servicePriority } from "./presentation/status-presentation";
 
 type DashboardLoader = () => Promise<DashboardPayload>;
 

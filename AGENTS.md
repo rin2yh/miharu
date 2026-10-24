@@ -22,6 +22,9 @@ Slack、Notion、GitHubなど複数サービスの公式ステータスを集約
 src/
 ├── index.ts                    # Worker entry: HTTP と scheduled() を接続
 ├── web/                        # React UI と Hono API
+│   ├── components/              # React表示コンポーネントとテスト
+│   ├── filters/                 # URLサービスフィルターとテスト
+│   ├── presentation/            # 状態表示・日時フォーマット
 │   └── routes/api/status.ts
 ├── cron/                       # 定期収集と取得Provider
 │   ├── collect-status.ts
