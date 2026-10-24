@@ -23,23 +23,35 @@ export function isAbnormal(status: NormalizedStatus): boolean {
 }
 
 export function incidentStateLabel(
+  kind: DashboardIncident["kind"],
   state: DashboardIncident["state"],
   lifecycle: DashboardIncident["lifecycle"],
 ): string {
-  if (lifecycle === "unverified") return "確認不能";
+  if (lifecycle === "unverified") {
+    return kind === "maintenance" ? "メンテナンス・確認不能" : "障害・確認不能";
+  }
+
+  if (kind === "maintenance") {
+    if (lifecycle === "resolved" || state === "resolved") return "メンテナンス完了";
+    if (state === "scheduled") return "メンテナンス予定";
+    if (state === "investigating" || state === "identified" || state === "monitoring") {
+      return "メンテナンス中";
+    }
+    return "メンテナンス・状態不明";
+  }
+
+  if (lifecycle === "resolved" || state === "resolved") return "障害・復旧";
   switch (state) {
     case "investigating":
-      return "調査中";
+      return "障害・調査中";
     case "identified":
-      return "原因特定";
+      return "障害・対応中";
     case "monitoring":
-      return "復旧確認中";
+      return "障害・監視中";
     case "scheduled":
-      return "予定・実施中";
-    case "resolved":
-      return "復旧";
+      return "障害・予定";
     default:
-      return "状態不明";
+      return "障害・状態不明";
   }
 }
 

@@ -21,23 +21,34 @@ describe("status presentation", () => {
   });
 
   it.each([
-    ["investigating", "調査中"],
-    ["identified", "原因特定"],
-    ["monitoring", "復旧確認中"],
-    ["scheduled", "予定・実施中"],
-    ["resolved", "復旧"],
-  ] as const)("labels incident state %s", (state, label) => {
-    expect(incidentStateLabel(state, "active")).toBe(label);
+    { kind: "incident", state: "investigating", lifecycle: "active", label: "障害・調査中" },
+    { kind: "incident", state: "identified", lifecycle: "active", label: "障害・対応中" },
+    { kind: "incident", state: "monitoring", lifecycle: "active", label: "障害・監視中" },
+    { kind: "incident", state: "scheduled", lifecycle: "active", label: "障害・予定" },
+    { kind: "incident", state: "resolved", lifecycle: "resolved", label: "障害・復旧" },
+    { kind: "maintenance", state: "scheduled", lifecycle: "active", label: "メンテナンス予定" },
+    { kind: "maintenance", state: "investigating", lifecycle: "active", label: "メンテナンス中" },
+    { kind: "maintenance", state: "identified", lifecycle: "active", label: "メンテナンス中" },
+    { kind: "maintenance", state: "monitoring", lifecycle: "active", label: "メンテナンス中" },
+    { kind: "maintenance", state: "resolved", lifecycle: "resolved", label: "メンテナンス完了" },
+  ] as const)("labels $kind $state as $label", ({ kind, state, lifecycle, label }) => {
+    expect(incidentStateLabel(kind, state as DashboardIncident["state"], lifecycle)).toBe(label);
   });
 
-  it("uses a fallback label for an unrecognized incident state", () => {
-    expect(incidentStateLabel("unrecognized" as DashboardIncident["state"], "active")).toBe(
-      "状態不明",
+  it.each([
+    { kind: "incident", lifecycle: "active", label: "障害・状態不明" },
+    { kind: "maintenance", lifecycle: "active", label: "メンテナンス・状態不明" },
+  ] as const)("keeps $kind in an unknown state label", ({ kind, lifecycle, label }) => {
+    expect(incidentStateLabel(kind, "unrecognized" as DashboardIncident["state"], lifecycle)).toBe(
+      label,
     );
   });
 
-  it("labels an unverified incident as unverifiable", () => {
-    expect(incidentStateLabel("investigating", "unverified")).toBe("確認不能");
+  it.each([
+    { kind: "incident", label: "障害・確認不能" },
+    { kind: "maintenance", label: "メンテナンス・確認不能" },
+  ] as const)("labels an unverified $kind as $label", ({ kind, label }) => {
+    expect(incidentStateLabel(kind, "investigating", "unverified")).toBe(label);
   });
 
   it("formats valid dates and identifies invalid dates", () => {

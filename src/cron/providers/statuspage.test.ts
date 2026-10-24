@@ -47,6 +47,10 @@ type CloudflareSummaryFixture = {
 const cloudflareSummaryFixture = JSON.parse(
   readFileSync("src/cron/providers/fixtures/cloudflare-summary.json", "utf8"),
 ) as CloudflareSummaryFixture;
+// Captured from Cloudflare's official summary API on 2026-10-24.
+const cloudflareStorageMaintenanceFixture = JSON.parse(
+  readFileSync("src/cron/providers/fixtures/cloudflare-storage-maintenance.json", "utf8"),
+) as unknown;
 
 const cloudflareServiceGroupId = "1km35smx8p41";
 const cloudflareWorkersId = "57srcl8zcn7c";
@@ -233,6 +237,33 @@ describe("Statuspage provider", () => {
 });
 
 describe("Cloudflare", () => {
+  it("classifies the official scheduled maintenance separately from service status", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      cloudflare,
+      providerContext(
+        jsonFetcher({
+          ...cloudflareSummaryFixture,
+          status: { indicator: "none", description: "All Systems Operational" },
+          incidents: [],
+          scheduled_maintenances: [cloudflareStorageMaintenanceFixture],
+        }),
+      ),
+    );
+
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.incidents).toHaveLength(1);
+    expect(snapshot.incidents[0]).toMatchObject({
+      id: "96wwk8y2kww4",
+      title: "Cloudflare has scheduled maintenance for our storage systems",
+      kind: "maintenance",
+      state: "scheduled",
+      lifecycle: "active",
+      sourceImpact: "maintenance",
+      severityStatus: "under_maintenance",
+      components: expect.arrayContaining(["Custom Pages", "Log Explorer", "Workers Builds"]),
+    });
+  });
+
   it.each([
     {
       scenario: "the captured official summary",

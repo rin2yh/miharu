@@ -82,8 +82,29 @@ describe("ServiceCard", () => {
     );
 
     const incidentItem = screen.getByRole("listitem", { name: "History entry missing" });
-    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("障害・確認不能")).toBeVisible();
     expect(within(incidentItem).queryByText("復旧", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("shows a scheduled maintenance label before opening its details", () => {
+    const scheduledMaintenance = incident({
+      title: "Cloudflare has scheduled maintenance for our storage systems",
+      kind: "maintenance",
+      state: "scheduled",
+      sourceStatus: "scheduled",
+      sourceType: "maintenance",
+      sourceImpact: "maintenance",
+      severityStatus: "under_maintenance",
+    });
+    render(<ServiceCard service={service({ incidents: [scheduledMaintenance] })} />);
+
+    const incidentItem = screen.getByRole("listitem", { name: scheduledMaintenance.title });
+    expect(within(incidentItem).getByText("メンテナンス予定")).toBeVisible();
+
+    fireEvent.click(within(incidentItem).getByText(scheduledMaintenance.title));
+
+    expect(within(incidentItem).getByText("メンテナンス")).toBeVisible();
+    expect(within(incidentItem).getByText("メンテナンス状態: メンテナンス")).toBeVisible();
   });
 
   it("reveals official incident details when its summary is opened", () => {
@@ -170,7 +191,7 @@ describe("ServiceCard", () => {
     const gmail = within(card).getByRole("listitem", { name: "Gmailコンポーネント" });
     expect(within(gmail).getAllByText("状態不明")).toHaveLength(1);
     const incidentItem = within(gmail).getByRole("listitem", { name: unknownIncident.title });
-    expect(within(incidentItem).getByText("確認不能")).toBeVisible();
+    expect(within(incidentItem).getByText("障害・確認不能")).toBeVisible();
     fireEvent.click(within(incidentItem).getByText(unknownIncident.title));
 
     expect(within(incidentItem).getByText("復旧状況を確認できていません。")).toBeVisible();
