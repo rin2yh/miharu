@@ -15,7 +15,6 @@ import {
   asRecord,
   boundedText,
   fetchJson,
-  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   ProviderError,
@@ -251,7 +250,6 @@ function parseStatuspageIncident(
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url,
-    lifecycle: incidentLifecycleForState(state),
   };
 }
 

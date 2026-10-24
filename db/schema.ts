@@ -1,5 +1,6 @@
 import type {
   IncidentEventKind,
+  IncidentClosureReason,
   IncidentKind,
   IncidentLifecycle,
   IncidentState,
@@ -43,8 +44,9 @@ export interface IncidentRow {
   officialUpdatedAt: string | null;
   url: string | null;
   lifecycle: IncidentLifecycle;
+  closureReason: IncidentClosureReason | null;
   firstSeenAt: string;
-  resolvedDetectedAt: string | null;
+  closedDetectedAt: string | null;
   fingerprint: string;
   revision: number;
   lastObservedAt: string;
@@ -57,6 +59,7 @@ export interface IncidentEventRow {
   title: string;
   kind: IncidentKind;
   eventKind: IncidentEventKind;
+  closureReason: IncidentClosureReason | null;
   sourceStatus: string;
   severityStatus: NormalizedStatus | null;
   componentIdsJson: string;

@@ -1,4 +1,3 @@
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../../domain";
 import type { DashboardIncident, NormalizedStatus } from "../../../domain";
 import {
   formatDateTime,
@@ -13,10 +12,10 @@ function incidentKindColor(kind: DashboardIncident["kind"]): string {
 }
 
 function incidentStateColor(incident: DashboardIncident): string {
-  if (incident.lifecycle === "unverified" || incident.state === "unknown") {
+  if (incident.state === "unknown" || incident.lifecycle === "unverified") {
     return "bg-unknown-bg text-unknown";
   }
-  if (incident.lifecycle === "resolved" || incident.state === "resolved") {
+  if (incident.state === "resolved") {
     return "bg-healthy-bg text-healthy";
   }
   switch (incident.state) {
@@ -103,16 +102,15 @@ export function IncidentList({
                   </span>
                 )}
               </div>
-              {incident.sourceStatus === INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS ? (
+              {incident.lifecycle === "unverified" && (
                 <p className="mt-1.5 mb-0 max-w-3xl text-xs leading-relaxed text-muted">
-                  復旧状況を確認できていません。
+                  最後に確認した公式状態を表示しています。現在の状態を再確認できていません。
                 </p>
-              ) : (
-                incident.body && (
-                  <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
-                    {incident.body}
-                  </p>
-                )
+              )}
+              {incident.body && (
+                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
+                  {incident.body}
+                </p>
               )}
               {incident.components.length > 0 && (
                 <p

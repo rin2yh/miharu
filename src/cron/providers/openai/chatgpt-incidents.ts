@@ -7,7 +7,6 @@ import {
 import {
   asRecord,
   boundedText,
-  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   requiredText,
@@ -27,7 +26,7 @@ export async function parseOpenAIChatGPTIncidents(
   knownActiveIncidents: KnownIncident[],
   signal: AbortSignal,
   fetcher: FetchLike,
-): Promise<NormalizedIncident[]> {
+): Promise<{ incidents: NormalizedIncident[]; unverifiedIncidentIds: string[] }> {
   if (values.length > INCIDENTS_PER_SERVICE_LIMIT) {
     throw new ProviderError("invalid_payload", "OpenAI incident list exceeded the supported limit");
   }
@@ -38,14 +37,20 @@ export async function parseOpenAIChatGPTIncidents(
     .filter((incident): incident is NormalizedIncident => incident !== null);
   const listedIncidentIds = new Set(incidents.map((incident) => incident.id));
   const omittedActiveIncidents = knownActiveIncidents.filter(
-    (incident) => incident.lifecycle !== "resolved" && !listedIncidentIds.has(incident.id),
+    (incident) => incident.lifecycle !== "closed" && !listedIncidentIds.has(incident.id),
   );
+  const selectedForRecheck = selectOmittedIncidentsForRecheck(omittedActiveIncidents);
   const recheckedIncidents = await Promise.all(
-    selectOmittedIncidentsForRecheck(omittedActiveIncidents).map((incident) =>
+    selectedForRecheck.map((incident) =>
       recheckOmittedIncident(incident, service, signal, fetcher),
     ),
   );
-  return [...incidents, ...recheckedIncidents];
+  return {
+    incidents: [...incidents, ...recheckedIncidents.filter((incident) => incident !== null)],
+    unverifiedIncidentIds: selectedForRecheck.flatMap((incident, index) =>
+      recheckedIncidents[index] === null ? [incident.id] : [],
+    ),
+  };
 }
 
 function parseOpenAIIncident(
@@ -109,7 +114,6 @@ function parseOpenAIIncident(
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url: incidentUrl,
-    lifecycle: incidentLifecycleForState(state),
   };
 }
 

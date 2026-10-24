@@ -7,9 +7,11 @@ const labels = [
   { kind: "incident", eventKind: "opened", label: "障害発生" },
   { kind: "incident", eventKind: "updated", label: "障害更新" },
   { kind: "incident", eventKind: "resolved", label: "復旧" },
+  { kind: "incident", eventKind: "closed", label: "追跡終了" },
   { kind: "maintenance", eventKind: "opened", label: "メンテナンス予定" },
   { kind: "maintenance", eventKind: "updated", label: "メンテナンス更新" },
   { kind: "maintenance", eventKind: "resolved", label: "メンテナンス完了" },
+  { kind: "maintenance", eventKind: "closed", label: "追跡終了" },
 ] as const;
 
 function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
@@ -21,6 +23,7 @@ function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
     title: "Actions delay",
     kind: "incident",
     eventKind: "opened",
+    closureReason: null,
     sourceStatus: "investigating",
     severityStatus: "partial_outage",
     detectedAt: "2026-10-23T05:00:00.000Z",
