@@ -7,7 +7,6 @@ import type {
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
-  FRESHNESS_WARNING_SECONDS,
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
 } from "../../shared/config/services";
@@ -61,7 +60,6 @@ const historicalOnlyProductIds = new Set([
   "8qvqBSzo9ksVXYtWwe5g", // Classic Hangouts
   "dmLd9pmXmkuNNFZXo8a5", // Currents
 ]);
-const dashboardTimestampPrecisionMs = 60_000;
 
 export async function fetchGoogleWorkspaceSnapshot(
   service: GoogleWorkspaceService,
@@ -171,20 +169,6 @@ interface StatusObservation {
 }
 
 function parseCurrentDashboard(html: string, products: GoogleProduct[]): GoogleProductStatus[] {
-  const updatedText = html.match(/Last updated time:\s*([^<]+)/i)?.[1];
-  const updatedAt = updatedText ? Date.parse(decodeHtmlText(updatedText)) : Number.NaN;
-  const ageMs = Date.now() - updatedAt;
-  if (
-    !Number.isFinite(updatedAt) ||
-    ageMs < -dashboardTimestampPrecisionMs ||
-    ageMs > FRESHNESS_WARNING_SECONDS * 1_000 + dashboardTimestampPrecisionMs
-  ) {
-    throw new ProviderError(
-      "invalid_payload",
-      "Google Workspace dashboard data is missing or stale",
-    );
-  }
-
   const table = html.match(
     /<table\b(?=[^>]*\bclass=["'][^"']*\bmain-dashboard-table\b[^"']*["'])[^>]*>([\s\S]*?)<\/table>/i,
   )?.[1];

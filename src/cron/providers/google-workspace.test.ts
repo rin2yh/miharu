@@ -285,11 +285,21 @@ describe("Google Workspace provider", () => {
     expect(snapshot.components?.map(({ name }) => name)).not.toContain("Currents");
   });
 
-  it("accepts the current dashboard timestamp at the four-minute freshness limit", async () => {
-    const atLimit = dashboardHtml.replace("6:07", "6:04");
-    const snapshot = await fetchSnapshot([], [], false, productCatalog, atLimit).result;
+  it.each([
+    {
+      name: "stale while the footer timestamp is current",
+      dashboard: dashboardHtml.replace("6:07", "5:00"),
+    },
+    {
+      name: "missing while the footer timestamp is current",
+      dashboard: dashboardHtml.replace(/Last updated time:[^<]+/, ""),
+    },
+  ])("uses product statuses when the dashboard timestamp is $name", async ({ dashboard }) => {
+    const snapshot = await fetchSnapshot([], [], false, productCatalog, dashboard).result;
 
     expect(snapshot.status).toBe("operational");
+    expect(snapshot.components).toHaveLength(35);
+    expect(snapshot.components?.every(({ status }) => status === "operational")).toBe(true);
   });
 
   it("reports a current product outage even when history has no incident", async () => {
@@ -328,24 +338,6 @@ describe("Google Workspace provider", () => {
       currentDashboard: dashboardHtml,
       failDashboard: true,
       expectedCode: "upstream_http_error",
-    },
-    {
-      name: "dashboard status timestamp is stale while the footer timestamp is current",
-      history: [],
-      failHistory: false,
-      catalogPayload: productCatalog,
-      currentDashboard: dashboardHtml.replace("6:07", "5:00"),
-      failDashboard: false,
-      expectedCode: "invalid_payload",
-    },
-    {
-      name: "dashboard status timestamp is missing while the footer timestamp is current",
-      history: [],
-      failHistory: false,
-      catalogPayload: productCatalog,
-      currentDashboard: dashboardHtml.replace(/Last updated time:[^<]+/, ""),
-      failDashboard: false,
-      expectedCode: "invalid_payload",
     },
     {
       name: "dashboard omits a current product",
