@@ -62,12 +62,38 @@ export async function fetchText(
   signal: AbortSignal,
   fetcher: FetchLike = fetch,
 ): Promise<string> {
+  return fetchTextResponse(
+    url,
+    signal,
+    fetcher,
+    "application/rss+xml, application/xml, text/xml",
+    /(?:rss\+xml|application\/xml|text\/xml)/i,
+    "XML feed",
+  );
+}
+
+export async function fetchHtml(
+  url: string,
+  signal: AbortSignal,
+  fetcher: FetchLike = fetch,
+): Promise<string> {
+  return fetchTextResponse(url, signal, fetcher, "text/html", /\btext\/html\b/i, "HTML page");
+}
+
+async function fetchTextResponse(
+  url: string,
+  signal: AbortSignal,
+  fetcher: FetchLike,
+  accept: string,
+  contentTypePattern: RegExp,
+  expectedType: string,
+): Promise<string> {
   let response: Response;
   try {
     response = await fetcher(url, {
       signal,
       headers: {
-        accept: "application/rss+xml, application/xml, text/xml",
+        accept,
         "user-agent": "saas-status-dashboard/0.1",
       },
     });
@@ -83,8 +109,8 @@ export async function fetchText(
     );
   }
   const contentType = response.headers.get("content-type") ?? "";
-  if (!/(?:rss\+xml|application\/xml|text\/xml)/i.test(contentType)) {
-    throw new ProviderError("invalid_response", "Status source did not return an XML feed");
+  if (!contentTypePattern.test(contentType)) {
+    throw new ProviderError("invalid_response", `Status source did not return an ${expectedType}`);
   }
   return readLimitedText(response);
 }
