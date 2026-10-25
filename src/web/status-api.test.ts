@@ -43,7 +43,7 @@ const rows: DashboardRows = {
       serviceId: slackService.id,
       id: "incident-1",
       title: "Message delivery delays",
-      body: "<p>We are investigating.<br />Update &amp; details</p>",
+      body: "We are investigating.\nUpdate & details",
       kind: "incident",
       state: "investigating",
       sourceStatus: "investigating",
@@ -137,6 +137,22 @@ describe("status API", () => {
     expect(dashboard.services.flatMap((service) => service.components)).toHaveLength(1);
     expect(dashboard.services.flatMap((service) => service.incidents)).toHaveLength(1);
     expect(dashboard.recentEvents).toHaveLength(1);
+  });
+
+  it("does not parse already normalized text a second time", () => {
+    const dashboard = buildDashboardPayload(
+      {
+        ...rows,
+        incidentRows: [
+          { ...rows.incidentRows[0]!, body: "Status: Resolved\n<script>alert(1)</script>" },
+        ],
+      },
+      new Date("2026-10-23T05:00:00.000Z"),
+    );
+
+    expect(
+      dashboard.services.find((service) => service.id === slackService.id)?.incidents[0]?.body,
+    ).toBe("Status: Resolved\n<script>alert(1)</script>");
   });
 
   it("returns registered services, active incidents, and a small public history", async () => {

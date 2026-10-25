@@ -25,7 +25,9 @@
   "dependencies": {
     "@tanstack/react-query": "^5.104.3",
     "drizzle-orm": "0.45.4",
+    "fast-xml-parser": "^5.11.2",
     "hono": "4.13.13",
+    "html-to-text": "^10.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "simple-icons": "^16.30.0"
@@ -37,6 +39,7 @@
     "@rolldown/plugin-babel": "^0.2.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "^16.3.0",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

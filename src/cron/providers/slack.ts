@@ -11,6 +11,7 @@ import {
   ProviderError,
   requiredText,
   safeIncidentUrl,
+  statusText,
   uniqueNames,
 } from "./shared";
 
@@ -160,7 +161,7 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
   return {
     id,
     title,
-    body: boundedText(latestNote?.body ?? latestNote?.text),
+    body: statusText(latestNote?.body ?? latestNote?.text),
     kind: state === "scheduled" ? "maintenance" : "incident",
     state,
     sourceStatus,
