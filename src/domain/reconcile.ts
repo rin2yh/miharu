@@ -10,7 +10,6 @@ import type {
 import { stableFallbackId } from "./id";
 
 export interface IncidentRecord extends NormalizedIncident {
-  bodyNormalized: boolean;
   lifecycle: IncidentLifecycle;
   closureReason: IncidentClosureReason | null;
   serviceId: string;
@@ -207,7 +206,6 @@ function makeRecord(
 ): IncidentRecord {
   return {
     ...snapshot,
-    bodyNormalized: true,
     lifecycle,
     closureReason,
     serviceId,

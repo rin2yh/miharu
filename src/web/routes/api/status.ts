@@ -12,7 +12,6 @@ import type {
 } from "../../../domain";
 import type { DashboardRows } from "../../../../db/schema";
 import { createD1Store, parseComponents, type DashboardStore } from "../../../shared/store";
-import { toPlainText } from "../../../domain/text";
 
 export interface StatusBindings {
   DB: D1Database;
@@ -89,8 +88,7 @@ export function buildDashboardPayload(
     list.push({
       id: row.id,
       title: row.title,
-      // Rows from before migration 0005 are converted until a Provider refreshes them.
-      body: row.bodyNormalized ? row.body : toPlainText(row.body),
+      body: row.body,
       kind: row.kind,
       state: row.state,
       sourceStatus: row.sourceStatus,

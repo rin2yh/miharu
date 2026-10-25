@@ -47,7 +47,6 @@ const incidentSelection = {
   id: incidents.id,
   title: incidents.title,
   body: incidents.body,
-  bodyNormalized: incidents.bodyNormalized,
   kind: incidents.kind,
   state: incidents.state,
   sourceStatus: incidents.sourceStatus,
@@ -112,12 +111,7 @@ export function createD1Store(database: D1Database): DashboardStore {
       const groups = reconciled.changedIncidents.map((record) => {
         const eventId = JSON.stringify([record.serviceId, record.id, record.revision]);
         const event = eventsById.get(eventId);
-        return [
-          incidentUpsert(db, record),
-          // Reassert after the migration trigger handles writes from older Workers.
-          ...(record.bodyNormalized ? [incidentBodyNormalizationUpdate(db, record)] : []),
-          ...(event ? [eventInsert(db, event)] : []),
-        ];
+        return [incidentUpsert(db, record), ...(event ? [eventInsert(db, event)] : [])];
       });
       await runDrizzleBatches(db, groups);
     },
@@ -256,7 +250,6 @@ function incidentUpsert(database: AppDatabase, record: IncidentRecord): D1BatchQ
     id: record.id,
     title: record.title,
     body: record.body,
-    bodyNormalized: record.bodyNormalized,
     kind: record.kind,
     state: record.state,
     sourceStatus: record.sourceStatus,
@@ -287,7 +280,6 @@ function incidentUpsert(database: AppDatabase, record: IncidentRecord): D1BatchQ
       set: {
         title: values.title,
         body: values.body,
-        bodyNormalized: values.bodyNormalized,
         kind: values.kind,
         state: values.state,
         sourceStatus: values.sourceStatus,
@@ -338,22 +330,6 @@ function eventInsert(database: AppDatabase, event: IncidentEventRecord): D1Batch
     .onConflictDoNothing({ target: incidentEvents.id });
 }
 
-function incidentBodyNormalizationUpdate(
-  database: AppDatabase,
-  record: IncidentRecord,
-): D1BatchQuery {
-  return database
-    .update(incidents)
-    .set({ bodyNormalized: true })
-    .where(
-      and(
-        eq(incidents.serviceId, record.serviceId),
-        eq(incidents.id, record.id),
-        eq(incidents.lastObservedAt, record.lastObservedAt),
-      ),
-    );
-}
-
 async function runDrizzleBatches(database: AppDatabase, groups: D1BatchQuery[][]): Promise<void> {
   let batch: D1BatchQuery[] = [];
   for (const group of groups) {
@@ -389,7 +365,6 @@ function toIncidentRecord(row: IncidentRow): IncidentRecord {
     id: row.id,
     title: row.title,
     body: row.body,
-    bodyNormalized: row.bodyNormalized,
     kind: row.kind,
     state: row.state,
     sourceStatus: row.sourceStatus,

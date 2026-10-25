@@ -27,7 +27,6 @@ export const incidents = sqliteTable(
     id: text("id").notNull(),
     title: text("title").notNull(),
     body: text("body"),
-    bodyNormalized: integer("body_normalized", { mode: "boolean" }).notNull().default(false),
     kind: text("kind").$type<IncidentKind>().notNull(),
     state: text("state").$type<IncidentState>().notNull(),
     sourceStatus: text("source_status").notNull(),

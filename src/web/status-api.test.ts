@@ -44,7 +44,6 @@ const rows: DashboardRows = {
       id: "incident-1",
       title: "Message delivery delays",
       body: "We are investigating.\nUpdate & details",
-      bodyNormalized: true,
       kind: "incident",
       state: "investigating",
       sourceStatus: "investigating",
@@ -148,7 +147,6 @@ describe("status API", () => {
           {
             ...rows.incidentRows[0]!,
             body: "Status: Resolved\n<script>alert(1)</script>",
-            bodyNormalized: true,
           },
         ],
       },
@@ -158,26 +156,6 @@ describe("status API", () => {
     expect(
       dashboard.services.find((service) => service.id === slackService.id)?.incidents[0]?.body,
     ).toBe("Status: Resolved\n<script>alert(1)</script>");
-  });
-
-  it("converts legacy D1 bodies until a Provider refreshes them", () => {
-    const dashboard = buildDashboardPayload(
-      {
-        ...rows,
-        incidentRows: [
-          {
-            ...rows.incidentRows[0]!,
-            body: "<p>Legacy body<br />Update &amp; details</p>",
-            bodyNormalized: false,
-          },
-        ],
-      },
-      new Date("2026-10-23T05:00:00.000Z"),
-    );
-
-    expect(
-      dashboard.services.find((service) => service.id === slackService.id)?.incidents[0]?.body,
-    ).toBe("Legacy body\nUpdate & details");
   });
 
   it("returns registered services, active incidents, and a small public history", async () => {
