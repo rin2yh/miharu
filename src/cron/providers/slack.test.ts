@@ -96,6 +96,21 @@ describe("Slack provider", () => {
     expect(snapshot.status).toBe("operational");
     expect(snapshot.incidents).toEqual([]);
     expect(snapshot.components).toHaveLength(slack.components.length);
+    expect(snapshot.components?.every((component) => component.status === "operational")).toBe(
+      true,
+    );
+    expect(
+      snapshot.components?.every((component) => component.sourceStatus === "not_reported"),
+    ).toBe(true);
+  });
+
+  it("keeps unreported features unknown when Slack's global status is abnormal", async () => {
+    const snapshot = await fetchSlackSnapshot(
+      slack,
+      providerContext(jsonFetcher({ status: "active", active_incidents: [] })),
+    );
+
+    expect(snapshot.status).toBe("unknown");
     expect(snapshot.components?.every((component) => component.status === "unknown")).toBe(true);
     expect(
       snapshot.components?.every((component) => component.sourceStatus === "not_reported"),

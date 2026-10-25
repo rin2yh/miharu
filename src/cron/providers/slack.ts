@@ -38,7 +38,7 @@ export async function fetchSlackSnapshot(
     status: sourceStatus.toLowerCase() === "ok" ? "operational" : normalizedStatus,
     sourceStatus,
     summary: null,
-    components: normalizeSlackComponents(service, incidents),
+    components: normalizeSlackComponents(service, incidents, normalizedStatus === "operational"),
     incidents,
   };
 }
@@ -46,6 +46,7 @@ export async function fetchSlackSnapshot(
 function normalizeSlackComponents(
   service: SlackService,
   incidents: NormalizedIncident[],
+  isOverallOperational: boolean,
 ): ProviderSnapshot["components"] {
   const reportByComponentId = new Map<string, "affected" | "scheduled" | "under_maintenance">();
   const now = Date.now();
@@ -77,6 +78,10 @@ function normalizeSlackComponents(
     if (report === "scheduled") {
       // The scheduled maintenance is shown on its incident; its current feature state is unknown.
       return { id, name, status: "unknown", sourceStatus: "scheduled" };
+    }
+    if (isOverallOperational) {
+      // Slack's "No issues" is a page-level signal, not an independent feature health check.
+      return { id, name, status: "operational", sourceStatus: "not_reported" };
     }
     return { id, name, status: "unknown", sourceStatus: "not_reported" };
   });
