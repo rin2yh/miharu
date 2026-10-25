@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import * as schema from "../../db/schema";
 import {
   incidentEvents,
   incidents,
@@ -21,7 +23,9 @@ import {
   type IncidentRecord,
 } from "../domain/reconcile";
 import { failureMetadata } from "../domain/failure";
-import { createDatabase, type AppDatabase, type D1BatchQuery } from "./database";
+
+type AppDatabase = ReturnType<typeof drizzle<typeof schema, D1Database>>;
+type D1BatchQuery = Parameters<AppDatabase["batch"]>[0][number];
 
 export interface CollectionStore {
   getUnresolvedIncidents(serviceId: string): Promise<KnownIncident[]>;
@@ -65,7 +69,7 @@ const incidentSelection = {
 };
 
 export function createD1Store(database: D1Database): DashboardStore {
-  const db = createDatabase(database);
+  const db = drizzle(database, { schema });
 
   return {
     async getUnresolvedIncidents(serviceId) {
