@@ -128,7 +128,6 @@ describe("D1 incident lifecycle migration", () => {
       sourceStatus: "investigating",
       active: 1,
     });
-
     database
       .prepare(
         `UPDATE incidents SET

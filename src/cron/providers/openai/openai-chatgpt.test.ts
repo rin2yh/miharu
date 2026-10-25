@@ -250,6 +250,37 @@ describe("OpenAI ChatGPT provider", () => {
   });
 
   it.each([
+    {
+      format: "XML-escaped HTML",
+      description:
+        "&lt;b&gt;Status: Resolved&lt;/b&gt;&lt;br/&gt;&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;",
+      body: "Status: Resolved\n<script>alert(1)</script>",
+    },
+    {
+      format: "CDATA HTML",
+      description:
+        "<![CDATA[<b>Status: Resolved</b><br/>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;]]>",
+      body: "Status: Resolved\n&lt;script&gt;alert(1)&lt;/script&gt;",
+    },
+    {
+      format: "incomplete HTML in CDATA",
+      description: "<![CDATA[<b>Status: Resolved</b><br/>Trailing <i>unfinished]]>",
+      body: "Status: Resolved\nTrailing unfinished",
+    },
+  ])("parses RSS $format into plain text", async ({ description, body }) => {
+    const feed = `<rss><channel><link>https://status.openai.com/incidents/${capturedChatGPTIncident.id}</link><item><title>Resolved</title><pubDate>Thu, 22 Oct 2026 08:50:43 GMT</pubDate><description>${description}</description></item></channel></rss>`;
+    const snapshot = await fetchOmittedChatGPTIncident(capturedChatGPTIncident, feed);
+
+    expect(snapshot.incidents).toMatchObject([
+      {
+        id: capturedChatGPTIncident.id,
+        state: "resolved",
+        body,
+      },
+    ]);
+  });
+
+  it.each([
     "Resolved - Elevated ChatGPT conversation and Responses API errors",
     "Elevated ChatGPT conversation and Responses API errors - Resolved",
   ])("recognizes a status appended or prepended in an RSS title: %s", async (title) => {

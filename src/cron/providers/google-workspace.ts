@@ -5,6 +5,7 @@ import type {
   ProviderSnapshot,
 } from "../../domain";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
+import { toPlainText } from "../../domain/text";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
@@ -203,7 +204,7 @@ function parseCurrentDashboard(html: string, products: GoogleProduct[]): GoogleP
     const rawName = row.match(
       /<td\b(?=[^>]*\bclass=["'][^"']*\bproduct-name\b[^"']*["'])[^>]*>([\s\S]*?)<\/td>/i,
     )?.[1];
-    const name = rawName ? decodeHtmlText(rawName.replace(/<[^>]*>/g, " ")) : "";
+    const name = rawName ? decodeHtmlText(rawName) : "";
     const product = productsByName.get(normalizeProductName(name));
     if (!product || seenProductIds.has(product.id)) {
       throw new ProviderError(
@@ -260,13 +261,7 @@ function dashboardStatus(label: string | undefined): StatusObservation | null {
 }
 
 function decodeHtmlText(value: string): string {
-  return value
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+  return (toPlainText(value, Number.MAX_SAFE_INTEGER) ?? "")
     .replace(/[\u00a0\u202f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
