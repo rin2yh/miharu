@@ -273,7 +273,29 @@ function incidentUpsert(database: AppDatabase, record: IncidentRecord): D1BatchQ
     .values(values)
     .onConflictDoUpdate({
       target: [incidents.serviceId, incidents.id],
-      set: values,
+      set: {
+        title: values.title,
+        body: values.body,
+        kind: values.kind,
+        state: values.state,
+        sourceStatus: values.sourceStatus,
+        sourceType: values.sourceType,
+        sourceImpact: values.sourceImpact,
+        severityStatus: values.severityStatus,
+        componentIdsJson: values.componentIdsJson,
+        componentsJson: values.componentsJson,
+        officialCreatedAt: values.officialCreatedAt,
+        officialUpdatedAt: values.officialUpdatedAt,
+        url: values.url,
+        active: values.active,
+        lifecycle: values.lifecycle,
+        resolvedDetectedAt: values.resolvedDetectedAt,
+        closureReason: values.closureReason,
+        recheckUnavailable: values.recheckUnavailable,
+        fingerprint: values.fingerprint,
+        revision: values.revision,
+        lastObservedAt: values.lastObservedAt,
+      },
       setWhere: sql`${incidents.lastObservedAt} <= excluded.last_observed_at`,
     });
 }
