@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
@@ -12,16 +13,27 @@ import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
 import { servicePriority } from "./presentation/status-presentation";
 
-type DashboardLoader = () => Promise<DashboardPayload>;
+type DashboardLoader = (
+  serviceIds: readonly string[],
+  signal?: AbortSignal,
+) => Promise<DashboardPayload>;
 
 export function App({ load: providedLoad }: { load?: DashboardLoader }) {
   const load = providedLoad ?? fetchDashboard;
-  const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [query, setQuery] = useState("");
   const [locationSearch, setLocationSearch] = useState(() => window.location.search);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const inFlight = useRef(false);
+  const selectedServiceIds = getSelectedServiceIds(locationSearch);
+  const selectedServiceKey = selectedServiceIds.join(",");
+  const dashboard = useQuery({
+    queryKey: ["dashboard", selectedServiceKey],
+    queryFn: ({ signal }) => load(selectedServiceIds, signal),
+    enabled: selectedServiceIds.length > 0,
+    refetchInterval: DASHBOARD_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+  });
+  const payload = dashboard.data ?? null;
+  const loadError = dashboard.isError;
 
   useEffect(() => {
     const syncSelectionFromUrl = () => {
@@ -32,53 +44,16 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     return () => window.removeEventListener("popstate", syncSelectionFromUrl);
   }, []);
 
-  const refresh = async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const result = await load();
-      setPayload(result);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-    inFlight.current = false;
-  };
+  const refresh = () => dashboard.refetch({ cancelRefetch: true });
 
   const refreshManually = async () => {
-    if (inFlight.current) return;
     setRefreshing(true);
-    await refresh();
-    setRefreshing(false);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadLatest = () => {
-      if (inFlight.current) return;
-      inFlight.current = true;
-      load()
-        .then((result) => {
-          if (!cancelled) {
-            setPayload(result);
-            setLoadError(false);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setLoadError(true);
-        })
-        .finally(() => {
-          inFlight.current = false;
-        });
-    };
-
-    loadLatest();
-    const interval = window.setInterval(loadLatest, DASHBOARD_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [load]);
 
   const orderedServices = [...(payload?.services ?? [])];
   orderedServices.sort((left, right) => {
@@ -88,7 +63,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
   });
 
-  const selectedServiceIds = getSelectedServiceIds(locationSearch);
   const activeServiceIds = new Set(selectedServiceIds);
   const needle = query.trim().toLocaleLowerCase("ja");
   const filteredServices = orderedServices.filter(
@@ -143,7 +117,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
                 className="inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-line-strong bg-surface px-2.5 text-xs font-semibold text-ink transition-colors duration-150 enabled:hover:border-line-strong enabled:hover:bg-control-hover disabled:cursor-wait disabled:opacity-70 max-sm:size-10 max-sm:px-0"
                 type="button"
                 onClick={() => void refreshManually()}
-                disabled={refreshing}
+                disabled={refreshing || selectedServiceIds.length === 0}
               >
                 <RefreshIcon spinning={refreshing} />
                 <span className="max-sm:sr-only">{refreshing ? "更新中" : "手動更新"}</span>
@@ -157,7 +131,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
               selectedServiceIds={selectedServiceIds}
               onApply={applyServiceSelection}
             />
-            {!payload && !loadError && (
+            {!payload && !loadError && selectedServiceIds.length > 0 && (
               <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
                 サービス情報を読み込んでいます…
               </div>
@@ -174,7 +148,7 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
                 </button>
               </div>
             )}
-            {payload && filteredServices.length === 0 && (
+            {filteredServices.length === 0 && (payload || selectedServiceIds.length === 0) && (
               <div className="rounded-lg border border-dashed border-line-strong bg-empty-bg px-5 py-7 text-center text-sm text-muted dark:border-line">
                 条件に一致するサービスはありません。
               </div>
