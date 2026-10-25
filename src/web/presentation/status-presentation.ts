@@ -57,16 +57,12 @@ export function incidentStateLabel(
   state: IncidentState,
   lifecycle: IncidentLifecycle,
 ): string {
-  if (lifecycle === "unverified") {
-    return kind === "maintenance" ? "終了未確認" : "復旧未確認";
-  }
-
-  if (lifecycle === "resolved") {
-    return kind === "maintenance" ? "完了" : "復旧済み";
-  }
-
   const labels = kind === "maintenance" ? MAINTENANCE_STATE_LABELS : INCIDENT_STATE_LABELS;
-  return labels[state] ?? "状態不明";
+  const officialStateLabel = labels[state] ?? "状態不明";
+  if (lifecycle === "unverified") {
+    return state === "unknown" ? "状態不明・再確認不能" : `${officialStateLabel}・再確認不能`;
+  }
+  return officialStateLabel;
 }
 
 export function formatDateTime(value: string): string {

@@ -168,6 +168,5 @@ function parseSlackIncident(value: unknown, service: SlackService): NormalizedIn
     officialCreatedAt: createdAt,
     officialUpdatedAt: updatedAt,
     url,
-    lifecycle: state === "resolved" ? "resolved" : "active",
   };
 }

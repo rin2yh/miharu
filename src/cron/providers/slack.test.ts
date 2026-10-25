@@ -156,7 +156,6 @@ describe("Slack provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       kind: "maintenance",
       state: "scheduled",
-      lifecycle: "active",
     });
   });
 
@@ -189,7 +188,6 @@ describe("Slack provider", () => {
     expect(snapshot.incidents[0]).toMatchObject({
       kind: "maintenance",
       state: "scheduled",
-      lifecycle: "active",
     });
   });
 

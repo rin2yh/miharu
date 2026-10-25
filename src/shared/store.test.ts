@@ -200,12 +200,27 @@ describe("createD1Store with local D1", () => {
     );
 
     expect(await selectRows(`SELECT id FROM service_components`)).toEqual([]);
-    expect(await selectRows(`SELECT lifecycle, resolved_detected_at FROM incidents`)).toEqual([
-      { lifecycle: "resolved", resolved_detected_at: "2026-10-03T05:00:00.000Z" },
+    expect(
+      await selectRows(
+        `SELECT lifecycle, state, source_status, closure_reason, resolved_detected_at FROM incidents`,
+      ),
+    ).toEqual([
+      {
+        lifecycle: "resolved",
+        state: "investigating",
+        source_status: "investigating",
+        closure_reason: "no_longer_listed",
+        resolved_detected_at: "2026-10-03T05:00:00.000Z",
+      },
     ]);
-    expect(await selectRows(`SELECT event_kind FROM incident_events ORDER BY detected_at`)).toEqual(
-      [{ event_kind: "opened" }, { event_kind: "resolved" }],
-    );
+    expect(
+      await selectRows(
+        `SELECT event_kind, closure_reason FROM incident_events ORDER BY detected_at`,
+      ),
+    ).toEqual([
+      { event_kind: "opened", closure_reason: null },
+      { event_kind: "closed", closure_reason: "no_longer_listed" },
+    ]);
 
     await store.pruneHistory(new Date("2026-10-12T05:00:00.000Z"));
 
@@ -287,7 +302,6 @@ function incident(overrides: Partial<NormalizedIncident> = {}): NormalizedIncide
     officialCreatedAt: "2026-10-01T04:55:00.000Z",
     officialUpdatedAt: "2026-10-01T04:55:00.000Z",
     url: "https://www.githubstatus.com/incidents/incident-1",
-    lifecycle: "active",
     ...overrides,
   };
 }

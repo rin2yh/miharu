@@ -143,7 +143,6 @@ describe("Google Workspace provider", () => {
         id: "vagmms1y6yRxwg6RMQZp",
         state: "investigating",
         sourceImpact: impact,
-        lifecycle: "active",
         componentIds: [
           "prPt2Yra2CbGsbEm9cpC",
           "n5hVexuq1PM9onY9qrmo",
@@ -172,20 +171,22 @@ describe("Google Workspace provider", () => {
       name: "omitted from the history",
       history: () => [],
       previouslyUnverifiable: false,
+      expectedListed: false,
+      expectedUnverified: true,
       expectedState: "investigating",
       expectedSourceStatus: "SERVICE_DISRUPTION",
-      expectedLifecycle: "unverified",
       expectedServiceStatus: "unknown",
-      expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
+      expectedOfficialUpdatedAt: undefined,
       expectedDriveStatus: "unknown",
     },
     {
       name: "listed as active again",
       history: () => [activeIncident("SERVICE_OUTAGE")],
       previouslyUnverifiable: true,
+      expectedListed: true,
+      expectedUnverified: false,
       expectedState: "investigating",
       expectedSourceStatus: "SERVICE_OUTAGE",
-      expectedLifecycle: "active",
       expectedServiceStatus: "major_outage",
       expectedOfficialUpdatedAt: "2026-06-04T20:11:27.000Z",
       expectedDriveStatus: "major_outage",
@@ -194,9 +195,10 @@ describe("Google Workspace provider", () => {
       name: "listed as resolved",
       history: () => historyFixture,
       previouslyUnverifiable: true,
+      expectedListed: true,
+      expectedUnverified: false,
       expectedState: "resolved",
       expectedSourceStatus: "AVAILABLE",
-      expectedLifecycle: "resolved",
       expectedServiceStatus: "operational",
       expectedOfficialUpdatedAt: "2026-05-31T04:24:00.000Z",
       expectedDriveStatus: "operational",
@@ -206,9 +208,10 @@ describe("Google Workspace provider", () => {
     async ({
       history,
       previouslyUnverifiable,
+      expectedListed,
+      expectedUnverified,
       expectedState,
       expectedSourceStatus,
-      expectedLifecycle,
       expectedServiceStatus,
       expectedOfficialUpdatedAt,
       expectedDriveStatus,
@@ -218,11 +221,14 @@ describe("Google Workspace provider", () => {
       if (!priorIncident) throw new Error("Expected captured active incident");
       const knownIncident: KnownIncident = {
         ...priorIncident,
+        lifecycle: "active",
         ...(previouslyUnverifiable
           ? {
               lifecycle: "unverified" as const,
+              closureReason: null,
             }
           : {}),
+        closureReason: null,
         lastObservedAt: "2026-01-01T00:00:00.000Z",
       };
 
@@ -230,14 +236,26 @@ describe("Google Workspace provider", () => {
       const snapshot = await result;
       const currentIncident = snapshot.incidents.find(({ id }) => id === knownIncident.id);
 
-      expect(currentIncident).toMatchObject({
-        state: expectedState,
-        sourceStatus: expectedSourceStatus,
-        lifecycle: expectedLifecycle,
-      });
+      expect(
+        currentIncident
+          ? {
+              state: currentIncident.state,
+              sourceStatus: currentIncident.sourceStatus,
+              officialUpdatedAt: currentIncident.officialUpdatedAt,
+            }
+          : null,
+      ).toEqual(
+        expectedListed
+          ? {
+              state: expectedState,
+              sourceStatus: expectedSourceStatus,
+              officialUpdatedAt: expectedOfficialUpdatedAt,
+            }
+          : null,
+      );
+      expect(snapshot.unverifiedIncidentIds).toEqual(expectedUnverified ? [knownIncident.id] : []);
       expect(snapshot.status).toBe(expectedServiceStatus);
       expect(fetcher).toHaveBeenCalledTimes(3);
-      expect(currentIncident?.officialUpdatedAt).toBe(expectedOfficialUpdatedAt);
       expect(snapshot.components?.find(({ id }) => id === "VHNA7p3Z5p3iakj5sA8V")?.status).toBe(
         expectedDriveStatus,
       );

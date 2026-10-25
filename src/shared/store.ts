@@ -55,9 +55,10 @@ export function createD1Store(database: D1Database): DashboardStore {
       official_created_at AS officialCreatedAt,
       official_updated_at AS officialUpdatedAt,
       url,
-      lifecycle,
+      CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
+      closure_reason AS closureReason,
       first_seen_at AS firstSeenAt,
-      resolved_detected_at AS resolvedDetectedAt,
+      resolved_detected_at AS closedDetectedAt,
       fingerprint,
       revision,
       last_observed_at AS lastObservedAt
@@ -88,9 +89,10 @@ export function createD1Store(database: D1Database): DashboardStore {
       official_created_at AS officialCreatedAt,
       official_updated_at AS officialUpdatedAt,
       url,
-      lifecycle,
+      CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
+      closure_reason AS closureReason,
       first_seen_at AS firstSeenAt,
-      resolved_detected_at AS resolvedDetectedAt,
+      resolved_detected_at AS closedDetectedAt,
       fingerprint,
       revision,
       last_observed_at AS lastObservedAt
@@ -105,6 +107,7 @@ export function createD1Store(database: D1Database): DashboardStore {
         snapshot.incidents,
         observedAt,
         snapshot.incidentListComplete,
+        snapshot.unverifiedIncidentIds,
       );
 
       await database.batch([
@@ -201,8 +204,10 @@ export function createD1Store(database: D1Database): DashboardStore {
               source_impact AS sourceImpact, severity_status AS severityStatus,
               component_ids_json AS componentIdsJson, components_json AS componentsJson,
               official_created_at AS officialCreatedAt,
-              official_updated_at AS officialUpdatedAt, url, lifecycle,
-              first_seen_at AS firstSeenAt, resolved_detected_at AS resolvedDetectedAt,
+              official_updated_at AS officialUpdatedAt, url,
+              CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
+              closure_reason AS closureReason,
+              first_seen_at AS firstSeenAt, resolved_detected_at AS closedDetectedAt,
               fingerprint, revision, last_observed_at AS lastObservedAt
             FROM incidents
             WHERE lifecycle IN ('active', 'unverified')
@@ -215,7 +220,8 @@ export function createD1Store(database: D1Database): DashboardStore {
           .prepare(
             `SELECT
               id, service_id AS serviceId, incident_id AS incidentId, title, body,
-              kind, event_kind AS eventKind, source_status AS sourceStatus,
+              kind, event_kind AS eventKind, closure_reason AS closureReason,
+              source_status AS sourceStatus,
               severity_status AS severityStatus, component_ids_json AS componentIdsJson,
               components_json AS componentsJson,
               detected_at AS detectedAt, official_event_at AS officialEventAt, url
@@ -270,8 +276,8 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
         service_id, id, title, body, kind, state, source_status, source_type,
         source_impact, severity_status, component_ids_json, components_json, official_created_at,
         official_updated_at, url, active, lifecycle, first_seen_at, resolved_detected_at,
-        fingerprint, revision, last_observed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        closure_reason, recheck_unavailable, fingerprint, revision, last_observed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(service_id, id) DO UPDATE SET
         title = excluded.title,
         body = excluded.body,
@@ -289,6 +295,8 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
         active = excluded.active,
         lifecycle = excluded.lifecycle,
         resolved_detected_at = excluded.resolved_detected_at,
+        closure_reason = excluded.closure_reason,
+        recheck_unavailable = excluded.recheck_unavailable,
         fingerprint = excluded.fingerprint,
         revision = excluded.revision,
         last_observed_at = excluded.last_observed_at
@@ -310,10 +318,12 @@ function incidentUpsert(database: D1Database, record: IncidentRecord): D1Prepare
       record.officialCreatedAt,
       record.officialUpdatedAt,
       record.url,
-      Number(record.lifecycle !== "resolved"),
-      record.lifecycle,
+      Number(record.lifecycle !== "closed"),
+      record.lifecycle === "closed" ? "resolved" : record.lifecycle,
       record.firstSeenAt,
-      record.resolvedDetectedAt,
+      record.closedDetectedAt,
+      record.closureReason,
+      Number(record.lifecycle === "unverified"),
       record.fingerprint,
       record.revision,
       record.lastObservedAt,
@@ -326,8 +336,8 @@ function eventInsert(database: D1Database, event: IncidentEventRecord): D1Prepar
       `INSERT INTO incident_events (
         id, service_id, incident_id, kind, event_kind, title, body, state,
         source_status, source_type, source_impact, severity_status,
-        component_ids_json, components_json, url, official_event_at, detected_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        component_ids_json, components_json, url, official_event_at, detected_at, closure_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING`,
     )
     .bind(
@@ -348,6 +358,7 @@ function eventInsert(database: D1Database, event: IncidentEventRecord): D1Prepar
       event.url,
       event.officialEventAt,
       event.detectedAt,
+      event.closureReason,
     );
 }
 
@@ -383,8 +394,9 @@ function toIncidentRecord(row: IncidentRow): IncidentRecord {
     officialUpdatedAt: row.officialUpdatedAt,
     url: row.url,
     lifecycle: row.lifecycle,
+    closureReason: row.closureReason,
     firstSeenAt: row.firstSeenAt,
-    resolvedDetectedAt: row.resolvedDetectedAt,
+    closedDetectedAt: row.closedDetectedAt,
     fingerprint: row.fingerprint,
     revision: row.revision,
     lastObservedAt: row.lastObservedAt,

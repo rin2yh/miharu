@@ -1,7 +1,6 @@
 import { type KnownIncident, type NormalizedIncident } from "../../../domain";
 import {
   fetchText,
-  incidentLifecycleForState,
   normalizeTimestamp,
   parseIncidentState,
   ProviderError,
@@ -17,8 +16,8 @@ export async function recheckOmittedIncident(
   service: OpenAIChatGPTService,
   signal: AbortSignal,
   fetcher: FetchLike,
-): Promise<NormalizedIncident> {
-  if (incident.id.startsWith("generated_")) return unknownIncident(incident);
+): Promise<NormalizedIncident | null> {
+  if (incident.id.startsWith("generated_")) return null;
   const feedUrl = safeIncidentUrl(
     new URL(
       `incidents/${encodeURIComponent(incident.id)}/feed.rss`,
@@ -26,29 +25,27 @@ export async function recheckOmittedIncident(
     ).toString(),
     service,
   );
-  if (!feedUrl) return unknownIncident(incident);
+  if (!feedUrl) return null;
 
   try {
     const feed = await fetchText(feedUrl, signal, fetcher);
     const update = parseIncidentFeed(feed, incident.id, service);
+    const {
+      lifecycle: _lifecycle,
+      closureReason: _closureReason,
+      lastObservedAt: _lastObservedAt,
+      ...officialIncident
+    } = incident;
     return {
-      ...incident,
+      ...officialIncident,
       state: update.state,
       sourceStatus: update.sourceStatus,
       body: update.body ?? incident.body,
       officialUpdatedAt: update.updatedAt ?? incident.officialUpdatedAt,
-      lifecycle: incidentLifecycleForState(update.state),
     };
   } catch {
-    return unknownIncident(incident);
+    return null;
   }
-}
-
-function unknownIncident(incident: KnownIncident): NormalizedIncident {
-  return {
-    ...incident,
-    lifecycle: "unverified",
-  };
 }
 
 interface IncidentFeedUpdate {

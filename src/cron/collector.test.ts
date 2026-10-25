@@ -96,6 +96,7 @@ describe("status collection", () => {
       officialUpdatedAt: null,
       url: null,
       lifecycle: "active" as const,
+      closureReason: null,
       lastObservedAt: "2026-10-23T04:59:00.000Z",
     };
     const persistence = store({
