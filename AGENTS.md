@@ -136,6 +136,8 @@ D1ストアの実DB結合テストは `pnpm test` に含まれる。D1用project
 - 既存のmigration SQLは編集せず、`db/migrations/` に新しい連番SQLを追加する。
 - まずローカルでmigrationを適用し、アプリの動作を確認する。
 - スキーマ変更は旧Workerでも動くよう段階的に行う。列の追加とアプリ側の切り替えを分け、不要な列の削除は後続のmigrationにする。
+- migrationの適用と履歴管理はWranglerに一本化する。Drizzle Kitでmigrationを生成・適用せず、migration適用後のテーブル定義を `db/schema.ts` に反映して型定義を同期する。
+- `db/schema.ts` はアプリ実行時のDrizzleスキーマと行型の唯一の定義元にする。行型は `$inferSelect` から導出し、SQL migrationとDrizzle定義の両方を変更した場合は既存のD1結合テストで整合性を確認する。
 
 ## Git hooksと必須チェック
 

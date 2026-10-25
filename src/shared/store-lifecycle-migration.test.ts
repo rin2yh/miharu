@@ -20,6 +20,10 @@ class SqliteD1Adapter {
       all: async <T>() => ({
         results: statement.all(...(parameters as never[])) as T[],
       }),
+      raw: async () => {
+        const rows = statement.all(...(parameters as never[])) as Record<string, unknown>[];
+        return rows.map((row) => Object.values(row));
+      },
       run: async () => {
         const result = statement.run(...(parameters as never[]));
         return { success: true, meta: { changes: Number(result.changes) } };
