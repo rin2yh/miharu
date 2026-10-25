@@ -2,6 +2,8 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "miharu",
   "main": "./src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "compatibility_date": "2026-10-19",
   "vars": {
     "FRESHNESS_WARNING_SECONDS": "180",
