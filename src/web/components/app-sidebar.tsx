@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
-import type { DashboardPayload } from "../../domain";
 import { ServiceSidebar } from "./service-sidebar";
 
 type AppSidebarProps = {
-  orderedServices: DashboardPayload["services"];
   selectedServiceIds: string[];
   onSelect: (serviceIds: string[]) => void;
   query: string;
@@ -12,7 +10,6 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({
-  orderedServices,
   selectedServiceIds,
   onSelect,
   query,
@@ -22,7 +19,6 @@ export function AppSidebar({
   return (
     <div className="grid gap-8 lg:grid-cols-[13rem_1px_minmax(0,1fr)] lg:gap-x-7">
       <ServiceSidebar
-        orderedServices={orderedServices}
         selectedServiceIds={selectedServiceIds}
         onSelect={onSelect}
         query={query}

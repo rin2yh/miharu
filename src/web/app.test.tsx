@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DASHBOARD_POLL_INTERVAL_MS, SERVICES } from "../shared/config/services";
+import { DASHBOARD_POLL_INTERVAL_MS, SERVICES, SERVICES_BY_NAME } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
 import { App } from "./app";
 import {
@@ -235,23 +235,20 @@ describe("dashboard", () => {
       .mockResolvedValueOnce(updatedPayload);
     renderDashboard(load);
 
-    expect(getSidebarOrder()).toEqual(SERVICES.map(({ name }) => name));
+    expect(getSidebarOrder()).toEqual(SERVICES_BY_NAME.map(({ name }) => name));
 
     await act(async () => {
       resolveInitialLoad?.(initialPayload);
     });
     await screen.findByRole("list", { name: "サービス一覧" });
 
-    const missingServiceNames = SERVICES.filter(
-      ({ id }) => !initialPayload.services.some((dashboardService) => dashboardService.id === id),
-    ).map(({ name }) => name);
-    const initialOrder = ["Notion", "GitHub", "Slack"];
+    const initialOrder = ["GitHub", "Notion", "Slack"];
     expect(getMainOrder()).toEqual(initialOrder);
-    expect(getSidebarOrder()).toEqual([...initialOrder, ...missingServiceNames]);
+    expect(getSidebarOrder()).toEqual(SERVICES_BY_NAME.map(({ name }) => name));
 
     fireEvent.click(screen.getByRole("button", { name: "手動更新" }));
-    await waitFor(() => expect(getMainOrder()).toEqual(["Slack", "GitHub", "Notion"]));
-    expect(getSidebarOrder()).toEqual(["Slack", "GitHub", "Notion", ...missingServiceNames]);
+    await waitFor(() => expect(getMainOrder()).toEqual(initialOrder));
+    expect(getSidebarOrder()).toEqual(SERVICES_BY_NAME.map(({ name }) => name));
   });
 
   it("shows an empty message when a service search has no matching recent events", async () => {
@@ -315,8 +312,8 @@ describe("dashboard", () => {
         [slackLinkName, githubLinkName].includes(link.getAttribute("aria-label") ?? ""),
       );
     expect(serviceLinks.map((link) => link.getAttribute("aria-label"))).toEqual([
-      slackLinkName,
       githubLinkName,
+      slackLinkName,
     ]);
     expect(screen.getByRole("link", { name: "Slack update" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GitHub update" })).toBeInTheDocument();
