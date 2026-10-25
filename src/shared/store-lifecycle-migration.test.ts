@@ -74,7 +74,14 @@ function insertLegacyIncident(
 
 function insertLegacyEvent(
   database: SqliteD1Adapter,
-  event: { id: string; incidentId: string; eventKind: string; state: string; sourceStatus: string },
+  event: {
+    id: string;
+    incidentId: string;
+    eventKind: string;
+    state: string;
+    sourceStatus: string;
+    detectedAt?: string;
+  },
 ) {
   database
     .prepare(
@@ -83,7 +90,7 @@ function insertLegacyEvent(
         source_status, source_type, source_impact, severity_status, components_json,
         url, official_event_at, detected_at
       ) VALUES (?, 'google-workspace', ?, 'incident', ?, ?, NULL, ?, ?, NULL, NULL, NULL,
-        '[]', NULL, NULL, '2026-10-23T04:00:00.000Z')`,
+        '[]', NULL, NULL, ?)`,
     )
     .bind(
       event.id,
@@ -92,6 +99,7 @@ function insertLegacyEvent(
       event.incidentId,
       event.state,
       event.sourceStatus,
+      event.detectedAt ?? "2026-10-23T04:00:00.000Z",
     )
     .run();
 }
@@ -181,6 +189,22 @@ describe("D1 incident lifecycle migration", () => {
       sourceStatus: "not_listed",
     });
     insertLegacyEvent(database, {
+      id: "listed-resolved",
+      incidentId: "legacy-disappeared-after-recovery",
+      eventKind: "resolved",
+      state: "resolved",
+      sourceStatus: "resolved",
+      detectedAt: "2026-10-23T04:30:00.000Z",
+    });
+    insertLegacyEvent(database, {
+      id: "listed-resolved-closed",
+      incidentId: "legacy-disappeared-after-recovery",
+      eventKind: "resolved",
+      state: "resolved",
+      sourceStatus: "not_listed",
+      detectedAt: "2026-10-23T05:00:00.000Z",
+    });
+    insertLegacyEvent(database, {
       id: "recheck-opened",
       incidentId: "legacy-recheck",
       eventKind: "opened",
@@ -189,6 +213,12 @@ describe("D1 incident lifecycle migration", () => {
     });
     insertLegacyIncident(database, {
       id: "legacy-missing",
+      state: "resolved",
+      sourceStatus: "not_listed",
+      active: 0,
+    });
+    insertLegacyIncident(database, {
+      id: "legacy-disappeared-after-recovery",
       state: "resolved",
       sourceStatus: "not_listed",
       active: 0,
@@ -223,6 +253,14 @@ describe("D1 incident lifecycle migration", () => {
       .all();
     expect(migrated).toEqual([
       {
+        id: "legacy-disappeared-after-recovery",
+        state: "resolved",
+        sourceStatus: "resolved",
+        lifecycle: "resolved",
+        closureReason: "no_longer_listed",
+        recheckUnavailable: 0,
+      },
+      {
         id: "legacy-missing",
         state: "investigating",
         sourceStatus: "investigating",
@@ -255,6 +293,31 @@ describe("D1 incident lifecycle migration", () => {
         recheckUnavailable: 1,
       },
     ]);
+
+    expect(
+      database.sqlite
+        .prepare(
+          "SELECT event_kind AS eventKind, state, source_status AS sourceStatus, closure_reason AS closureReason FROM incident_events WHERE id = 'listed-resolved-closed'",
+        )
+        .get(),
+    ).toEqual({
+      eventKind: "closed",
+      state: "resolved",
+      sourceStatus: "resolved",
+      closureReason: "no_longer_listed",
+    });
+    expect(
+      database.sqlite
+        .prepare(
+          "SELECT event_kind AS eventKind, state, source_status AS sourceStatus, closure_reason AS closureReason FROM incident_events WHERE id = 'listed-resolved'",
+        )
+        .get(),
+    ).toEqual({
+      eventKind: "resolved",
+      state: "resolved",
+      sourceStatus: "resolved",
+      closureReason: "official_resolved",
+    });
 
     expect(
       database.sqlite

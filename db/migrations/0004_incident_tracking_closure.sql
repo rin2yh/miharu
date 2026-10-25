@@ -5,6 +5,12 @@ ALTER TABLE incident_events ADD COLUMN closure_reason TEXT;
 DROP TRIGGER IF EXISTS incidents_lifecycle_compat_insert;
 DROP TRIGGER IF EXISTS incidents_lifecycle_compat_active_update;
 
+-- Preserve why these rows were closed before restoring the last official
+-- source status from event history.
+UPDATE incidents
+SET closure_reason = 'no_longer_listed'
+WHERE lifecycle = 'resolved' AND source_status = 'not_listed';
+
 -- The previous implementation replaced the last official state when an incident
 -- disappeared. Recover it from the latest official event where possible.
 UPDATE incidents
@@ -14,7 +20,10 @@ SET
     FROM incident_events AS event
     WHERE event.service_id = incidents.service_id
       AND event.incident_id = incidents.id
-      AND event.event_kind IN ('opened', 'updated')
+      AND (
+        event.event_kind IN ('opened', 'updated')
+        OR (event.event_kind = 'resolved' AND event.source_status <> 'not_listed')
+      )
     ORDER BY event.detected_at DESC
     LIMIT 1
   ), 'unknown'),
@@ -23,7 +32,10 @@ SET
     FROM incident_events AS event
     WHERE event.service_id = incidents.service_id
       AND event.incident_id = incidents.id
-      AND event.event_kind IN ('opened', 'updated')
+      AND (
+        event.event_kind IN ('opened', 'updated')
+        OR (event.event_kind = 'resolved' AND event.source_status <> 'not_listed')
+      )
     ORDER BY event.detected_at DESC
     LIMIT 1
   ), 'unknown')
@@ -60,7 +72,10 @@ SET
     FROM incident_events AS previous
     WHERE previous.service_id = incident_events.service_id
       AND previous.incident_id = incident_events.incident_id
-      AND previous.event_kind IN ('opened', 'updated')
+      AND (
+        previous.event_kind IN ('opened', 'updated')
+        OR (previous.event_kind = 'resolved' AND previous.source_status <> 'not_listed')
+      )
       AND previous.detected_at <= incident_events.detected_at
     ORDER BY previous.detected_at DESC
     LIMIT 1
@@ -70,7 +85,10 @@ SET
     FROM incident_events AS previous
     WHERE previous.service_id = incident_events.service_id
       AND previous.incident_id = incident_events.incident_id
-      AND previous.event_kind IN ('opened', 'updated')
+      AND (
+        previous.event_kind IN ('opened', 'updated')
+        OR (previous.event_kind = 'resolved' AND previous.source_status <> 'not_listed')
+      )
       AND previous.detected_at <= incident_events.detected_at
     ORDER BY previous.detected_at DESC
     LIMIT 1
@@ -83,11 +101,10 @@ WHERE event_kind = 'resolved';
 
 UPDATE incidents
 SET closure_reason = CASE
-  WHEN source_status = 'not_listed' THEN 'no_longer_listed'
   WHEN state = 'resolved' THEN 'official_resolved'
   ELSE 'no_longer_listed'
 END
-WHERE lifecycle = 'resolved';
+WHERE lifecycle = 'resolved' AND closure_reason IS NULL;
 
 -- Migration 0003 inferred "unverified" from an unknown official state. That
 -- state is still useful official information and must remain actively tracked.
