@@ -249,6 +249,19 @@ describe("OpenAI ChatGPT provider", () => {
     ]);
   });
 
+  it("decodes RSS entities once before stripping embedded HTML", async () => {
+    const feed = `<rss><channel><link>https://status.openai.com/incidents/${capturedChatGPTIncident.id}</link><item><title>Resolved</title><pubDate>Thu, 22 Oct 2026 08:50:43 GMT</pubDate><description>&lt;b&gt;Status: Resolved&lt;/b&gt; &amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</description></item></channel></rss>`;
+    const snapshot = await fetchOmittedChatGPTIncident(capturedChatGPTIncident, feed);
+
+    expect(snapshot.incidents).toMatchObject([
+      {
+        id: capturedChatGPTIncident.id,
+        state: "resolved",
+        body: "Status: Resolved alert(1)",
+      },
+    ]);
+  });
+
   it.each([
     "Resolved - Elevated ChatGPT conversation and Responses API errors",
     "Elevated ChatGPT conversation and Responses API errors - Resolved",

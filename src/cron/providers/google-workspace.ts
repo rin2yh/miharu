@@ -5,6 +5,7 @@ import type {
   ProviderSnapshot,
 } from "../../domain";
 import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
+import { decodeHtmlEntitiesOnce } from "../../domain/text";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
@@ -260,13 +261,7 @@ function dashboardStatus(label: string | undefined): StatusObservation | null {
 }
 
 function decodeHtmlText(value: string): string {
-  return value
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+  return decodeHtmlEntitiesOnce(value)
     .replace(/[\u00a0\u202f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
