@@ -1,10 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS, SERVICES } from "../shared/config/services";
 import type { DashboardEvent, DashboardPayload } from "../domain";
 import { App } from "./app";
-import { createQueryClient } from "./query-client";
 import {
   basePayload,
   githubLinkName,
@@ -26,7 +25,16 @@ type DeferredDashboardRequest = {
 };
 
 function renderDashboard(load: DashboardLoader) {
-  const queryClient = createQueryClient({ gcTime: 0 });
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 0,
+        refetchOnReconnect: false,
+        refetchOnWindowFocus: true,
+        retry: false,
+      },
+    },
+  });
 
   return render(
     <QueryClientProvider client={queryClient}>
