@@ -1,9 +1,14 @@
-import type {
-  DashboardRows,
-  IncidentEventRow,
-  IncidentRow,
-  ServiceComponentRow,
-  ServiceStatusRow,
+import { and, asc, desc, eq, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import * as schema from "../../db/schema";
+import {
+  incidentEvents,
+  incidents,
+  serviceComponents,
+  serviceStatus,
+  type DashboardRows,
+  type IncidentRow,
 } from "../../db/schema";
 import {
   INCIDENT_HISTORY_DISPLAY_LIMIT,
@@ -18,6 +23,9 @@ import {
   type IncidentRecord,
 } from "../domain/reconcile";
 import { failureMetadata } from "../domain/failure";
+
+type AppDatabase = ReturnType<typeof drizzle<typeof schema, D1Database>>;
+type D1BatchQuery = Parameters<AppDatabase["batch"]>[0][number];
 
 export interface CollectionStore {
   getUnresolvedIncidents(serviceId: string): Promise<KnownIncident[]>;
@@ -34,109 +42,66 @@ export interface DashboardStore extends CollectionStore {
   pruneHistory(now: Date): Promise<void>;
 }
 
+const incidentSelection = {
+  serviceId: incidents.serviceId,
+  id: incidents.id,
+  title: incidents.title,
+  body: incidents.body,
+  kind: incidents.kind,
+  state: incidents.state,
+  sourceStatus: incidents.sourceStatus,
+  sourceType: incidents.sourceType,
+  sourceImpact: incidents.sourceImpact,
+  severityStatus: incidents.severityStatus,
+  componentIdsJson: incidents.componentIdsJson,
+  componentsJson: incidents.componentsJson,
+  officialCreatedAt: incidents.officialCreatedAt,
+  officialUpdatedAt: incidents.officialUpdatedAt,
+  url: incidents.url,
+  lifecycle: sql<IncidentRow["lifecycle"]>`CASE WHEN ${incidents.lifecycle} = 'resolved'
+    THEN 'closed' ELSE ${incidents.lifecycle} END`,
+  closureReason: incidents.closureReason,
+  firstSeenAt: incidents.firstSeenAt,
+  closedDetectedAt: incidents.resolvedDetectedAt,
+  fingerprint: incidents.fingerprint,
+  revision: incidents.revision,
+  lastObservedAt: incidents.lastObservedAt,
+};
+
 export function createD1Store(database: D1Database): DashboardStore {
+  const db = drizzle(database, { schema });
+
   return {
     async getUnresolvedIncidents(serviceId) {
-      const result = await database
-        .prepare(`
-    SELECT
-      service_id AS serviceId,
-      id,
-      title,
-      body,
-      kind,
-      state,
-      source_status AS sourceStatus,
-      source_type AS sourceType,
-      source_impact AS sourceImpact,
-      severity_status AS severityStatus,
-      component_ids_json AS componentIdsJson,
-      components_json AS componentsJson,
-      official_created_at AS officialCreatedAt,
-      official_updated_at AS officialUpdatedAt,
-      url,
-      CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
-      closure_reason AS closureReason,
-      first_seen_at AS firstSeenAt,
-      resolved_detected_at AS closedDetectedAt,
-      fingerprint,
-      revision,
-      last_observed_at AS lastObservedAt
-    FROM incidents
-        WHERE service_id = ? AND lifecycle IN ('active', 'unverified')
-  `)
-        .bind(serviceId)
-        .all<IncidentRow>();
-      return result.results.map(toIncidentRecord);
+      const rows = await db
+        .select(incidentSelection)
+        .from(incidents)
+        .where(
+          and(
+            eq(incidents.serviceId, serviceId),
+            inArray(incidents.lifecycle, ["active", "unverified"]),
+          ),
+        )
+        .all();
+      return rows.map(toIncidentRecord);
     },
 
     async saveSuccess(service, snapshot, observedAt) {
-      const existing = await database
-        .prepare(`
-    SELECT
-      service_id AS serviceId,
-      id,
-      title,
-      body,
-      kind,
-      state,
-      source_status AS sourceStatus,
-      source_type AS sourceType,
-      source_impact AS sourceImpact,
-      severity_status AS severityStatus,
-      component_ids_json AS componentIdsJson,
-      components_json AS componentsJson,
-      official_created_at AS officialCreatedAt,
-      official_updated_at AS officialUpdatedAt,
-      url,
-      CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
-      closure_reason AS closureReason,
-      first_seen_at AS firstSeenAt,
-      resolved_detected_at AS closedDetectedAt,
-      fingerprint,
-      revision,
-      last_observed_at AS lastObservedAt
-    FROM incidents
-    WHERE service_id = ?
-  `)
-        .bind(service.id)
-        .all<IncidentRow>();
+      const existing = await db
+        .select(incidentSelection)
+        .from(incidents)
+        .where(eq(incidents.serviceId, service.id))
+        .all();
       const reconciled = reconcileIncidents(
         service.id,
-        existing.results.map(toIncidentRecord),
+        existing.map(toIncidentRecord),
         snapshot.incidents,
         observedAt,
         snapshot.incidentListComplete,
         snapshot.unverifiedIncidentIds,
       );
 
-      await database.batch([
-        database
-          .prepare(
-            `INSERT INTO service_status (
-              service_id, status, source_status, summary, last_checked_at,
-              last_success_at, last_error_at, error_code
-            ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
-            ON CONFLICT(service_id) DO UPDATE SET
-              status = excluded.status,
-              source_status = excluded.source_status,
-              summary = excluded.summary,
-              last_checked_at = excluded.last_checked_at,
-              last_success_at = excluded.last_success_at,
-              last_error_at = NULL,
-              error_code = NULL
-            WHERE service_status.last_checked_at IS NULL
-              OR service_status.last_checked_at < excluded.last_checked_at`,
-          )
-          .bind(
-            service.id,
-            snapshot.status,
-            snapshot.sourceStatus,
-            snapshot.summary,
-            observedAt,
-            observedAt,
-          ),
-      ]);
+      await db.batch([successStatusUpsert(db, service.id, snapshot, observedAt)]);
 
       if (snapshot.components !== undefined) {
         await syncComponents(database, service.id, snapshot.components, observedAt);
@@ -146,97 +111,77 @@ export function createD1Store(database: D1Database): DashboardStore {
       const groups = reconciled.changedIncidents.map((record) => {
         const eventId = JSON.stringify([record.serviceId, record.id, record.revision]);
         const event = eventsById.get(eventId);
-        return [incidentUpsert(database, record), ...(event ? [eventInsert(database, event)] : [])];
+        return [incidentUpsert(db, record), ...(event ? [eventInsert(db, event)] : [])];
       });
-      await runBatches(database, groups);
+      await runDrizzleBatches(db, groups);
     },
 
     async saveFailure(service, observedAt, errorCode) {
       const failure = failureMetadata(observedAt, errorCode);
-      await database.batch([
-        database
-          .prepare(
-            `INSERT INTO service_status (
-            service_id, status, last_checked_at, last_error_at, error_code
-          ) VALUES (?, 'unknown', ?, ?, ?)
-          ON CONFLICT(service_id) DO UPDATE SET
-            last_checked_at = excluded.last_checked_at,
-            last_error_at = excluded.last_error_at,
-            error_code = excluded.error_code
-            WHERE service_status.last_checked_at IS NULL
-              OR service_status.last_checked_at < excluded.last_checked_at`,
-          )
-          .bind(service.id, failure.lastCheckedAt, failure.lastErrorAt, failure.errorCode),
+      await db.batch([
+        db
+          .insert(serviceStatus)
+          .values({
+            serviceId: service.id,
+            status: "unknown",
+            lastCheckedAt: failure.lastCheckedAt,
+            lastErrorAt: failure.lastErrorAt,
+            errorCode: failure.errorCode,
+          })
+          .onConflictDoUpdate({
+            target: serviceStatus.serviceId,
+            set: {
+              lastCheckedAt: sql`excluded.last_checked_at`,
+              lastErrorAt: sql`excluded.last_error_at`,
+              errorCode: sql`excluded.error_code`,
+            },
+            setWhere: sql`${serviceStatus.lastCheckedAt} is null
+              or ${serviceStatus.lastCheckedAt} < excluded.last_checked_at`,
+          }),
       ]);
     },
 
     async getDashboardRows(serviceIds) {
-      const statusFilter = buildServiceFilter(serviceIds);
-      const componentFilter = buildServiceFilter(serviceIds);
-      const incidentFilter = buildServiceFilter(serviceIds, "AND");
-      const eventFilter = buildServiceFilter(serviceIds);
-      const [statuses, components, incidents, events] = await Promise.all([
-        database
-          .prepare(
-            `SELECT
-              service_id AS serviceId, status, source_status AS sourceStatus,
-              summary, last_checked_at AS lastCheckedAt, last_success_at AS lastSuccessAt,
-              last_error_at AS lastErrorAt, error_code AS errorCode
-            FROM service_status${statusFilter.sql}`,
+      const [statusRows, componentRows, incidentRows, eventRows] = await Promise.all([
+        db
+          .select()
+          .from(serviceStatus)
+          .where(buildServiceFilter(serviceStatus.serviceId, serviceIds))
+          .all(),
+        db
+          .select()
+          .from(serviceComponents)
+          .where(buildServiceFilter(serviceComponents.serviceId, serviceIds))
+          .orderBy(
+            asc(serviceComponents.serviceId),
+            sql`${serviceComponents.name} COLLATE NOCASE`,
+            asc(serviceComponents.id),
           )
-          .bind(...statusFilter.values)
-          .all<ServiceStatusRow>(),
-        database
-          .prepare(
-            `SELECT
-              service_id AS serviceId, id, name, status,
-              source_status AS sourceStatus, last_changed_at AS lastChangedAt
-            FROM service_components${componentFilter.sql}
-            ORDER BY service_id, name COLLATE NOCASE, id`,
+          .all(),
+        db
+          .select(incidentSelection)
+          .from(incidents)
+          .where(
+            and(
+              inArray(incidents.lifecycle, ["active", "unverified"]),
+              buildServiceFilter(incidents.serviceId, serviceIds),
+            ),
           )
-          .bind(...componentFilter.values)
-          .all<ServiceComponentRow>(),
-        database
-          .prepare(
-            `SELECT
-              service_id AS serviceId, id, title, body, kind, state,
-              source_status AS sourceStatus, source_type AS sourceType,
-              source_impact AS sourceImpact, severity_status AS severityStatus,
-              component_ids_json AS componentIdsJson, components_json AS componentsJson,
-              official_created_at AS officialCreatedAt,
-              official_updated_at AS officialUpdatedAt, url,
-              CASE WHEN lifecycle = 'resolved' THEN 'closed' ELSE lifecycle END AS lifecycle,
-              closure_reason AS closureReason,
-              first_seen_at AS firstSeenAt, resolved_detected_at AS closedDetectedAt,
-              fingerprint, revision, last_observed_at AS lastObservedAt
-            FROM incidents
-            WHERE lifecycle IN ('active', 'unverified')
-              ${incidentFilter.sql}
-            ORDER BY service_id, official_created_at DESC`,
-          )
-          .bind(...incidentFilter.values)
-          .all<IncidentRow>(),
-        database
-          .prepare(
-            `SELECT
-              id, service_id AS serviceId, incident_id AS incidentId, title, body,
-              kind, event_kind AS eventKind, closure_reason AS closureReason,
-              source_status AS sourceStatus,
-              severity_status AS severityStatus, component_ids_json AS componentIdsJson,
-              components_json AS componentsJson,
-              detected_at AS detectedAt, official_event_at AS officialEventAt, url
-            FROM incident_events${eventFilter.sql}
-            ORDER BY detected_at DESC
-            LIMIT ?`,
-          )
-          .bind(...eventFilter.values, INCIDENT_HISTORY_DISPLAY_LIMIT)
-          .all<IncidentEventRow>(),
+          .orderBy(asc(incidents.serviceId), desc(incidents.officialCreatedAt))
+          .all(),
+        db
+          .select()
+          .from(incidentEvents)
+          .where(buildServiceFilter(incidentEvents.serviceId, serviceIds))
+          .orderBy(desc(incidentEvents.detectedAt))
+          .limit(INCIDENT_HISTORY_DISPLAY_LIMIT)
+          .all(),
       ]);
       return {
-        statusRows: statuses.results,
-        componentRows: components.results,
-        incidentRows: incidents.results,
-        eventRows: events.results,
+        statusRows,
+        componentRows,
+        incidentRows,
+        eventRows,
       };
     },
 
@@ -244,125 +189,165 @@ export function createD1Store(database: D1Database): DashboardStore {
       const cutoff = new Date(
         now.getTime() - INCIDENT_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1_000,
       ).toISOString();
-      await database.batch([
-        database.prepare("DELETE FROM incident_events WHERE detected_at < ?").bind(cutoff),
-        database
-          .prepare(
-            `DELETE FROM incidents
-            WHERE lifecycle = 'resolved' AND resolved_detected_at < ?`,
-          )
-          .bind(cutoff),
+      await db.batch([
+        db.delete(incidentEvents).where(lt(incidentEvents.detectedAt, cutoff)),
+        db
+          .delete(incidents)
+          .where(
+            and(eq(incidents.lifecycle, "resolved"), lt(incidents.resolvedDetectedAt, cutoff)),
+          ),
       ]);
     },
   };
 }
 
 function buildServiceFilter(
+  column: AnySQLiteColumn,
   serviceIds: readonly string[] | undefined,
-  conjunction: "AND" | "WHERE" = "WHERE",
-): { sql: string; values: string[] } {
-  if (serviceIds === undefined) return { sql: "", values: [] };
-  if (serviceIds.length === 0) return { sql: ` ${conjunction} 1 = 0`, values: [] };
-  return {
-    sql: ` ${conjunction} service_id IN (${serviceIds.map(() => "?").join(", ")})`,
-    values: [...serviceIds],
+): SQL | undefined {
+  if (serviceIds === undefined) return undefined;
+  if (serviceIds.length === 0) return sql`1 = 0`;
+  return inArray(column, [...serviceIds]);
+}
+
+function successStatusUpsert(
+  database: AppDatabase,
+  serviceId: string,
+  snapshot: ProviderSnapshot,
+  observedAt: string,
+): D1BatchQuery {
+  return database
+    .insert(serviceStatus)
+    .values({
+      serviceId,
+      status: snapshot.status,
+      sourceStatus: snapshot.sourceStatus,
+      summary: snapshot.summary,
+      lastCheckedAt: observedAt,
+      lastSuccessAt: observedAt,
+      lastErrorAt: null,
+      errorCode: null,
+    })
+    .onConflictDoUpdate({
+      target: serviceStatus.serviceId,
+      set: {
+        status: sql`excluded.status`,
+        sourceStatus: sql`excluded.source_status`,
+        summary: sql`excluded.summary`,
+        lastCheckedAt: sql`excluded.last_checked_at`,
+        lastSuccessAt: sql`excluded.last_success_at`,
+        lastErrorAt: null,
+        errorCode: null,
+      },
+      setWhere: sql`${serviceStatus.lastCheckedAt} is null
+        or ${serviceStatus.lastCheckedAt} < excluded.last_checked_at`,
+    });
+}
+
+function incidentUpsert(database: AppDatabase, record: IncidentRecord): D1BatchQuery {
+  const values: typeof incidents.$inferInsert = {
+    serviceId: record.serviceId,
+    id: record.id,
+    title: record.title,
+    body: record.body,
+    kind: record.kind,
+    state: record.state,
+    sourceStatus: record.sourceStatus,
+    sourceType: record.sourceType,
+    sourceImpact: record.sourceImpact,
+    severityStatus: record.severityStatus,
+    componentIdsJson: record.componentIdsJson,
+    componentsJson: record.componentsJson,
+    officialCreatedAt: record.officialCreatedAt,
+    officialUpdatedAt: record.officialUpdatedAt,
+    url: record.url,
+    active: record.lifecycle !== "closed",
+    lifecycle: record.lifecycle === "closed" ? "resolved" : record.lifecycle,
+    firstSeenAt: record.firstSeenAt,
+    resolvedDetectedAt: record.closedDetectedAt,
+    closureReason: record.closureReason,
+    recheckUnavailable: record.lifecycle === "unverified",
+    fingerprint: record.fingerprint,
+    revision: record.revision,
+    lastObservedAt: record.lastObservedAt,
   };
-}
 
-function incidentUpsert(database: D1Database, record: IncidentRecord): D1PreparedStatement {
   return database
-    .prepare(
-      `INSERT INTO incidents (
-        service_id, id, title, body, kind, state, source_status, source_type,
-        source_impact, severity_status, component_ids_json, components_json, official_created_at,
-        official_updated_at, url, active, lifecycle, first_seen_at, resolved_detected_at,
-        closure_reason, recheck_unavailable, fingerprint, revision, last_observed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(service_id, id) DO UPDATE SET
-        title = excluded.title,
-        body = excluded.body,
-        kind = excluded.kind,
-        state = excluded.state,
-        source_status = excluded.source_status,
-        source_type = excluded.source_type,
-        source_impact = excluded.source_impact,
-        severity_status = excluded.severity_status,
-        component_ids_json = excluded.component_ids_json,
-        components_json = excluded.components_json,
-        official_created_at = excluded.official_created_at,
-        official_updated_at = excluded.official_updated_at,
-        url = excluded.url,
-        active = excluded.active,
-        lifecycle = excluded.lifecycle,
-        resolved_detected_at = excluded.resolved_detected_at,
-        closure_reason = excluded.closure_reason,
-        recheck_unavailable = excluded.recheck_unavailable,
-        fingerprint = excluded.fingerprint,
-        revision = excluded.revision,
-        last_observed_at = excluded.last_observed_at
-      WHERE incidents.last_observed_at <= excluded.last_observed_at`,
-    )
-    .bind(
-      record.serviceId,
-      record.id,
-      record.title,
-      record.body,
-      record.kind,
-      record.state,
-      record.sourceStatus,
-      record.sourceType,
-      record.sourceImpact,
-      record.severityStatus,
-      record.componentIdsJson,
-      record.componentsJson,
-      record.officialCreatedAt,
-      record.officialUpdatedAt,
-      record.url,
-      Number(record.lifecycle !== "closed"),
-      record.lifecycle === "closed" ? "resolved" : record.lifecycle,
-      record.firstSeenAt,
-      record.closedDetectedAt,
-      record.closureReason,
-      Number(record.lifecycle === "unverified"),
-      record.fingerprint,
-      record.revision,
-      record.lastObservedAt,
-    );
+    .insert(incidents)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [incidents.serviceId, incidents.id],
+      set: {
+        title: values.title,
+        body: values.body,
+        kind: values.kind,
+        state: values.state,
+        sourceStatus: values.sourceStatus,
+        sourceType: values.sourceType,
+        sourceImpact: values.sourceImpact,
+        severityStatus: values.severityStatus,
+        componentIdsJson: values.componentIdsJson,
+        componentsJson: values.componentsJson,
+        officialCreatedAt: values.officialCreatedAt,
+        officialUpdatedAt: values.officialUpdatedAt,
+        url: values.url,
+        active: values.active,
+        lifecycle: values.lifecycle,
+        resolvedDetectedAt: values.resolvedDetectedAt,
+        closureReason: values.closureReason,
+        recheckUnavailable: values.recheckUnavailable,
+        fingerprint: values.fingerprint,
+        revision: values.revision,
+        lastObservedAt: values.lastObservedAt,
+      },
+      setWhere: sql`${incidents.lastObservedAt} <= excluded.last_observed_at`,
+    });
 }
 
-function eventInsert(database: D1Database, event: IncidentEventRecord): D1PreparedStatement {
+function eventInsert(database: AppDatabase, event: IncidentEventRecord): D1BatchQuery {
   return database
-    .prepare(
-      `INSERT INTO incident_events (
-        id, service_id, incident_id, kind, event_kind, title, body, state,
-        source_status, source_type, source_impact, severity_status,
-        component_ids_json, components_json, url, official_event_at, detected_at, closure_reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO NOTHING`,
-    )
-    .bind(
-      event.id,
-      event.serviceId,
-      event.incidentId,
-      event.kind,
-      event.eventKind,
-      event.title,
-      event.body,
-      event.state,
-      event.sourceStatus,
-      event.sourceType,
-      event.sourceImpact,
-      event.severityStatus,
-      event.componentIdsJson,
-      event.componentsJson,
-      event.url,
-      event.officialEventAt,
-      event.detectedAt,
-      event.closureReason,
-    );
+    .insert(incidentEvents)
+    .values({
+      id: event.id,
+      serviceId: event.serviceId,
+      incidentId: event.incidentId,
+      kind: event.kind,
+      eventKind: event.eventKind,
+      title: event.title,
+      body: event.body,
+      state: event.state,
+      sourceStatus: event.sourceStatus,
+      sourceType: event.sourceType,
+      sourceImpact: event.sourceImpact,
+      severityStatus: event.severityStatus,
+      componentIdsJson: event.componentIdsJson,
+      componentsJson: event.componentsJson,
+      url: event.url,
+      officialEventAt: event.officialEventAt,
+      detectedAt: event.detectedAt,
+      closureReason: event.closureReason,
+    })
+    .onConflictDoNothing({ target: incidentEvents.id });
 }
 
-async function runBatches(database: D1Database, groups: D1PreparedStatement[][]): Promise<void> {
+async function runDrizzleBatches(database: AppDatabase, groups: D1BatchQuery[][]): Promise<void> {
+  let batch: D1BatchQuery[] = [];
+  for (const group of groups) {
+    if (batch.length + group.length > 100) {
+      if (batch.length > 0) await executeDrizzleBatch(database, batch);
+      batch = [];
+    }
+    batch.push(...group);
+  }
+  if (batch.length > 0) await executeDrizzleBatch(database, batch);
+}
+
+async function executeDrizzleBatch(database: AppDatabase, queries: D1BatchQuery[]): Promise<void> {
+  if (queries.length === 0) return;
+  await database.batch(queries as [D1BatchQuery, ...D1BatchQuery[]]);
+}
+
+async function runRawBatches(database: D1Database, groups: D1PreparedStatement[][]): Promise<void> {
   let batch: D1PreparedStatement[] = [];
   for (const group of groups) {
     if (batch.length + group.length > 100) {
@@ -410,6 +395,7 @@ async function syncComponents(
   components: NonNullable<ProviderSnapshot["components"]>,
   observedAt: string,
 ): Promise<void> {
+  // The freshness guard and json_each cleanup are clearer as SQL with their correlated conditions.
   const upserts = components.map((component) =>
     database
       .prepare(
@@ -441,7 +427,7 @@ async function syncComponents(
         observedAt,
       ),
   );
-  await runBatches(
+  await runRawBatches(
     database,
     upserts.map((statement) => [statement]),
   );
