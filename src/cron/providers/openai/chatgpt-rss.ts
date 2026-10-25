@@ -1,5 +1,7 @@
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { type KnownIncident, type NormalizedIncident } from "../../../domain";
 import {
+  asRecord,
   fetchText,
   normalizeTimestamp,
   parseIncidentState,
@@ -10,6 +12,17 @@ import {
 } from "../shared";
 import type { OpenAIChatGPTService } from "./chatgpt-components";
 const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
+const rssParser = new XMLParser({
+  ignoreAttributes: true,
+  parseTagValue: false,
+  processEntities: {
+    enabled: true,
+    maxEntitySize: 256,
+    maxExpansionDepth: 5,
+    maxTotalExpansions: 100,
+  },
+  trimValues: true,
+});
 
 export async function recheckOmittedIncident(
   incident: KnownIncident,
@@ -60,13 +73,19 @@ function parseIncidentFeed(
   incidentId: string,
   service: OpenAIChatGPTService,
 ): IncidentFeedUpdate {
-  const channel = xml.match(/<channel\b[^>]*>([\s\S]*?)<\/channel>/i)?.[1];
+  if (XMLValidator.validate(xml) !== true) {
+    throw new ProviderError("invalid_payload", "OpenAI incident feed is invalid");
+  }
+  const rss = asRecord(asRecord(rssParser.parse(xml))?.rss);
+  const channel = asRecord(rss?.channel);
   if (!channel) throw new ProviderError("invalid_payload", "OpenAI incident feed is invalid");
 
   const expectedPath = `/incidents/${encodeURIComponent(incidentId)}`;
-  const feedLinks = [...channel.matchAll(/<link\b[^>]*>([\s\S]*?)<\/link>/gi)].map((match) =>
-    decodeXmlText(match[1] ?? ""),
-  );
+  const items = asArray(channel.item).map(asRecord).filter(isRecord);
+  const feedLinks = [
+    ...asStringArray(channel.link),
+    ...items.flatMap((item) => asStringArray(item.link)),
+  ];
   const linksToIncident = feedLinks.some((link) => {
     const safeUrl = safeIncidentUrl(link, service);
     return safeUrl ? new URL(safeUrl).pathname.replaceAll("//", "/") === expectedPath : false;
@@ -75,21 +94,20 @@ function parseIncidentFeed(
     throw new ProviderError("invalid_payload", "OpenAI incident feed did not match the incident");
   }
 
-  const items = [...channel.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(
-    (match) => match[1] ?? "",
-  );
   const updates = items
     .map((item) => {
-      const title = extractXmlTag(item, "title");
+      const title = asString(item.title)?.trim() || null;
       if (!title) return null;
-      const updatedAt = normalizeTimestamp(extractXmlTag(item, "pubDate"));
-      const description = extractXmlTag(item, "description");
-      const { sourceStatus, state } = parseIncidentFeedStatus(title, description);
+      const updatedAt = normalizeTimestamp(item.pubDate);
+      // XML parsing handles XML entities; html-to-text handles embedded HTML entities.
+      const description = asString(item.description);
+      const body = statusText(description);
+      const { sourceStatus, state } = parseIncidentFeedStatus(title, body);
       return {
         sourceStatus,
         state,
         updatedAt,
-        body: statusText(description),
+        body,
       } satisfies IncidentFeedUpdate;
     })
     .filter((update): update is IncidentFeedUpdate => update !== null);
@@ -101,12 +119,29 @@ function parseIncidentFeed(
   return latest;
 }
 
+function asArray(value: unknown): unknown[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function asStringArray(value: unknown): string[] {
+  return asArray(value).filter((entry): entry is string => typeof entry === "string");
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function isRecord(value: Record<string, unknown> | null): value is Record<string, unknown> {
+  return value !== null;
+}
+
 function parseIncidentFeedStatus(
   title: string,
   description: string | null,
 ): { sourceStatus: string; state: NormalizedIncident["state"] } {
   const descriptionStatus = description?.match(
-    /<(?:b|strong)\b[^>]*>\s*Status:\s*([^<]+)<\/(?:b|strong)>/i,
+    /(?:^|\n)\s*Status:\s*(in[\s_-]*progress[\s_-]*maintenance|in[\s_-]*progress|resolved|closed|complete(?:d)?|cancell?ed|postmortem|scheduled|monitoring|identified|investigating|active|open)\b/i,
   )?.[1];
   const titleParts = title.split(/\s*(?:-|–|—|:)\s*/).filter(Boolean);
   const candidates = [descriptionStatus, titleParts[0], titleParts.at(-1), title];
@@ -117,22 +152,6 @@ function parseIncidentFeedStatus(
     if (state !== "unknown") return { sourceStatus, state };
   }
   return { sourceStatus: title, state: "unknown" };
-}
-
-function extractXmlTag(value: string, tag: string): string | null {
-  const match = value.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return match ? decodeXmlText(match[1] ?? "") : null;
-}
-
-function decodeXmlText(value: string): string {
-  return value
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
-    .trim();
 }
 
 export function selectOmittedIncidentsForRecheck(incidents: KnownIncident[]): KnownIncident[] {
