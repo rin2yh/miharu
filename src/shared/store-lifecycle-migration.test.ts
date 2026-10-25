@@ -115,6 +115,7 @@ describe("D1 incident lifecycle migration", () => {
     database.migrate("db/migrations/0002_service_components.sql");
     database.migrate("db/migrations/0003_incident_lifecycle.sql");
     database.migrate("db/migrations/0004_incident_tracking_closure.sql");
+    database.migrate("db/migrations/0005_incident_body_normalization.sql");
     insertLegacyEvent(database, {
       id: "compat-opened",
       incidentId: "compat-disappeared",
@@ -128,6 +129,17 @@ describe("D1 incident lifecycle migration", () => {
       sourceStatus: "investigating",
       active: 1,
     });
+    database
+      .prepare("UPDATE incidents SET body_normalized = 1 WHERE id = 'compat-disappeared'")
+      .run();
+    database
+      .prepare("UPDATE incidents SET body = '<p>legacy HTML</p>' WHERE id = 'compat-disappeared'")
+      .run();
+    expect(
+      database.sqlite
+        .prepare("SELECT body_normalized FROM incidents WHERE id = 'compat-disappeared'")
+        .get(),
+    ).toEqual({ body_normalized: 0 });
 
     database
       .prepare(
@@ -247,6 +259,7 @@ describe("D1 incident lifecycle migration", () => {
     });
     database.migrate("db/migrations/0003_incident_lifecycle.sql");
     database.migrate("db/migrations/0004_incident_tracking_closure.sql");
+    database.migrate("db/migrations/0005_incident_body_normalization.sql");
 
     const migrated = database.sqlite
       .prepare(
@@ -348,7 +361,7 @@ describe("D1 incident lifecycle migration", () => {
     const unknownIncident = {
       id: "legacy-official-unknown",
       title: "legacy-official-unknown",
-      body: null,
+      body: "A normalized Provider update.",
       kind: "incident" as const,
       state: "unknown" as const,
       sourceStatus: "future_status",
@@ -369,9 +382,15 @@ describe("D1 incident lifecycle migration", () => {
       incidentListComplete: false,
       unverifiedIncidentIds: ["legacy-recheck"],
     };
+    database
+      .prepare("UPDATE incidents SET body_normalized = 1 WHERE id = 'legacy-official-unknown'")
+      .run();
     await store.saveSuccess(service, snapshot, "2026-10-23T05:00:00.000Z");
 
     const rows = await store.getDashboardRows();
+    expect(
+      rows.incidentRows.find(({ id }) => id === "legacy-official-unknown")?.bodyNormalized,
+    ).toBe(true);
     const payload = buildDashboardPayload(rows, new Date("2026-10-23T05:01:00.000Z"));
     const workspace = payload.services.find(({ id }) => id === "google-workspace");
     expect(workspace?.incidents.find(({ id }) => id === "legacy-official-unknown")).toMatchObject({

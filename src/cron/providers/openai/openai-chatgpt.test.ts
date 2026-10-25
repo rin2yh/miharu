@@ -281,6 +281,27 @@ describe("OpenAI ChatGPT provider", () => {
   });
 
   it.each([
+    {
+      label: "converts a legacy stored body",
+      body: "<p>Legacy body</p>",
+      bodyNormalized: false,
+      expected: "Legacy body",
+    },
+    {
+      label: "preserves an already normalized body",
+      body: "<script>alert(1)</script>",
+      bodyNormalized: true,
+      expected: "<script>alert(1)</script>",
+    },
+  ])("$label when an RSS update omits its description", async (stored) => {
+    const incident = { ...capturedChatGPTIncident, ...stored };
+    const feed = `<rss><channel><link>https://status.openai.com/incidents/${incident.id}</link><item><title>Resolved</title><pubDate>Thu, 22 Oct 2026 08:50:43 GMT</pubDate><description></description></item></channel></rss>`;
+    const snapshot = await fetchOmittedChatGPTIncident(incident, feed);
+
+    expect(snapshot.incidents).toMatchObject([{ id: incident.id, body: stored.expected }]);
+  });
+
+  it.each([
     "Resolved - Elevated ChatGPT conversation and Responses API errors",
     "Elevated ChatGPT conversation and Responses API errors - Resolved",
   ])("recognizes a status appended or prepended in an RSS title: %s", async (title) => {

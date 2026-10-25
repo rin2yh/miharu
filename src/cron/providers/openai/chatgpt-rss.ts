@@ -12,6 +12,7 @@ import {
 } from "../shared";
 import type { OpenAIChatGPTService } from "./chatgpt-components";
 const OMITTED_INCIDENT_RECHECKS_PER_POLL = 5;
+type StoredKnownIncident = KnownIncident & { bodyNormalized?: boolean };
 const rssParser = new XMLParser({
   ignoreAttributes: true,
   parseTagValue: false,
@@ -25,7 +26,7 @@ const rssParser = new XMLParser({
 });
 
 export async function recheckOmittedIncident(
-  incident: KnownIncident,
+  incident: StoredKnownIncident,
   service: OpenAIChatGPTService,
   signal: AbortSignal,
   fetcher: FetchLike,
@@ -53,7 +54,7 @@ export async function recheckOmittedIncident(
       ...officialIncident,
       state: update.state,
       sourceStatus: update.sourceStatus,
-      body: update.body ?? incident.body,
+      body: update.body ?? (incident.bodyNormalized ? incident.body : statusText(incident.body)),
       officialUpdatedAt: update.updatedAt ?? incident.officialUpdatedAt,
     };
   } catch {
