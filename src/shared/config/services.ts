@@ -126,6 +126,10 @@ export const SERVICES = [
   },
 ] satisfies ServiceConfig[];
 
+export const SERVICES_BY_NAME = SERVICES.toSorted((left, right) =>
+  left.name.localeCompare(right.name, "en"),
+);
+
 export const COLLECTION_TIMEOUT_MS = 8_000;
 export const FRESHNESS_WARNING_SECONDS = 180;
 export const INCIDENT_HISTORY_RETENTION_DAYS = 7;

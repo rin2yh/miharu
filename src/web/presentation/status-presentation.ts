@@ -1,5 +1,4 @@
 import type {
-  DashboardService,
   IncidentKind,
   IncidentLifecycle,
   IncidentState,
@@ -85,18 +84,4 @@ export function relativeTime(value: string): string {
   const hours = Math.floor(elapsedMinutes / 60);
   if (hours < 24) return `${hours}時間`;
   return `${Math.floor(hours / 24)}日`;
-}
-
-export function servicePriority(service: DashboardService): number {
-  return Math.max(
-    priorityRank(service.status),
-    ...service.components.map((component) => priorityRank(component.status)),
-    ...service.incidents.map((incident) =>
-      incident.severityStatus ? priorityRank(incident.severityStatus) : 0,
-    ),
-  );
-}
-
-function priorityRank(status: NormalizedStatus): number {
-  return status === "operational" || status === "unknown" ? 0 : STATUS_RANK[status];
 }

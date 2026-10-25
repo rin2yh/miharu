@@ -1,10 +1,8 @@
-import type { DashboardPayload } from "../../domain";
-import { SERVICES } from "../../shared/config/services";
+import { SERVICES, SERVICES_BY_NAME } from "../../shared/config/services";
 import { AppBrand } from "./app-brand";
 import { ServiceSearch } from "./service-search";
 
 type ServiceSidebarProps = {
-  orderedServices: DashboardPayload["services"];
   selectedServiceIds: string[];
   onSelect: (serviceIds: string[]) => void;
   query: string;
@@ -12,7 +10,6 @@ type ServiceSidebarProps = {
 };
 
 export function ServiceSidebar({
-  orderedServices,
   selectedServiceIds,
   onSelect,
   query,
@@ -22,18 +19,7 @@ export function ServiceSidebar({
   const allServicesSelected = selectedServiceIds.length === SERVICES.length;
   const someServicesSelected = selectedServiceIds.length > 0 && !allServicesSelected;
   const needle = query.trim().toLocaleLowerCase("ja");
-  const configuredServicesById = new Map<string, (typeof SERVICES)[number]>(
-    SERVICES.map((service) => [service.id, service]),
-  );
-  const orderedServiceIds = new Set(orderedServices.map(({ id }) => id));
-  const sidebarServices = [
-    ...orderedServices.flatMap(({ id }) => {
-      const service = configuredServicesById.get(id);
-      return service ? [service] : [];
-    }),
-    ...SERVICES.filter((service) => !orderedServiceIds.has(service.id)),
-  ];
-  const visibleServices = sidebarServices.filter((service) =>
+  const visibleServices = SERVICES_BY_NAME.filter((service) =>
     service.name.toLocaleLowerCase("ja").includes(needle),
   );
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { DASHBOARD_POLL_INTERVAL_MS } from "../shared/config/services";
+import { DASHBOARD_POLL_INTERVAL_MS, SERVICES_BY_NAME } from "../shared/config/services";
 import type { DashboardPayload } from "../domain";
 import { fetchDashboard } from "./api";
 import { AppSidebar } from "./components/app-sidebar";
@@ -11,7 +11,6 @@ import ServiceCard from "./components/service-card";
 import { ServiceSearch } from "./components/service-search";
 import { ServiceSelector } from "./components/service-selector";
 import { getSelectedServiceIds, getServiceSelectionUrl } from "./filters/service-filter";
-import { servicePriority } from "./presentation/status-presentation";
 
 type DashboardLoader = (
   serviceIds: readonly string[],
@@ -55,12 +54,12 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
     }
   };
 
-  const orderedServices = [...(payload?.services ?? [])];
-  orderedServices.sort((left, right) => {
-    const incidentDifference =
-      Number(right.incidents.length > 0) - Number(left.incidents.length > 0);
-    const priorityDifference = servicePriority(right) - servicePriority(left);
-    return incidentDifference || priorityDifference || left.name.localeCompare(right.name, "ja");
+  const dashboardServicesById = new Map(
+    (payload?.services ?? []).map((service) => [service.id, service] as const),
+  );
+  const orderedServices = SERVICES_BY_NAME.flatMap(({ id }) => {
+    const service = dashboardServicesById.get(id);
+    return service ? [service] : [];
   });
 
   const activeServiceIds = new Set(selectedServiceIds);
@@ -98,7 +97,6 @@ export function App({ load: providedLoad }: { load?: DashboardLoader }) {
       )}
 
       <AppSidebar
-        orderedServices={orderedServices}
         selectedServiceIds={selectedServiceIds}
         onSelect={applyServiceSelection}
         query={query}

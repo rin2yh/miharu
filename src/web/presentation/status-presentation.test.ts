@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NORMALIZED_STATUSES } from "../../domain";
-import type { IncidentState, NormalizedStatus } from "../../domain";
+import type { IncidentState } from "../../domain";
 import {
   formatDateTime,
   incidentKindLabel,
   incidentStateLabel,
   isAbnormal,
   relativeTime,
-  servicePriority,
   STATUS_LABELS,
-  STATUS_RANK,
 } from "./status-presentation";
-import { component, incident, service } from "../test-fixtures";
 
 afterEach(() => vi.useRealTimers());
 
@@ -96,48 +93,5 @@ describe("status presentation", () => {
 
   it("handles an invalid relative timestamp", () => {
     expect(relativeTime("not-a-date")).toBe("時刻不明");
-  });
-
-  it.each([
-    {
-      name: "service status",
-      input: service({ status: "partial_outage" }),
-      expected: STATUS_RANK.partial_outage,
-    },
-    {
-      name: "component status",
-      input: service({ components: [component("api", "API", "degraded_performance")] }),
-      expected: STATUS_RANK.degraded_performance,
-    },
-    {
-      name: "incident severity",
-      input: service({ incidents: [incident({ severityStatus: "major_outage" })] }),
-      expected: STATUS_RANK.major_outage,
-    },
-    {
-      name: "the highest of all statuses",
-      input: service({
-        status: "degraded_performance",
-        components: [component("api", "API", "partial_outage")],
-        incidents: [incident({ severityStatus: "major_outage" })],
-      }),
-      expected: STATUS_RANK.major_outage,
-    },
-    {
-      name: "unknown and operational statuses",
-      input: service({
-        status: "unknown",
-        components: [component("api", "API", "operational")],
-        incidents: [incident({ severityStatus: "unknown" })],
-      }),
-      expected: 0,
-    },
-  ])("uses $name when ordering services", ({ input, expected }) => {
-    expect(servicePriority(input)).toBe(expected);
-  });
-
-  it("ranks maintenance below an active service degradation", () => {
-    const maintenance: NormalizedStatus = "under_maintenance";
-    expect(servicePriority(service({ status: maintenance }))).toBe(STATUS_RANK[maintenance]);
   });
 });

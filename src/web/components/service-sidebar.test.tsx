@@ -1,7 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { SERVICES } from "../../shared/config/services";
+import { SERVICES, SERVICES_BY_NAME } from "../../shared/config/services";
 import { ServiceSidebar } from "./service-sidebar";
+
+function getVisibleServiceNames() {
+  return within(screen.getByRole("navigation", { name: "表示サービス" }))
+    .getAllByRole("button")
+    .slice(1)
+    .map((button) => button.lastElementChild?.textContent?.trim() ?? "");
+}
 
 describe("ServiceSidebar", () => {
   it("selects all services from a partial selection and clears all from the selected state", () => {
@@ -10,7 +17,6 @@ describe("ServiceSidebar", () => {
     const allServiceIds = SERVICES.map(({ id }) => id);
     const { rerender } = render(
       <ServiceSidebar
-        orderedServices={[]}
         selectedServiceIds={["github", "slack"]}
         onSelect={onSelect}
         query=""
@@ -25,7 +31,6 @@ describe("ServiceSidebar", () => {
 
     rerender(
       <ServiceSidebar
-        orderedServices={[]}
         selectedServiceIds={allServiceIds}
         onSelect={onSelect}
         query=""
@@ -38,7 +43,6 @@ describe("ServiceSidebar", () => {
 
     rerender(
       <ServiceSidebar
-        orderedServices={[]}
         selectedServiceIds={[]}
         onSelect={onSelect}
         query=""
@@ -54,7 +58,6 @@ describe("ServiceSidebar", () => {
   it("gives selected services a background and leaves unselected services clear", () => {
     render(
       <ServiceSidebar
-        orderedServices={[]}
         selectedServiceIds={["github"]}
         onSelect={vi.fn<(serviceIds: string[]) => void>()}
         query=""
@@ -69,5 +72,43 @@ describe("ServiceSidebar", () => {
     expect(githubButton).toHaveClass("bg-healthy-bg");
     expect(slackButton).toHaveAttribute("aria-pressed", "false");
     expect(slackButton).not.toHaveClass("bg-healthy-bg");
+  });
+
+  it("keeps configured services in alphabetical order while selection and search change", () => {
+    const onSelect = vi.fn<(serviceIds: string[]) => void>();
+    const onQueryChange = vi.fn<(query: string) => void>();
+    const { rerender } = render(
+      <ServiceSidebar
+        selectedServiceIds={["slack", "github"]}
+        onSelect={onSelect}
+        query=""
+        onQueryChange={onQueryChange}
+      />,
+    );
+    expect(SERVICES_BY_NAME.map(({ name }) => name)).toEqual([
+      "ChatGPT",
+      "Claude",
+      "Cloudflare",
+      "GitHub",
+      "Google Workspace",
+      "Notion",
+      "Slack",
+    ]);
+    expect(getVisibleServiceNames()).toEqual(SERVICES_BY_NAME.map(({ name }) => name));
+
+    rerender(
+      <ServiceSidebar
+        selectedServiceIds={["notion", "cloudflare"]}
+        onSelect={onSelect}
+        query="g"
+        onQueryChange={onQueryChange}
+      />,
+    );
+
+    expect(getVisibleServiceNames()).toEqual(
+      SERVICES_BY_NAME.filter(({ name }) => name.toLowerCase().includes("g")).map(
+        ({ name }) => name,
+      ),
+    );
   });
 });

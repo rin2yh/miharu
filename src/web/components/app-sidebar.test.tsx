@@ -5,13 +5,7 @@ import { AppSidebar } from "./app-sidebar";
 describe("AppSidebar", () => {
   it("places a full-height divider between the desktop sidebar and main content", () => {
     render(
-      <AppSidebar
-        orderedServices={[]}
-        selectedServiceIds={[]}
-        onSelect={() => {}}
-        query=""
-        onQueryChange={() => {}}
-      >
+      <AppSidebar selectedServiceIds={[]} onSelect={() => {}} query="" onQueryChange={() => {}}>
         <section aria-label="メインコンテンツ">サービス一覧</section>
       </AppSidebar>,
     );
