@@ -31,11 +31,11 @@ export async function fetchSlackSnapshot(
 
   const sourceStatus = requiredText(data.status, "Slack status", 100);
   const incidents = data.active_incidents.map((value) => parseSlackIncident(value, service));
+  // Slack's `active` value describes incident lifecycle, not service-wide health.
   const normalizedStatus = normalizeStatus(sourceStatus);
 
   return {
-    // Slack's `active` value describes incident lifecycle, not service-wide health.
-    status: sourceStatus.toLowerCase() === "ok" ? "operational" : normalizedStatus,
+    status: normalizedStatus,
     sourceStatus,
     summary: null,
     components: normalizeSlackComponents(service, incidents, normalizedStatus === "operational"),
