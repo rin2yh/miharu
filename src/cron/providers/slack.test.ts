@@ -96,6 +96,55 @@ describe("Slack provider", () => {
     expect(snapshot.status).toBe("operational");
     expect(snapshot.incidents).toEqual([]);
     expect(snapshot.components).toHaveLength(slack.components.length);
+    expect(snapshot.components?.every((component) => component.status === "operational")).toBe(
+      true,
+    );
+    expect(
+      snapshot.components?.every((component) => component.sourceStatus === "not_reported"),
+    ).toBe(true);
+  });
+
+  it("keeps a reported feature unknown when Slack's global status is healthy", async () => {
+    const snapshot = await fetchSlackSnapshot(
+      slack,
+      providerContext(
+        jsonFetcher({
+          status: "ok",
+          active_incidents: [
+            {
+              id: "slack-reported-incident",
+              title: "Messaging is affected",
+              status: "active",
+              type: "incident",
+              services: ["Messaging"],
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.components).toContainEqual({
+      id: "messaging",
+      name: "Messaging",
+      status: "unknown",
+      sourceStatus: "affected",
+    });
+    expect(snapshot.components).toContainEqual({
+      id: "huddles",
+      name: "Huddles",
+      status: "operational",
+      sourceStatus: "not_reported",
+    });
+  });
+
+  it("keeps unreported features unknown when Slack's global status is abnormal", async () => {
+    const snapshot = await fetchSlackSnapshot(
+      slack,
+      providerContext(jsonFetcher({ status: "active", active_incidents: [] })),
+    );
+
+    expect(snapshot.status).toBe("unknown");
     expect(snapshot.components?.every((component) => component.status === "unknown")).toBe(true);
     expect(
       snapshot.components?.every((component) => component.sourceStatus === "not_reported"),
