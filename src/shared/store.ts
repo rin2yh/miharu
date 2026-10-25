@@ -168,10 +168,10 @@ export function createD1Store(database: D1Database): DashboardStore {
     },
 
     async getDashboardRows(serviceIds) {
-      const statusFilter = serviceFilter(serviceIds);
-      const componentFilter = serviceFilter(serviceIds);
-      const incidentFilter = serviceFilter(serviceIds, "AND");
-      const eventFilter = serviceFilter(serviceIds);
+      const statusFilter = buildServiceFilter(serviceIds);
+      const componentFilter = buildServiceFilter(serviceIds);
+      const incidentFilter = buildServiceFilter(serviceIds, "AND");
+      const eventFilter = buildServiceFilter(serviceIds);
       const [statuses, components, incidents, events] = await Promise.all([
         database
           .prepare(
@@ -251,7 +251,7 @@ export function createD1Store(database: D1Database): DashboardStore {
   };
 }
 
-function serviceFilter(
+function buildServiceFilter(
   serviceIds: readonly string[] | undefined,
   conjunction: "AND" | "WHERE" = "WHERE",
 ): { sql: string; values: string[] } {
