@@ -3,15 +3,15 @@ import type {
   NormalizedIncident,
   NormalizedStatus,
   ProviderSnapshot,
-} from "../../domain";
-import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../../domain";
-import { toPlainText } from "../../domain/text";
+} from "../domain";
+import { INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS } from "../domain";
+import { toPlainText } from "./text";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
-} from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+} from "../shared/config/services";
+import type { ProviderContext } from "./provider-context";
 import {
   asRecord,
   boundedText,

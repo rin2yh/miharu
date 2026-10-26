@@ -7,7 +7,7 @@ import type {
   NormalizedIncident,
   NormalizedStatus,
 } from "./index";
-import { stableFallbackId } from "./id";
+import { stableId } from "./stable-id";
 
 export interface IncidentRecord extends NormalizedIncident {
   lifecycle: IncidentLifecycle;
@@ -251,7 +251,7 @@ function makeEvent(
 }
 
 export function incidentFingerprint(incident: NormalizedIncident): string {
-  return stableFallbackId("incident-content", [
+  return stableId("incident-content", [
     incident.title,
     incident.body,
     incident.kind,

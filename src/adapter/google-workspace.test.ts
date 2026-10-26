@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KnownIncident } from "../../domain";
-import { SERVICES } from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+import type { KnownIncident } from "../domain";
+import { SERVICES } from "../shared/config/services";
+import type { ProviderContext } from "./provider-context";
 import { fetchGoogleWorkspaceSnapshot } from "./google-workspace";
 
 const service = SERVICES.find((candidate) => candidate.provider === "google-workspace");
@@ -10,15 +10,12 @@ if (!service) throw new Error("Google Workspace service config is missing");
 const googleWorkspaceService = service!;
 
 const productCatalog = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/google-workspace-products.json", "utf8"),
+  readFileSync("src/adapter/fixtures/google-workspace-products.json", "utf8"),
 ) as unknown;
 const historyFixture = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/google-workspace-history.json", "utf8"),
+  readFileSync("src/adapter/fixtures/google-workspace-history.json", "utf8"),
 ) as unknown[];
-const dashboardHtml = readFileSync(
-  "src/cron/providers/fixtures/google-workspace-dashboard.html",
-  "utf8",
-);
+const dashboardHtml = readFileSync("src/adapter/fixtures/google-workspace-dashboard.html", "utf8");
 const multiProductIncident = historyFixture.find(
   (incident) => (incident as Record<string, unknown>).id === "vagmms1y6yRxwg6RMQZp",
 ) as Record<string, unknown> | undefined;

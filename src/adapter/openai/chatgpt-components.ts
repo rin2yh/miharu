@@ -1,5 +1,5 @@
-import { normalizeStatus, type NormalizedComponent, type NormalizedStatus } from "../../../domain";
-import { COMPONENTS_PER_SERVICE_LIMIT, type ServiceConfig } from "../../../shared/config/services";
+import { normalizeStatus, type NormalizedComponent, type NormalizedStatus } from "../../domain";
+import { COMPONENTS_PER_SERVICE_LIMIT, type ServiceConfig } from "../../shared/config/services";
 import { asRecord, boundedText, ProviderError, requiredText } from "../shared";
 
 export type OpenAIChatGPTService = Extract<ServiceConfig, { provider: "openai-chatgpt" }>;

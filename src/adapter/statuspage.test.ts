@@ -1,8 +1,8 @@
-import { classifyIncident } from "../../domain/incident-category";
+import { classifyIncident } from "./incident-category";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SERVICES, type ServiceConfig } from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+import { SERVICES, type ServiceConfig } from "../shared/config/services";
+import type { ProviderContext } from "./provider-context";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
 
@@ -46,15 +46,15 @@ type CloudflareSummaryFixture = {
 
 // Captured from Cloudflare's official API on 2026-10-24; component rows are minimized.
 const cloudflareSummaryFixture = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/cloudflare-summary.json", "utf8"),
+  readFileSync("src/adapter/fixtures/cloudflare-summary.json", "utf8"),
 ) as CloudflareSummaryFixture;
 // Captured from Cloudflare's official summary API on 2026-10-24.
 const cloudflareStorageMaintenanceFixture = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/cloudflare-storage-maintenance.json", "utf8"),
+  readFileSync("src/adapter/fixtures/cloudflare-storage-maintenance.json", "utf8"),
 ) as unknown;
 // Captured from Cloudflare's official summary API on 2026-10-24.
 const cloudflareInProgressMaintenanceFixture = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/cloudflare-in-progress-maintenance.json", "utf8"),
+  readFileSync("src/adapter/fixtures/cloudflare-in-progress-maintenance.json", "utf8"),
 ) as unknown;
 
 const cloudflareServiceGroupId = "1km35smx8p41";

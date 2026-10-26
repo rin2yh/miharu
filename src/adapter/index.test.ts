@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { ProviderSnapshot } from "../../domain";
-import { SERVICES } from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+import type { ProviderSnapshot } from "../domain";
+import { SERVICES } from "../shared/config/services";
+import type { ProviderContext } from "./provider-context";
 import { fetchServiceSnapshot } from "./index";
 
 const signal = new AbortController().signal;
 const googleWorkspaceProducts = JSON.parse(
-  readFileSync("src/cron/providers/fixtures/google-workspace-products.json", "utf8"),
+  readFileSync("src/adapter/fixtures/google-workspace-products.json", "utf8"),
 ) as unknown;
 const googleWorkspaceDashboard = readFileSync(
-  "src/cron/providers/fixtures/google-workspace-dashboard.html",
+  "src/adapter/fixtures/google-workspace-dashboard.html",
   "utf8",
 );
 

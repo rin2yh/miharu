@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SERVICES } from "../shared/config/services";
 import type { ProviderSnapshot } from "../domain";
 import type { CollectionStore } from "../shared/store";
-import { ProviderError } from "./providers/shared";
+import { ProviderError } from "../adapter/shared";
 import {
   collectAll,
   collectService,

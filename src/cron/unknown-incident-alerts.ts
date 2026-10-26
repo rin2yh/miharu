@@ -1,4 +1,4 @@
-import { classifyIncident } from "../domain/incident-category";
+import { classifyIncident } from "../adapter/incident-category";
 import type { NormalizedIncident } from "../domain";
 import type { ServiceConfig } from "../shared/config/services";
 import { getErrorType, type CollectionAlertSender } from "./collection-alerts";

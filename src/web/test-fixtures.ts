@@ -1,4 +1,4 @@
-import { classifyIncident } from "../domain/incident-category";
+import { classifyIncident } from "../adapter/incident-category";
 import type { DashboardEvent, DashboardPayload, DashboardService } from "../domain";
 
 export const lastSuccessAt = "2026-10-23T05:00:00.000Z";

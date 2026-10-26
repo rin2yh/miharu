@@ -32,9 +32,10 @@ src/
 │   ├── filters/                 # URLサービスフィルターとテスト
 │   ├── presentation/            # 状態表示・日時フォーマット
 │   └── routes/api/status.ts
-├── cron/                       # 定期収集と取得Provider
-│   ├── collect-status.ts
-│   └── providers/
+├── cron/                       # 定期収集と通知
+│   └── collect-status.ts
+├── adapter/                    # 外部APIアクセスと解析
+│   └── statuspage.ts
 ├── domain/                     # 状態モデル・正規化・インシデント差分
 └── shared/                     # Web/Cron共通の設定とD1ストア
     └── config/services.ts
@@ -43,7 +44,7 @@ db/
 └── migrations/                 # SQL migrations
 ```
 
-WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorker、Hono、D1に依存しない。Providerのレスポンス解析はCron側に置き、正規化後の値をドメインモデルに渡す。
+WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorker、Hono、D1に依存しない。AdapterはCronに依存せず、外部レスポンスを正規化してドメインモデルに渡す。
 
 - Cron Triggerは毎分実行し、各サービスを並列・サービス単位のタイムアウト付きで取得する。1サービスの失敗は他サービスの保存に影響しない。
 - 公式取得の失敗は対象サービスの障害状態に変換しない。最後に成功した状態を残し、取得失敗と最終成功から3分を超えた古い情報を画面に示す。
@@ -57,7 +58,7 @@ WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorke
 
 - Atlassian Statuspage互換JSON: `provider: "statuspage"` を指定する。NotionとGitHubもこの実装を使う。
 - ChatGPT: `provider: "openai-chatgpt"` を指定する。OpenAIのsummaryにインシデントがないため別APIを取得し、公式ページのChatGPTセクションに属するコンポーネントと明示的にChatGPT関連と分かるインシデントだけを使う。別APIは直近25件のみ返すため、一覧にないことを復旧とは扱わない。
-- 独自API: `src/cron/providers/` にパーサーを追加し、`ServiceConfig` のprovider種別と `fetchServiceSnapshot` に登録する。Slackはこの方式。
+- 独自API: `src/adapter/` にパーサーを追加し、`ServiceConfig` のprovider種別と `fetchServiceSnapshot` に登録する。Slackはこの方式。
 - RSS/Atomなど: 共通化が必要になった時点でフィード用パーサーを追加し、取得元ごとの日時や状態を元データのまま保持する。
 
 Providerの出力は `ProviderSnapshot` と `NormalizedIncident` に正規化する。公式の全体ステータスと個別インシデントの重要度は別々に保存する。取得URLはコード上の設定に限定し、インシデント本文やURLは長さ・形式・許可ホストを検証してから利用する。

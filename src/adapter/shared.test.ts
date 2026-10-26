@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IncidentState } from "../../domain";
+import type { IncidentState } from "../domain";
 import { parseIncidentState } from "./shared";
 
 const knownIncidentStates = [
