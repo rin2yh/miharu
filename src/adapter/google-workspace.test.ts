@@ -15,10 +15,7 @@ const productCatalog = JSON.parse(
 const historyFixture = JSON.parse(
   readFileSync("src/adapter/fixtures/google-workspace-history.json", "utf8"),
 ) as unknown[];
-const dashboardHtml = readFileSync(
-  "src/adapter/fixtures/google-workspace-dashboard.html",
-  "utf8",
-);
+const dashboardHtml = readFileSync("src/adapter/fixtures/google-workspace-dashboard.html", "utf8");
 const multiProductIncident = historyFixture.find(
   (incident) => (incident as Record<string, unknown>).id === "vagmms1y6yRxwg6RMQZp",
 ) as Record<string, unknown> | undefined;
