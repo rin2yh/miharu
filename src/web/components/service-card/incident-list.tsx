@@ -65,17 +65,17 @@ export function IncidentList({
               >
                 ›
               </span>
-              <span className="min-w-0 text-xs font-semibold leading-normal [overflow-wrap:anywhere] max-sm:col-span-full">
+              <span className="min-w-0 text-xs font-semibold leading-normal wrap-anywhere max-sm:col-span-full">
                 {incident.title}
               </span>
               <span className="inline-flex flex-wrap items-center gap-1.5">
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
+                  className={`inline-flex min-h-5 items-center rounded-xs px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
                 >
                   {incidentCategoryLabel(incident.displayCategory)}
                 </span>
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColor(incident)}`}
+                  className={`inline-flex min-h-5 items-center rounded-xs px-1.5 py-0.5 text-xs font-semibold ${incidentStateColor(incident)}`}
                 >
                   {incidentStateLabel(incident.kind, incident.state, incident.lifecycle)}
                 </span>
@@ -97,7 +97,7 @@ export function IncidentList({
             <div className="pr-1 pb-3 pl-5">
               <div className="flex flex-wrap gap-1.5">
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
+                  className={`inline-flex min-h-5 items-center rounded-xs px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
                 >
                   {incident.displayCategory === "outage"
                     ? "障害情報"
@@ -105,7 +105,7 @@ export function IncidentList({
                 </span>
                 {incident.severityStatus && (
                   <span
-                    className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentImpactColors[incident.severityStatus]}`}
+                    className={`inline-flex min-h-5 items-center rounded-xs px-1.5 py-0.5 text-xs font-bold ${incidentImpactColors[incident.severityStatus]}`}
                   >
                     {`${incident.displayCategory === "maintenance" ? "メンテナンス状態" : incident.displayCategory === "outage" ? "障害の重要度" : "公式の影響度"}: ${STATUS_LABELS[incident.severityStatus]}`}
                   </span>
@@ -117,7 +117,7 @@ export function IncidentList({
                 </p>
               )}
               {incident.body && (
-                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body [overflow-wrap:anywhere] max-sm:max-h-28">
+                <p className="mt-1.5 mb-0 max-h-48 max-w-3xl overflow-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-incident-body wrap-anywhere max-sm:max-h-28">
                   {incident.body}
                 </p>
               )}

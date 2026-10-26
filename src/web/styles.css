@@ -1,6 +1,40 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+
+  --color-page: rgb(var(--page));
+  --color-surface: rgb(var(--surface));
+  --color-ink: rgb(var(--ink));
+  --color-muted: rgb(var(--muted));
+  --color-quiet: rgb(var(--quiet));
+  --color-line: rgb(var(--line));
+  --color-line-strong: rgb(var(--line-strong));
+  --color-forest: rgb(var(--forest));
+  --color-healthy: rgb(var(--healthy));
+  --color-healthy-bg: rgb(var(--healthy-bg));
+  --color-degraded: rgb(var(--degraded));
+  --color-degraded-bg: rgb(var(--degraded-bg));
+  --color-partial: rgb(var(--partial));
+  --color-partial-bg: rgb(var(--partial-bg));
+  --color-outage: rgb(var(--outage));
+  --color-outage-bg: rgb(var(--outage-bg));
+  --color-maintenance: rgb(var(--maintenance));
+  --color-maintenance-bg: rgb(var(--maintenance-bg));
+  --color-unknown: rgb(var(--unknown));
+  --color-unknown-bg: rgb(var(--unknown-bg));
+  --color-alert: rgb(var(--alert));
+  --color-alert-bg: rgb(var(--alert-bg));
+  --color-alert-line: rgb(var(--alert-line));
+  --color-alert-dot: rgb(var(--alert-dot));
+  --color-warning: rgb(var(--warning));
+  --color-stale: rgb(var(--stale));
+  --color-placeholder: rgb(var(--placeholder));
+  --color-control-hover: rgb(var(--control-hover));
+  --color-empty-bg: rgb(var(--empty-bg));
+  --color-incident-body: rgb(var(--incident-body));
+  --color-event-mark: rgb(var(--event-mark));
+}
 
 :root {
   --page: 242 245 243;
@@ -87,7 +121,7 @@ input {
 }
 
 :focus-visible {
-  @apply outline outline-2 outline-offset-2 outline-healthy;
+  @apply outline-solid outline-2 outline-offset-2 outline-healthy;
 }
 
 summary::-webkit-details-marker {
