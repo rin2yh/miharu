@@ -1,6 +1,6 @@
 import type { ProviderSnapshot } from "../domain";
 import type { ServiceConfig } from "../shared/config/services";
-import type { ProviderContext } from "../cron/provider-context";
+import type { ProviderContext } from "./provider-context";
 import { fetchGoogleWorkspaceSnapshot } from "./google-workspace";
 import { fetchOpenAIChatGPTSnapshot } from "./openai/chatgpt";
 import { fetchSlackSnapshot } from "./slack";

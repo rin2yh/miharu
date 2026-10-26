@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot } from "../domain";
 import { SERVICES } from "../shared/config/services";
-import type { ProviderContext } from "../cron/provider-context";
+import type { ProviderContext } from "./provider-context";
 import { fetchServiceSnapshot } from "./index";
 
 const signal = new AbortController().signal;

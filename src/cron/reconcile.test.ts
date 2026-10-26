@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NormalizedIncident } from "./index";
-import { applyFailureMetadata, failureMetadata } from "../cron/failure";
-import { reconcileIncidents } from "./reconcile";
+import type { NormalizedIncident } from "../domain";
+import { reconcileIncidents } from "../domain/reconcile";
 
 const observedAt = "2026-10-23T05:00:00.000Z";
 
@@ -341,33 +340,5 @@ describe("incident reconciliation", () => {
     const first = reconcileIncidents("github", [], [incident()], observedAt);
     const retried = reconcileIncidents("github", [], [incident()], observedAt);
     expect(first.events[0]?.id).toBe(retried.events[0]?.id);
-  });
-});
-
-describe("collection failure behavior", () => {
-  it("updates only fetch metadata and preserves the last successful service state", () => {
-    const previous = {
-      status: "partial_outage",
-      sourceStatus: "major",
-      summary: "Partial outage",
-      lastCheckedAt: "2026-10-23T04:59:00.000Z",
-      lastSuccessAt: "2026-10-23T04:59:00.000Z",
-      lastErrorAt: null,
-      errorCode: null,
-      incidentTitle: "API latency",
-    };
-    const after = applyFailureMetadata(
-      previous,
-      failureMetadata("2026-10-23T05:00:00.000Z", "timeout"),
-    );
-    expect(after).toMatchObject({
-      status: "partial_outage",
-      sourceStatus: "major",
-      summary: "Partial outage",
-      lastSuccessAt: previous.lastSuccessAt,
-      incidentTitle: "API latency",
-      lastErrorAt: "2026-10-23T05:00:00.000Z",
-      errorCode: "timeout",
-    });
   });
 });

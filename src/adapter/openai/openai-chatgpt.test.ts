@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { KnownIncident } from "../../domain";
 import { SERVICES } from "../../shared/config/services";
 import { fetchOpenAIChatGPTSnapshot } from "./chatgpt";
-import type { ProviderContext } from "../../cron/provider-context";
+import type { ProviderContext } from "../provider-context";
 import type { FetchLike } from "../shared";
 
 const abortSignal = new AbortController().signal;

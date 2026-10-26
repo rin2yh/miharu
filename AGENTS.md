@@ -32,9 +32,10 @@ src/
 │   ├── filters/                 # URLサービスフィルターとテスト
 │   ├── presentation/            # 状態表示・日時フォーマット
 │   └── routes/api/status.ts
-├── cron/                       # 定期収集と取得処理
-│   ├── collect-status.ts
-│   └── adapter/
+├── cron/                       # 定期収集と通知
+│   └── collect-status.ts
+├── adapter/                    # 外部APIアクセスと解析
+│   └── statuspage.ts
 ├── domain/                     # 状態モデル・正規化・インシデント差分
 └── shared/                     # Web/Cron共通の設定とD1ストア
     └── config/services.ts
@@ -43,7 +44,7 @@ db/
 └── migrations/                 # SQL migrations
 ```
 
-WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorker、Hono、D1に依存しない。Providerのレスポンス解析はAdapter側に置き、正規化後の値をドメインモデルに渡す。
+WebとCronは共通設定・D1ストアを利用する。ドメイン層はWorker、Hono、D1に依存しない。AdapterはCronに依存せず、外部レスポンスを正規化してドメインモデルに渡す。
 
 - Cron Triggerは毎分実行し、各サービスを並列・サービス単位のタイムアウト付きで取得する。1サービスの失敗は他サービスの保存に影響しない。
 - 公式取得の失敗は対象サービスの障害状態に変換しない。最後に成功した状態を残し、取得失敗と最終成功から3分を超えた古い情報を画面に示す。

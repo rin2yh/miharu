@@ -2,7 +2,7 @@ import { classifyIncident } from "./incident-category";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERVICES, type ServiceConfig } from "../shared/config/services";
-import type { ProviderContext } from "../cron/provider-context";
+import type { ProviderContext } from "./provider-context";
 import { fetchStatuspageSnapshot } from "./statuspage";
 import type { FetchLike } from "./shared";
 

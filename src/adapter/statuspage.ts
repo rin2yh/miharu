@@ -10,7 +10,7 @@ import {
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
 } from "../shared/config/services";
-import type { ProviderContext } from "../cron/provider-context";
+import type { ProviderContext } from "./provider-context";
 import {
   asRecord,
   boundedText,

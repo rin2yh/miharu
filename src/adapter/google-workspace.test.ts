@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KnownIncident } from "../domain";
 import { SERVICES } from "../shared/config/services";
-import type { ProviderContext } from "../cron/provider-context";
+import type { ProviderContext } from "./provider-context";
 import { fetchGoogleWorkspaceSnapshot } from "./google-workspace";
 
 const service = SERVICES.find((candidate) => candidate.provider === "google-workspace");
