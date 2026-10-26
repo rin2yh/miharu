@@ -1,4 +1,4 @@
-import { classifyIncident } from "../../../domain/incident-category";
+import { classifyIncident } from "../../../adapter/incident-category";
 import { Hono } from "hono";
 import {
   FRESHNESS_WARNING_SECONDS,

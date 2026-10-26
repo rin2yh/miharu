@@ -1,6 +1,6 @@
-import type { IncidentState, NormalizedStatus } from "../../domain";
-import { toPlainText } from "../../domain/text";
-import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../../shared/config/services";
+import type { IncidentState, NormalizedStatus } from "../domain";
+import { toPlainText } from "./text";
+import { PROVIDER_RESPONSE_LIMIT_BYTES, type ServiceConfig } from "../shared/config/services";
 
 export class ProviderError extends Error {
   constructor(

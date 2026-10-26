@@ -1,9 +1,9 @@
-import { type KnownIncident, type NormalizedIncident } from "../../../domain";
-import { stableFallbackId } from "../../../domain/id";
+import { type KnownIncident, type NormalizedIncident } from "../../domain";
+import { stableFallbackId } from "../id";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
-} from "../../../shared/config/services";
+} from "../../shared/config/services";
 import {
   asRecord,
   boundedText,

@@ -1,5 +1,5 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
-import { type KnownIncident, type NormalizedIncident } from "../../../domain";
+import { type KnownIncident, type NormalizedIncident } from "../../domain";
 import {
   asRecord,
   fetchText,

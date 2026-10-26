@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SERVICES, type ServiceConfig } from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+import { SERVICES, type ServiceConfig } from "../shared/config/services";
+import type { ProviderContext } from "../cron/provider-context";
 import { fetchSlackSnapshot } from "./slack";
 import type { FetchLike } from "./shared";
 

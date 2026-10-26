@@ -3,14 +3,14 @@ import {
   type NormalizedComponent,
   type NormalizedIncident,
   type ProviderSnapshot,
-} from "../../domain";
-import { stableFallbackId } from "../../domain/id";
+} from "../domain";
+import { stableFallbackId } from "./id";
 import {
   COMPONENTS_PER_SERVICE_LIMIT,
   INCIDENTS_PER_SERVICE_LIMIT,
   type ServiceConfig,
-} from "../../shared/config/services";
-import type { ProviderContext } from "../provider-context";
+} from "../shared/config/services";
+import type { ProviderContext } from "../cron/provider-context";
 import {
   asRecord,
   boundedText,

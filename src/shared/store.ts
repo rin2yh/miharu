@@ -22,7 +22,7 @@ import {
   type IncidentEventRecord,
   type IncidentRecord,
 } from "../domain/reconcile";
-import { failureMetadata } from "../domain/failure";
+import { failureMetadata } from "../cron/failure";
 
 type AppDatabase = ReturnType<typeof drizzle<typeof schema, D1Database>>;
 type D1BatchQuery = Parameters<AppDatabase["batch"]>[0][number];

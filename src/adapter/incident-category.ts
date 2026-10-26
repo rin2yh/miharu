@@ -1,4 +1,4 @@
-import type { IncidentDisplayCategory, NormalizedIncident } from "./index";
+import type { IncidentDisplayCategory, NormalizedIncident } from "../domain";
 
 type ClassificationEvidence = Pick<NormalizedIncident, "kind" | "sourceType" | "sourceImpact">;
 

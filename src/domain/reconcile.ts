@@ -7,7 +7,7 @@ import type {
   NormalizedIncident,
   NormalizedStatus,
 } from "./index";
-import { stableFallbackId } from "./id";
+import { stableFallbackId } from "../adapter/id";
 
 export interface IncidentRecord extends NormalizedIncident {
   lifecycle: IncidentLifecycle;
