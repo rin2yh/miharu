@@ -49,6 +49,8 @@ export async function notifyUnknownIncidents(
         incident.sourceType,
         incident.sourceImpact,
       ]);
+      // Best-effort deduplication: KV is eventually consistent and this read/send/write
+      // sequence is not atomic. Overlapping executions may both send the same alert.
       if ((await stateStore.get(key)) === fingerprint) continue;
       await sender.send({
         kind: "unknown_incident",
@@ -64,6 +66,7 @@ export async function notifyUnknownIncidents(
         detectedAt,
       });
       // A failed delivery remains unacknowledged so the next successful poll retries it.
+      // If Discord accepted the alert but acknowledgement fails, that retry may duplicate it.
       await stateStore.put(key, fingerprint);
     } catch (error) {
       console.error(
