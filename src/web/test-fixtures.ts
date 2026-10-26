@@ -51,6 +51,26 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
   };
 }
 
+export function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
+  return {
+    id: "event-1",
+    serviceId: "github",
+    serviceName: "GitHub",
+    incidentId: "incident-1",
+    title: "Actions delay",
+    kind: "incident",
+    displayCategory: "outage",
+    eventKind: "opened",
+    closureReason: null,
+    sourceStatus: "investigating",
+    severityStatus: "partial_outage",
+    detectedAt: lastSuccessAt,
+    officialEventAt: "2026-10-23T04:50:00.000Z",
+    url: "https://www.githubstatus.com/incidents/incident-1",
+    ...overrides,
+  };
+}
+
 export function component(
   id: string,
   name: string,

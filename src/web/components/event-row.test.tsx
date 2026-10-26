@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { DashboardEvent } from "../../domain";
+import { event } from "../test-fixtures";
 import { EventRow } from "./event-row";
 
 const labels = [
@@ -13,26 +13,6 @@ const labels = [
   { kind: "maintenance", eventKind: "resolved", label: "メンテナンス完了" },
   { kind: "maintenance", eventKind: "closed", label: "追跡終了" },
 ] as const;
-
-function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
-  return {
-    id: "event-1",
-    serviceId: "github",
-    serviceName: "GitHub",
-    incidentId: "incident-1",
-    title: "Actions delay",
-    kind: "incident",
-    displayCategory: "outage",
-    eventKind: "opened",
-    closureReason: null,
-    sourceStatus: "investigating",
-    severityStatus: "partial_outage",
-    detectedAt: "2026-10-23T05:00:00.000Z",
-    officialEventAt: "2026-10-23T04:50:00.000Z",
-    url: "https://www.githubstatus.com/incidents/incident-1",
-    ...overrides,
-  };
-}
 
 describe("EventRow", () => {
   it.each([
