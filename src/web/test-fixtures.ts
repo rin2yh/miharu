@@ -1,3 +1,4 @@
+import { classifyIncident } from "../domain/incident-category";
 import type { DashboardEvent, DashboardPayload, DashboardService } from "../domain";
 
 export const lastSuccessAt = "2026-10-23T05:00:00.000Z";
@@ -31,7 +32,7 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
     state: "investigating" as const,
     sourceStatus: "investigating",
     sourceType: "incident",
-    sourceImpact: null,
+    sourceImpact: "major",
     severityStatus: "partial_outage" as const,
     componentIds: [],
     components: ["Messaging"],
@@ -40,6 +41,32 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
     url: "https://www.githubstatus.com/incidents/incident-1",
     lifecycle: "active" as const,
     closureReason: null,
+    ...overrides,
+    displayCategory: classifyIncident({
+      kind: "incident",
+      sourceType: "incident",
+      sourceImpact: "major",
+      ...overrides,
+    }),
+  };
+}
+
+export function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
+  return {
+    id: "event-1",
+    serviceId: "github",
+    serviceName: "GitHub",
+    incidentId: "incident-1",
+    title: "Actions delay",
+    kind: "incident",
+    displayCategory: "outage",
+    eventKind: "opened",
+    closureReason: null,
+    sourceStatus: "investigating",
+    severityStatus: "partial_outage",
+    detectedAt: lastSuccessAt,
+    officialEventAt: "2026-10-23T04:50:00.000Z",
+    url: "https://www.githubstatus.com/incidents/incident-1",
     ...overrides,
   };
 }

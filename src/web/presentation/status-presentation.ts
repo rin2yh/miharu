@@ -1,5 +1,6 @@
 import type {
   IncidentKind,
+  IncidentDisplayCategory,
   IncidentLifecycle,
   IncidentState,
   NormalizedStatus,
@@ -47,8 +48,10 @@ export function isAbnormal(status: NormalizedStatus): boolean {
   return status !== "operational";
 }
 
-export function incidentKindLabel(kind: IncidentKind): string {
-  return kind === "maintenance" ? "メンテナンス" : "障害";
+export function incidentCategoryLabel(category: IncidentDisplayCategory): string {
+  return { outage: "障害", maintenance: "メンテナンス", notice: "お知らせ", unknown: "分類不明" }[
+    category
+  ];
 }
 
 export function incidentStateLabel(

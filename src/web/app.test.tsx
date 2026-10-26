@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DASHBOARD_POLL_INTERVAL_MS, SERVICES, SERVICES_BY_NAME } from "../shared/config/services";
-import type { DashboardEvent, DashboardPayload } from "../domain";
+import type { DashboardPayload } from "../domain";
 import { App } from "./app";
 import {
   basePayload,
+  event,
   githubLinkName,
   incident,
   lastSuccessAt,
@@ -116,25 +117,14 @@ describe("dashboard", () => {
   });
 
   it("uses official event times and concise labels in the recent updates", async () => {
-    const event: DashboardEvent = {
-      id: "event-1",
-      serviceId: "github",
-      serviceName: "GitHub",
-      incidentId: "incident-1",
-      title: "Actions delay",
-      kind: "incident",
-      eventKind: "opened",
-      closureReason: null,
-      sourceStatus: "investigating",
-      severityStatus: "partial_outage",
-      detectedAt: lastSuccessAt,
-      officialEventAt: "2026-10-23T04:50:00.000Z",
-      url: "https://www.githubstatus.com/incidents/incident-1",
-    };
-    renderDashboard(async () => payload([service()], [event]));
+    const recentEvent = event({ displayCategory: "outage" });
+    renderDashboard(async () => payload([service()], [recentEvent]));
 
     expect(await screen.findByText("障害発生")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Actions delay" })).toHaveAttribute("href", event.url);
+    expect(screen.getByRole("link", { name: "Actions delay" })).toHaveAttribute(
+      "href",
+      recentEvent.url,
+    );
     expect(screen.getByText(/公式時刻/)).toBeInTheDocument();
     expect(screen.queryByText(/アプリ検知|検知/)).not.toBeInTheDocument();
   });
@@ -170,29 +160,22 @@ describe("dashboard", () => {
   });
 
   it("filters services by name and clears the query", async () => {
-    const slackEvent: DashboardEvent = {
+    const slackEvent = event({
       id: "slack-event",
       serviceId: "slack",
       serviceName: "Slack",
       incidentId: "slack-incident",
       title: "Slack update",
-      kind: "incident",
-      eventKind: "opened",
-      closureReason: null,
-      sourceStatus: "investigating",
-      severityStatus: "partial_outage",
-      detectedAt: lastSuccessAt,
       officialEventAt: lastSuccessAt,
       url: "https://slack-status.com/incident/slack-incident",
-    };
-    const githubEvent: DashboardEvent = {
-      ...slackEvent,
+    });
+    const githubEvent = event({
       id: "github-event",
-      serviceId: "github",
-      serviceName: "GitHub",
+      incidentId: "github-incident",
       title: "GitHub update",
+      officialEventAt: lastSuccessAt,
       url: "https://www.githubstatus.com/incidents/github-incident",
-    };
+    });
     renderDashboard(async () => payload(basePayload.services, [slackEvent, githubEvent]));
     await screen.findByRole("link", { name: githubLinkName });
     fireEvent.change(screen.getByRole("searchbox", { name: "サービスを検索" }), {
@@ -252,21 +235,13 @@ describe("dashboard", () => {
   });
 
   it("shows an empty message when a service search has no matching recent events", async () => {
-    const githubEvent: DashboardEvent = {
+    const githubEvent = event({
       id: "github-event",
-      serviceId: "github",
-      serviceName: "GitHub",
       incidentId: "github-incident",
       title: "GitHub update",
-      kind: "incident",
-      eventKind: "opened",
-      closureReason: null,
-      sourceStatus: "investigating",
-      severityStatus: "partial_outage",
-      detectedAt: lastSuccessAt,
       officialEventAt: lastSuccessAt,
       url: "https://www.githubstatus.com/incidents/github-incident",
-    };
+    });
     renderDashboard(async () => payload(basePayload.services, [githubEvent]));
     await screen.findByRole("link", { name: githubLinkName });
 
@@ -280,29 +255,22 @@ describe("dashboard", () => {
 
   it("filters services and recent updates from the URL before applying the name search", async () => {
     window.history.replaceState(null, "", "/?services=github,slack,github,unknown");
-    const slackEvent: DashboardEvent = {
+    const slackEvent = event({
       id: "slack-event",
       serviceId: "slack",
       serviceName: "Slack",
       incidentId: "slack-incident",
       title: "Slack update",
-      kind: "incident",
-      eventKind: "opened",
-      closureReason: null,
-      sourceStatus: "investigating",
-      severityStatus: "partial_outage",
-      detectedAt: lastSuccessAt,
       officialEventAt: lastSuccessAt,
       url: "https://slack-status.com/incident/slack-incident",
-    };
-    const githubEvent: DashboardEvent = {
-      ...slackEvent,
+    });
+    const githubEvent = event({
       id: "github-event",
-      serviceId: "github",
-      serviceName: "GitHub",
+      incidentId: "github-incident",
       title: "GitHub update",
+      officialEventAt: lastSuccessAt,
       url: "https://www.githubstatus.com/incidents/github-incident",
-    };
+    });
     renderDashboard(async () => payload(basePayload.services, [slackEvent, githubEvent]));
 
     const serviceList = await screen.findByRole("list", { name: "サービス一覧" });

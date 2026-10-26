@@ -1,3 +1,4 @@
+import { classifyIncident } from "../../domain/incident-category";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERVICES, type ServiceConfig } from "../../shared/config/services";
@@ -100,6 +101,34 @@ function fetchIncidentWithFallbackTitle(title: string) {
 }
 
 describe("Statuspage provider", () => {
+  it.each([
+    { impact: "none", expected: "notice" },
+    { impact: "minor", expected: "outage" },
+    { impact: "major", expected: "outage" },
+    { impact: "critical", expected: "outage" },
+    { impact: undefined, expected: "unknown" },
+    { impact: "future", expected: "unknown" },
+  ])("retains Notion's monitoring evidence for $expected", async ({ impact, expected }) => {
+    const snapshot = await fetchStatuspageSnapshot(
+      notion,
+      providerContext(
+        jsonFetcher({
+          status: { indicator: "none" },
+          components: [],
+          incidents: [
+            { id: "security-notice", name: "Security notification", status: "monitoring", impact },
+          ],
+        }),
+      ),
+    );
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.incidents[0]).toMatchObject({
+      kind: "incident",
+      state: "monitoring",
+      sourceImpact: impact ?? null,
+    });
+    expect(classifyIncident(snapshot.incidents[0], notion.provider)).toBe(expected);
+  });
   it("normalizes overall status and keeps incident impact separate", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       github,

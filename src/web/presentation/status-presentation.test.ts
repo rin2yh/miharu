@@ -3,7 +3,7 @@ import { NORMALIZED_STATUSES } from "../../domain";
 import type { IncidentState } from "../../domain";
 import {
   formatDateTime,
-  incidentKindLabel,
+  incidentCategoryLabel,
   incidentStateLabel,
   isAbnormal,
   relativeTime,
@@ -46,10 +46,10 @@ describe("status presentation", () => {
   });
 
   it.each([
-    { kind: "incident", label: "障害" },
+    { kind: "outage", label: "障害" },
     { kind: "maintenance", label: "メンテナンス" },
   ] as const)("labels the $kind kind separately", ({ kind, label }) => {
-    expect(incidentKindLabel(kind)).toBe(label);
+    expect(incidentCategoryLabel(kind)).toBe(label);
   });
 
   it.each([

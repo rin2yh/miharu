@@ -1,3 +1,4 @@
+import { formatUnknownIncidentAlert, type UnknownIncidentAlert } from "./unknown-incident-alerts";
 import type { ServiceConfig } from "../shared/config/services";
 import type {
   CollectionAlertState,
@@ -27,7 +28,7 @@ export type CriticalCollectionAlert = {
 
 export interface CollectionAlertSender {
   enabled: boolean;
-  send(alert: CollectionAlert | CriticalCollectionAlert): Promise<void>;
+  send(alert: CollectionAlert | CriticalCollectionAlert | UnknownIncidentAlert): Promise<void>;
 }
 
 interface DiscordAlertConfig {
@@ -47,7 +48,9 @@ export function createDiscordAlertSender(config: DiscordAlertConfig): Collection
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          content: formatAlert(alert),
+          ...(alert.kind === "unknown_incident"
+            ? { embeds: [formatUnknownIncidentAlert(alert)] }
+            : { content: formatAlert(alert) }),
           allowed_mentions: { parse: [] },
         }),
         signal: AbortSignal.timeout(5_000),

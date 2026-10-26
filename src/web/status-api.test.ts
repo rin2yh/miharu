@@ -89,6 +89,25 @@ const rows: DashboardRows = {
 };
 
 describe("status API", () => {
+  it.each([
+    { sourceImpact: "none", expected: "notice" },
+    { sourceImpact: "major", expected: "outage" },
+    { sourceImpact: null, expected: "unknown" },
+  ])("recomputes $expected for stored incidents and history", ({ sourceImpact, expected }) => {
+    const dashboard = buildDashboardPayload(
+      {
+        ...rows,
+        incidentRows: [{ ...rows.incidentRows[0], serviceId: "notion", sourceImpact }],
+        eventRows: [{ ...rows.eventRows[0], serviceId: "notion", sourceImpact }],
+      },
+      new Date("2026-10-23T05:03:00Z"),
+    );
+    expect(
+      dashboard.services.find((entry) => entry.id === "notion")?.incidents[0].displayCategory,
+    ).toBe(expected);
+    expect(dashboard.recentEvents[0].displayCategory).toBe(expected);
+    expect(dashboard.services.find((entry) => entry.id === "slack")?.status).toBe("operational");
+  });
   it("converts D1 rows directly into the public dashboard payload", () => {
     const dashboard = buildDashboardPayload(rows, new Date("2026-10-23T05:03:00.000Z"), 180);
     const slack = dashboard.services.find((service) => service.id === slackService.id);

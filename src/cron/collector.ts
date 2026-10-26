@@ -20,7 +20,11 @@ export interface CollectorOptions {
     errorCode: string,
     errorType: string,
   ) => Promise<void>;
-  onCollectionSuccess?: (service: ServiceConfig, observedAt: string) => Promise<void>;
+  onCollectionSuccess?: (
+    service: ServiceConfig,
+    observedAt: string,
+    snapshot: ProviderSnapshot,
+  ) => Promise<void>;
 }
 
 class CollectionPersistenceError extends Error {
@@ -75,7 +79,7 @@ export async function collectService(
   }
 
   await store.saveSuccess(service, snapshot, observedAt);
-  await options.onCollectionSuccess?.(service, observedAt);
+  await options.onCollectionSuccess?.(service, observedAt, snapshot);
   return "ok";
 }
 

@@ -18,6 +18,7 @@ export type IncidentState =
   | "unknown";
 export type IncidentLifecycle = "active" | "closed" | "unverified";
 export type IncidentClosureReason = "official_resolved" | "no_longer_listed";
+export type IncidentDisplayCategory = "outage" | "maintenance" | "notice" | "unknown";
 export type IncidentKind = "incident" | "maintenance";
 export type IncidentEventKind = "opened" | "updated" | "resolved" | "closed";
 export const INCIDENT_RECHECK_UNAVAILABLE_SOURCE_STATUS = "recheck_unavailable";
@@ -65,6 +66,7 @@ export interface ProviderSnapshot {
 }
 
 export interface DashboardIncident extends NormalizedIncident {
+  displayCategory: IncidentDisplayCategory;
   lifecycle: IncidentLifecycle;
   closureReason: IncidentClosureReason | null;
 }
@@ -88,6 +90,7 @@ export interface DashboardComponent extends NormalizedComponent {
 }
 
 export interface DashboardEvent {
+  displayCategory: IncidentDisplayCategory;
   id: string;
   serviceId: string;
   serviceName: string;

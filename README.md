@@ -20,21 +20,20 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
-## 収集エラー通知
+## インシデントの表示分類
 
-本番では、3回連続したサービス別の収集失敗と復旧をDiscord Webhookへ通知します。Webhook URLはCloudflare Secret `DISCORD_WEBHOOK_URL` に設定します。
+公式APIの掲載形式と進行状態を分け、構造化された影響度・種別から「障害」「メンテナンス」「お知らせ」「分類不明」を表示します。影響なしの告知は「お知らせ」、根拠が足りない場合は「分類不明」とし、サービス全体の公式ステータスは変更しません。
 
-```sh
-pnpm exec wrangler secret put DISCORD_WEBHOOK_URL
-```
+## Discord通知
 
-Previewでは通知を無効にし、ローカル開発でもWebhookへ送信しません。
+本番環境では、以下をDiscord Webhookへ通知します。
 
-サービス別の連続失敗回数と通知済み状態はWorkers KVに保存します。失敗が3回に達した後は、追加の失敗ごとにKVを書き換えません。復旧時に状態を削除します。
+- サービスの収集失敗が3回連続した場合と、その復旧時
+- 分類不明のインシデントを検出した場合
 
-通知済み状態を保存してからWebhookへ1回送信します。Webhook送信に失敗しても自動再送しません。失敗は構造化ログに記録します。
+Webhook URLはCloudflare Secret `DISCORD_WEBHOOK_URL` に設定します。Preview環境では通知しません。
 
-Workers KV Free枠は書き込み・削除が各1,000回/日です。連続失敗中は通知まで最大3回書き込み、通知後は復旧まで書き込みません。KVは結果整合性のため、競合時は失敗回数や通知タイミングがずれる可能性があります（[利用上限](https://developers.cloudflare.com/kv/platform/limits/)、[整合性と同時更新](https://developers.cloudflare.com/kv/concepts/how-kv-works/)）。
+通知状態はWorkers KVで管理し、重複通知を可能な範囲で抑止します。分類不明の通知は送信失敗時に再試行するため、重複する場合があります。
 
 ## ライセンス
 

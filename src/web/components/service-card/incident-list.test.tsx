@@ -4,6 +4,26 @@ import { incident } from "../../test-fixtures";
 import { IncidentList } from "./incident-list";
 
 describe("IncidentList", () => {
+  it.each([
+    { sourceImpact: "none", label: "お知らせ" },
+    { sourceImpact: null, label: "分類不明" },
+  ])(
+    "shows $label independently of monitoring in the summary and detail",
+    ({ sourceImpact, label }) => {
+      render(
+        <IncidentList
+          incidents={[incident({ sourceImpact, state: "monitoring", sourceStatus: "monitoring" })]}
+        />,
+      );
+      const item = screen.getByRole("listitem");
+      expect(within(item).getAllByText(label)[0]).toBeVisible();
+      expect(within(item).getByText("監視中")).toBeVisible();
+      fireEvent.click(within(item).getByText("Messaging delays for some users"));
+      expect(within(item).getAllByText(label)[1]).toBeVisible();
+      expect(within(item).queryByText("障害情報")).not.toBeInTheDocument();
+    },
+  );
+
   it("labels an unverified incident without presenting it as recovered", () => {
     render(
       <IncidentList

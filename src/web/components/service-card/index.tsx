@@ -83,9 +83,9 @@ export default function ServiceCard({ service }: { service: DashboardService }) 
       />
 
       {unassigned.length > 0 && (
-        <section className="mt-3" aria-label={`${service.name}の障害・メンテナンス情報`}>
+        <section className="mt-3" aria-label={`${service.name}のインシデント・お知らせ`}>
           <h3 className="mt-0 mb-1 text-xs font-semibold text-muted">
-            その他の障害・メンテナンス情報
+            その他のインシデント・お知らせ
           </h3>
           <IncidentList incidents={unassigned} />
         </section>
