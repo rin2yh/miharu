@@ -25,7 +25,7 @@ export default function ServiceCard({ service }: { service: DashboardService }) 
 
   return (
     <li
-      className={`min-w-0 rounded-lg border border-line border-t-4 bg-surface px-5 pt-4 pb-2.5 shadow-sm max-sm:px-3 max-sm:pt-3 max-sm:pb-2 ${statusBorders[service.status]}`}
+      className={`min-w-0 rounded-lg border border-line border-t-4 bg-surface px-5 pt-4 pb-2.5 shadow-xs max-sm:px-3 max-sm:pt-3 max-sm:pb-2 ${statusBorders[service.status]}`}
       id={`service-details-${service.id}`}
       aria-label={`${service.name}のサービス状況`}
     >
@@ -45,7 +45,7 @@ export default function ServiceCard({ service }: { service: DashboardService }) 
             </a>
           </h2>
           <span
-            className={`inline-flex min-h-7 items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-xs font-bold ${statusColors[service.status]}`}
+            className={`inline-flex min-h-7 items-center gap-2 whitespace-nowrap rounded-sm px-2 py-1 text-xs font-bold ${statusColors[service.status]}`}
             aria-label={`公式全体ステータス: ${STATUS_LABELS[service.status]}`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
@@ -55,7 +55,7 @@ export default function ServiceCard({ service }: { service: DashboardService }) 
       </header>
 
       {service.status !== "operational" && service.summary && (
-        <p className="mt-2 mb-0 [overflow-wrap:anywhere] text-xs leading-relaxed text-muted">
+        <p className="mt-2 mb-0 wrap-anywhere text-xs leading-relaxed text-muted">
           {service.summary}
         </p>
       )}

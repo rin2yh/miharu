@@ -24,7 +24,7 @@ export function EventRow({ event }: { event: DashboardEvent }) {
           <span>{event.serviceName}</span>
           <span className="border-l border-line-strong pl-2">{labels[event.eventKind]}</span>
         </div>
-        <p className="mt-1 mb-1 text-xs leading-normal text-ink [overflow-wrap:anywhere]">
+        <p className="mt-1 mb-1 text-xs leading-normal text-ink wrap-anywhere">
           {event.url ? (
             <a
               className="ml-1 decoration-line-strong underline-offset-2 hover:text-healthy"

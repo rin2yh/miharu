@@ -71,7 +71,7 @@ export function ServiceSidebar({
             >
               <span
                 aria-hidden="true"
-                className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] leading-none ${allServicesSelected || someServicesSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded-sm border text-[10px] leading-none ${allServicesSelected || someServicesSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
               >
                 {allServicesSelected ? "✓" : someServicesSelected ? "−" : ""}
               </span>
@@ -98,7 +98,7 @@ export function ServiceSidebar({
                 >
                   <span
                     aria-hidden="true"
-                    className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] leading-none ${isSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
+                    className={`grid h-4 w-4 shrink-0 place-items-center rounded-sm border text-[10px] leading-none ${isSelected ? "border-forest bg-forest text-white" : "border-line-strong bg-surface"}`}
                   >
                     {isSelected ? "✓" : ""}
                   </span>

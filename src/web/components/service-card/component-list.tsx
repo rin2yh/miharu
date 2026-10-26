@@ -164,9 +164,9 @@ function ComponentItem({
   return (
     <li className="border-t border-line" aria-label={`${component.name}コンポーネント`}>
       <div className="flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-2 px-0.5 py-2 text-xs text-ink max-sm:gap-1.5">
-        <h4 className="m-0 min-w-0 [overflow-wrap:anywhere] font-semibold">{component.name}</h4>
+        <h4 className="m-0 min-w-0 wrap-anywhere font-semibold">{component.name}</h4>
         <span
-          className={`inline-flex min-h-6 items-center gap-2 whitespace-nowrap rounded px-2 py-0.5 text-xs font-bold ${statusColors[component.status]}`}
+          className={`inline-flex min-h-6 items-center gap-2 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-bold ${statusColors[component.status]}`}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
           {label}
