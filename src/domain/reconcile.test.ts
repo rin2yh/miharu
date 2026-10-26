@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NormalizedIncident } from "../domain";
-import { reconcileIncidents } from "../domain/reconcile";
+import type { NormalizedIncident } from "./index";
+import { reconcileIncidents } from "./reconcile";
 
 const observedAt = "2026-10-23T05:00:00.000Z";
 
