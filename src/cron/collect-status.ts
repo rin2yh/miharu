@@ -1,3 +1,4 @@
+import { notifyUnknownIncidents, type IncidentAlertStateStore } from "./unknown-incident-alerts";
 import { SERVICES, type ServiceConfig } from "../shared/config/services";
 import { createD1Store, type CollectionStore } from "../shared/store";
 import type { CollectionAlertStateStore } from "../shared/collection-alert-state";
@@ -17,6 +18,7 @@ interface ScheduledCollectionStore extends CollectionStore {
 export interface ScheduledCollectionOptions {
   sender?: CollectionAlertSender;
   alertState?: CollectionAlertStateStore;
+  incidentAlertState?: IncidentAlertStateStore;
   environment: string;
   services?: ServiceConfig[];
   fetcher?: SnapshotFetcher;
@@ -49,17 +51,27 @@ export async function collectAtScheduledTime(
                 options.environment,
               )
           : undefined,
-      onCollectionSuccess:
-        alertSender && alertState
-          ? (service, succeededAt) =>
-              notifyCollectionRecovery(
-                alertState,
-                alertSender,
-                service,
-                succeededAt,
-                options.environment,
-              )
-          : undefined,
+      onCollectionSuccess: async (service, succeededAt, snapshot) => {
+        if (alertSender && options.incidentAlertState) {
+          await notifyUnknownIncidents(
+            options.incidentAlertState,
+            alertSender,
+            service,
+            snapshot.incidents,
+            succeededAt,
+            options.environment,
+          );
+        }
+        if (alertSender && alertState) {
+          await notifyCollectionRecovery(
+            alertState,
+            alertSender,
+            service,
+            succeededAt,
+            options.environment,
+          );
+        }
+      },
       onPersistenceFailure: async (service, error) =>
         reportCriticalAlert(options.sender, {
           kind: "persistence_failure",

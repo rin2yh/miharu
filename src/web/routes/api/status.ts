@@ -1,3 +1,4 @@
+import { classifyIncident } from "../../../domain/incident-category";
 import { Hono } from "hono";
 import {
   FRESHNESS_WARNING_SECONDS,
@@ -90,6 +91,10 @@ export function buildDashboardPayload(
       title: row.title,
       body: row.body,
       kind: row.kind,
+      displayCategory: classifyIncident(
+        row,
+        SERVICES.find((service) => service.id === row.serviceId)?.provider,
+      ),
       state: row.state,
       sourceStatus: row.sourceStatus,
       sourceType: row.sourceType,
@@ -145,6 +150,10 @@ export function buildDashboardPayload(
       incidentId: row.incidentId,
       title: row.title,
       kind: row.kind,
+      displayCategory: classifyIncident(
+        row,
+        SERVICES.find((service) => service.id === row.serviceId)?.provider,
+      ),
       eventKind: row.eventKind,
       closureReason: row.closureReason,
       sourceStatus: row.sourceStatus,

@@ -1,3 +1,4 @@
+import { classifyIncident } from "../domain/incident-category";
 import type { DashboardEvent, DashboardPayload, DashboardService } from "../domain";
 
 export const lastSuccessAt = "2026-10-23T05:00:00.000Z";
@@ -31,7 +32,7 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
     state: "investigating" as const,
     sourceStatus: "investigating",
     sourceType: "incident",
-    sourceImpact: null,
+    sourceImpact: "major",
     severityStatus: "partial_outage" as const,
     componentIds: [],
     components: ["Messaging"],
@@ -41,6 +42,12 @@ export function incident(overrides: Partial<DashboardService["incidents"][number
     lifecycle: "active" as const,
     closureReason: null,
     ...overrides,
+    displayCategory: classifyIncident({
+      kind: "incident",
+      sourceType: "incident",
+      sourceImpact: "major",
+      ...overrides,
+    }),
   };
 }
 

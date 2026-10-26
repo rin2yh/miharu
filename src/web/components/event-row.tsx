@@ -1,12 +1,16 @@
 import type { DashboardEvent } from "../../domain";
 import { ExternalIcon } from "./icons";
-import { formatDateTime } from "../presentation/status-presentation";
+import { formatDateTime, incidentCategoryLabel } from "../presentation/status-presentation";
 
 export function EventRow({ event }: { event: DashboardEvent }) {
+  const category = incidentCategoryLabel(event.displayCategory);
   const labels = {
-    opened: event.kind === "maintenance" ? "メンテナンス予定" : "障害発生",
-    updated: event.kind === "maintenance" ? "メンテナンス更新" : "障害更新",
-    resolved: event.kind === "maintenance" ? "メンテナンス完了" : "復旧",
+    opened:
+      event.displayCategory === "maintenance"
+        ? "メンテナンス予定"
+        : `${category}${event.displayCategory === "outage" ? "発生" : "掲載"}`,
+    updated: `${category}更新`,
+    resolved: event.displayCategory === "outage" ? "復旧" : `${category}完了`,
     closed: "追跡終了",
   };
   return (

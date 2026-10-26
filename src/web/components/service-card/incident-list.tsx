@@ -1,14 +1,21 @@
 import type { DashboardIncident, NormalizedStatus } from "../../../domain";
 import {
   formatDateTime,
-  incidentKindLabel,
+  incidentCategoryLabel,
   incidentStateLabel,
   STATUS_LABELS,
 } from "../../presentation/status-presentation";
 import { ExternalIcon } from "../icons";
 
-function incidentKindColor(kind: DashboardIncident["kind"]): string {
-  return kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage";
+function incidentCategoryColor(category: DashboardIncident["displayCategory"]): string {
+  switch (category) {
+    case "maintenance":
+      return "bg-maintenance-bg text-maintenance";
+    case "outage":
+      return "bg-outage-bg text-outage";
+    default:
+      return "bg-unknown-bg text-unknown";
+  }
 }
 
 function incidentStateColor(incident: DashboardIncident): string {
@@ -63,9 +70,9 @@ export function IncidentList({
               </span>
               <span className="inline-flex flex-wrap items-center gap-1.5">
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentKindColor(incident.kind)}`}
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
                 >
-                  {incidentKindLabel(incident.kind)}
+                  {incidentCategoryLabel(incident.displayCategory)}
                 </span>
                 <span
                   className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-semibold ${incidentStateColor(incident)}`}
@@ -90,15 +97,17 @@ export function IncidentList({
             <div className="pr-1 pb-3 pl-5">
               <div className="flex flex-wrap gap-1.5">
                 <span
-                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incident.kind === "maintenance" ? "bg-maintenance-bg text-maintenance" : "bg-outage-bg text-outage"}`}
+                  className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentCategoryColor(incident.displayCategory)}`}
                 >
-                  {incident.kind === "maintenance" ? "メンテナンス" : "障害情報"}
+                  {incident.displayCategory === "outage"
+                    ? "障害情報"
+                    : incidentCategoryLabel(incident.displayCategory)}
                 </span>
                 {incident.severityStatus && (
                   <span
                     className={`inline-flex min-h-5 items-center rounded-sm px-1.5 py-0.5 text-xs font-bold ${incidentImpactColors[incident.severityStatus]}`}
                   >
-                    {`${incident.kind === "maintenance" ? "メンテナンス状態" : "障害の重要度"}: ${STATUS_LABELS[incident.severityStatus]}`}
+                    {`${incident.displayCategory === "maintenance" ? "メンテナンス状態" : incident.displayCategory === "outage" ? "障害の重要度" : "公式の影響度"}: ${STATUS_LABELS[incident.severityStatus]}`}
                   </span>
                 )}
               </div>

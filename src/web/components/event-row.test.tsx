@@ -22,6 +22,7 @@ function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
     incidentId: "incident-1",
     title: "Actions delay",
     kind: "incident",
+    displayCategory: "outage",
     eventKind: "opened",
     closureReason: null,
     sourceStatus: "investigating",
@@ -34,8 +35,24 @@ function event(overrides: Partial<DashboardEvent> = {}): DashboardEvent {
 }
 
 describe("EventRow", () => {
+  it.each([
+    { displayCategory: "notice", label: "お知らせ掲載" },
+    { displayCategory: "unknown", label: "分類不明掲載" },
+  ] as const)("uses $displayCategory for history", ({ displayCategory, label }) => {
+    render(<EventRow event={event({ displayCategory })} />);
+    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.queryByText("障害発生")).not.toBeInTheDocument();
+  });
   it.each(labels)("labels $kind $eventKind events as $label", ({ kind, eventKind, label }) => {
-    render(<EventRow event={event({ kind, eventKind })} />);
+    render(
+      <EventRow
+        event={event({
+          kind,
+          eventKind,
+          displayCategory: kind === "maintenance" ? "maintenance" : "outage",
+        })}
+      />,
+    );
 
     expect(screen.getByText("GitHub")).toBeInTheDocument();
     expect(screen.getByText(label)).toBeInTheDocument();

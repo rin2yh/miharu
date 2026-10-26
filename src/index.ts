@@ -1,3 +1,4 @@
+import { createKvIncidentAlertStateStore } from "./cron/unknown-incident-alerts";
 import { collectAtScheduledTime } from "./cron/collect-status";
 import { createDiscordAlertSender } from "./cron/collection-alerts";
 import { createKvCollectionAlertStateStore } from "./shared/collection-alert-state";
@@ -8,6 +9,7 @@ interface Env {
   COLLECTION_ALERT_STATE: KVNamespace;
   FRESHNESS_WARNING_SECONDS: string;
   DISCORD_WEBHOOK_URL?: string;
+  ENVIRONMENT?: string;
 }
 
 const app = createStatusRoutes();
@@ -21,8 +23,9 @@ export default {
     context.waitUntil(
       collectAtScheduledTime(env.DB, controller.scheduledTime, {
         alertState: createKvCollectionAlertStateStore(env.COLLECTION_ALERT_STATE),
+        incidentAlertState: createKvIncidentAlertStateStore(env.COLLECTION_ALERT_STATE),
         sender,
-        environment: "miharu",
+        environment: env.ENVIRONMENT ?? "local",
       }),
     );
   },
