@@ -48,7 +48,7 @@
     "@vitest/coverage-v8": "^5.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "jsdom": "^30.0.0",
-    "oxfmt": "^0.73.0",
+    "oxfmt": "^0.74.0",
     "oxlint": "^1.80.0",
     "tailwindcss": "4.3.3",
     "typescript": "^7.0.0",
