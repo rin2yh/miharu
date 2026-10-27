@@ -19,12 +19,17 @@ export interface CollectorOptions {
     observedAt: string,
     errorCode: string,
     errorType: string,
+    errorMessage?: string,
   ) => Promise<void>;
   onCollectionSuccess?: (
     service: ServiceConfig,
     observedAt: string,
     snapshot: ProviderSnapshot,
   ) => Promise<void>;
+}
+
+function truncateErrorMessage(message: string): string {
+  return message.length > 500 ? `${message.slice(0, 497)}...` : message;
 }
 
 class CollectionPersistenceError extends Error {
@@ -61,6 +66,7 @@ export async function collectService(
   } catch (error) {
     if (error instanceof CollectionPersistenceError) throw error;
     const errorCode = getCollectionErrorCode(error, controller.signal.aborted);
+    const errorMessage = error instanceof Error ? error.message : undefined;
     console.warn(
       JSON.stringify({
         event: "status_collection_failed",
@@ -68,11 +74,18 @@ export async function collectService(
         serviceName: service.name,
         errorCode,
         errorType: getErrorType(error),
+        ...(errorMessage ? { errorMessage: truncateErrorMessage(errorMessage) } : {}),
         environment: options.environment ?? "unknown",
       }),
     );
     await store.saveFailure(service, observedAt, errorCode);
-    await options.onCollectionFailure?.(service, observedAt, errorCode, getErrorType(error));
+    await options.onCollectionFailure?.(
+      service,
+      observedAt,
+      errorCode,
+      getErrorType(error),
+      errorMessage,
+    );
     return "failed";
   } finally {
     clearTimeout(timeout);

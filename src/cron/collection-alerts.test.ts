@@ -85,6 +85,7 @@ describe("Discord collection alerts with KV state", () => {
         "timeout",
         "TimeoutError",
         "production",
+        "Missing incident status",
       );
       expect(fetcher).toHaveBeenCalledTimes(minute === 2 ? 1 : 0);
     }
@@ -115,6 +116,7 @@ describe("Discord collection alerts with KV state", () => {
     expect(payload.content).toContain("収集失敗が継続");
     expect(payload.content).toContain("Slack (slack)");
     expect(payload.content).toContain("失敗回数: 3");
+    expect(payload.content).toContain("エラー詳細: Missing incident status");
     expect(payload.content).toContain("環境: miharu");
     expect(payload.allowed_mentions).toEqual({ parse: [] });
   });

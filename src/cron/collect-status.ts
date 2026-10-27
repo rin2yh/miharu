@@ -40,7 +40,7 @@ export async function collectAtScheduledTime(
       environment: options.environment,
       onCollectionFailure:
         alertSender && alertState
-          ? (service, failedAt, errorCode, errorType) =>
+          ? (service, failedAt, errorCode, errorType, errorMessage) =>
               notifyCollectionFailure(
                 alertState,
                 alertSender,
@@ -49,6 +49,7 @@ export async function collectAtScheduledTime(
                 errorCode,
                 errorType,
                 options.environment,
+                errorMessage,
               )
           : undefined,
       onCollectionSuccess: async (service, succeededAt, snapshot) => {

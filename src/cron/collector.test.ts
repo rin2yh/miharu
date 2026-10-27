@@ -79,6 +79,37 @@ describe("status collection", () => {
     expect(persistence.saveSuccess).not.toHaveBeenCalled();
   });
 
+  it("logs and forwards an Error message on collection failure", async () => {
+    const persistence = store();
+    const onCollectionFailure = vi.fn<NonNullable<CollectorOptions["onCollectionFailure"]>>(
+      async () => undefined,
+    );
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await collectService(
+        service,
+        "2026-10-23T05:00:00.000Z",
+        persistence,
+        async () => {
+          throw new ProviderError("invalid_payload", "Missing incident status");
+        },
+        { environment: "production", onCollectionFailure },
+      );
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining('"errorMessage":"Missing incident status"'),
+      );
+      expect(onCollectionFailure).toHaveBeenCalledWith(
+        service,
+        "2026-10-23T05:00:00.000Z",
+        "invalid_payload",
+        "ProviderError",
+        "Missing incident status",
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("passes known active ChatGPT incidents to the provider for rechecks", async () => {
     const knownIncident = {
       id: "older-chatgpt-incident",
