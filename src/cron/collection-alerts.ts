@@ -11,6 +11,7 @@ export type CollectionAlert = {
   serviceName: string;
   errorCode: string;
   errorType: string;
+  errorMessage?: string;
   firstFailedAt: string;
   lastFailedAt?: string;
   failureCount: number;
@@ -68,10 +69,18 @@ export async function notifyCollectionFailure(
   errorCode: string,
   errorType: string,
   environment: string,
+  errorMessage?: string,
 ): Promise<void> {
   let alert: CollectionAlert | undefined;
   try {
-    alert = await recordCollectionFailure(stateStore, service, occurredAt, errorCode, errorType);
+    alert = await recordCollectionFailure(
+      stateStore,
+      service,
+      occurredAt,
+      errorCode,
+      errorType,
+      errorMessage,
+    );
   } catch (error) {
     reportLog("collection_alert_state_failed", {
       kind: "failure",
@@ -158,6 +167,7 @@ export async function recordCollectionFailure(
   occurredAt: string,
   errorCode: string,
   errorType: string,
+  errorMessage?: string,
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
@@ -174,6 +184,7 @@ export async function recordCollectionFailure(
     lastFailedAt: occurredAt,
     errorCode,
     errorType,
+    ...(errorMessage ? { errorMessage: truncateErrorMessage(errorMessage) } : {}),
     notified: false,
     notificationSuppressed: false,
   };
@@ -186,6 +197,7 @@ export async function recordCollectionFailure(
     serviceName: service.name,
     errorCode: state.errorCode,
     errorType: state.errorType,
+    ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
     firstFailedAt: state.firstFailedAt,
     lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
@@ -206,6 +218,7 @@ async function saveCollectionAlertDeliveryState(
       lastFailedAt: alert.lastFailedAt ?? alert.firstFailedAt,
       errorCode: alert.errorCode,
       errorType: alert.errorType,
+      ...(alert.errorMessage ? { errorMessage: alert.errorMessage } : {}),
       notified,
       notificationSuppressed,
     });
@@ -272,6 +285,9 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
       `サービス: ${alert.serviceName} (${alert.serviceId})`,
       `エラー種別: ${alert.errorType}`,
       `エラーコード: ${alert.errorCode}`,
+      ...(alert.kind === "failure" && alert.errorMessage
+        ? [`エラー詳細: ${alert.errorMessage.slice(0, 500)}`]
+        : []),
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
       "環境: miharu",
@@ -304,6 +320,10 @@ function isDiscordWebhookUrl(value: string | undefined): value is string {
   } catch {
     return false;
   }
+}
+
+function truncateErrorMessage(message: string): string {
+  return message.length > 500 ? `${message.slice(0, 497)}...` : message;
 }
 
 function reportLog(

@@ -4,6 +4,7 @@ export interface CollectionAlertState {
   lastFailedAt: string;
   errorCode: string;
   errorType: string;
+  errorMessage?: string;
   notified: boolean;
   notificationSuppressed?: boolean;
 }
