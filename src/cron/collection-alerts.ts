@@ -45,18 +45,18 @@ export function createDiscordAlertSender(config: DiscordAlertConfig): Collection
     enabled,
     async send(alert) {
       if (!enabled || !webhookUrl) return;
-      const response = await (config.fetcher ?? fetch)(webhookUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...(alert.kind === "unknown_incident"
-            ? { embeds: [formatUnknownIncidentAlert(alert)] }
-            : { content: formatAlert(alert) }),
-          allowed_mentions: { parse: [] },
-        }),
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!response.ok) throw new Error(`Discord webhook returned HTTP ${response.status}`);
+      const payloads = alert.kind === "unknown_incident"
+        ? [{ embeds: [formatUnknownIncidentAlert(alert)] }]
+        : splitDiscordMessage(formatAlert(alert)).map((content) => ({ content }));
+      for (const payload of payloads) {
+        const response = await (config.fetcher ?? fetch)(webhookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...payload, allowed_mentions: { parse: [] } }),
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!response.ok) throw new Error(`Discord webhook returned HTTP ${response.status}`);
+      }
     },
   };
 }
@@ -184,7 +184,7 @@ export async function recordCollectionFailure(
     lastFailedAt: occurredAt,
     errorCode,
     errorType,
-    ...(errorMessage ? { errorMessage: truncateErrorMessage(errorMessage) } : {}),
+    ...(errorMessage ? { errorMessage } : {}),
     notified: false,
     notificationSuppressed: false,
   };
@@ -286,7 +286,7 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
       `エラー種別: ${alert.errorType}`,
       `エラーコード: ${alert.errorCode}`,
       ...(alert.kind === "failure" && alert.errorMessage
-        ? [`エラー詳細: ${alert.errorMessage.slice(0, 500)}`]
+        ? [`エラー詳細: ${alert.errorMessage}`]
         : []),
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
@@ -322,8 +322,18 @@ function isDiscordWebhookUrl(value: string | undefined): value is string {
   }
 }
 
-function truncateErrorMessage(message: string): string {
-  return message.length > 500 ? `${message.slice(0, 497)}...` : message;
+function splitDiscordMessage(message: string): string[] {
+  const limit = 2_000;
+  const chunks: string[] = [];
+  let remaining = message;
+  while (remaining.length > limit) {
+    let splitAt = remaining.lastIndexOf("\n", limit);
+    if (splitAt < 1) splitAt = limit;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n/, "");
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
 }
 
 function reportLog(

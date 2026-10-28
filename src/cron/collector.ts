@@ -28,10 +28,6 @@ export interface CollectorOptions {
   ) => Promise<void>;
 }
 
-function truncateErrorMessage(message: string): string {
-  return message.length > 500 ? `${message.slice(0, 497)}...` : message;
-}
-
 class CollectionPersistenceError extends Error {
   constructor(cause: unknown) {
     super("Collection persistence failed", { cause });
@@ -74,7 +70,7 @@ export async function collectService(
         serviceName: service.name,
         errorCode,
         errorType: getErrorType(error),
-        ...(errorMessage ? { errorMessage: truncateErrorMessage(errorMessage) } : {}),
+        ...(errorMessage ? { errorMessage } : {}),
         environment: options.environment ?? "unknown",
       }),
     );
