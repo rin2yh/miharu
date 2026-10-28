@@ -75,23 +75,21 @@ export async function collectAtScheduledTime(
           );
         }
       },
-      onPersistenceFailure: async (service, error) =>
-        reportCriticalAlert(options.sender, {
-          kind:
-            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
-              ? "persistence_failure"
-              : "cron_failure",
+      onPersistenceFailure: async (service, error) => {
+        const diagnostics = getErrorDiagnostics(error);
+        const isD1Error = diagnostics.errorCategory === "D1";
+        await reportCriticalAlert(options.sender, {
+          kind: isD1Error ? "persistence_failure" : "cron_failure",
           serviceId: service.id,
           serviceName: service.name,
-          errorCode:
-            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
-              ? "d1_persistence_error"
-              : `collection_${getErrorDiagnostics(error).errorCategory.toLowerCase()}_error`,
-          ...getErrorDiagnostics(error),
-          errorCategory: getErrorDiagnostics(error).errorCategory,
+          errorCode: isD1Error
+            ? "d1_persistence_error"
+            : `collection_${diagnostics.errorCategory.toLowerCase()}_error`,
+          ...diagnostics,
           occurredAt: observedAt,
           environment: options.environment,
-        }),
+        });
+      },
     });
 
     if (new Date(scheduledTime).getUTCMinutes() % 15 === 0) {
