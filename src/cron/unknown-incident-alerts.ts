@@ -2,6 +2,7 @@ import { classifyIncident } from "../adapter/incident-category";
 import type { NormalizedIncident } from "../domain";
 import type { ServiceConfig } from "../shared/config/services";
 import { getErrorType, type CollectionAlertSender } from "./collection-alerts";
+import { getErrorDiagnostics } from "./error-diagnostics";
 
 export interface UnknownIncidentAlert {
   kind: "unknown_incident";
@@ -75,7 +76,7 @@ export async function notifyUnknownIncidents(
           serviceId: service.id,
           incidentId: incident.id,
           environment,
-          errorType: getErrorType(error),
+          ...getErrorDiagnostics(error),
         }),
       );
     }

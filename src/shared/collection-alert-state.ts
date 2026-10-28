@@ -5,6 +5,7 @@ export interface CollectionAlertState {
   errorCode: string;
   errorType: string;
   errorMessage?: string;
+  errorCause?: string;
   notified: boolean;
   notificationSuppressed?: boolean;
 }

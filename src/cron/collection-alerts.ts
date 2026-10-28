@@ -4,6 +4,7 @@ import type {
   CollectionAlertState,
   CollectionAlertStateStore,
 } from "../shared/collection-alert-state";
+import { getErrorDiagnostics } from "./error-diagnostics";
 
 export type CollectionAlert = {
   kind: "failure" | "recovery";
@@ -12,6 +13,8 @@ export type CollectionAlert = {
   errorCode: string;
   errorType: string;
   errorMessage?: string;
+  errorCause?: string;
+  errorCategory?: string;
   firstFailedAt: string;
   lastFailedAt?: string;
   failureCount: number;
@@ -25,6 +28,9 @@ export type CriticalCollectionAlert = {
   errorType: string;
   occurredAt: string;
   environment: string;
+  errorMessage?: string;
+  errorCause?: string;
+  errorCategory?: string;
 };
 
 export interface CollectionAlertSender {
@@ -45,9 +51,10 @@ export function createDiscordAlertSender(config: DiscordAlertConfig): Collection
     enabled,
     async send(alert) {
       if (!enabled || !webhookUrl) return;
-      const payloads = alert.kind === "unknown_incident"
-        ? [{ embeds: [formatUnknownIncidentAlert(alert)] }]
-        : splitDiscordMessage(formatAlert(alert)).map((content) => ({ content }));
+      const payloads =
+        alert.kind === "unknown_incident"
+          ? [{ embeds: [formatUnknownIncidentAlert(alert)] }]
+          : splitDiscordMessage(formatAlert(alert)).map((content) => ({ content }));
       for (const payload of payloads) {
         const response = await (config.fetcher ?? fetch)(webhookUrl, {
           method: "POST",
@@ -70,6 +77,7 @@ export async function notifyCollectionFailure(
   errorType: string,
   environment: string,
   errorMessage?: string,
+  errorCause?: string,
 ): Promise<void> {
   let alert: CollectionAlert | undefined;
   try {
@@ -80,28 +88,40 @@ export async function notifyCollectionFailure(
       errorCode,
       errorType,
       errorMessage,
+      errorCause,
     );
   } catch (error) {
+    const diagnostics = getErrorDiagnostics(error);
     reportLog("collection_alert_state_failed", {
       kind: "failure",
       serviceId: service.id,
       serviceName: service.name,
       errorCode: "kv_state_error",
-      errorType: getErrorType(error),
+      ...diagnostics,
       environment,
     });
+    await sendDiagnosticAlert(
+      sender,
+      service.id,
+      service.name,
+      "KV",
+      "kv_state_error",
+      error,
+      occurredAt,
+      environment,
+    );
     return;
   }
 
   if (!alert) return;
 
   if (!sender?.enabled) {
-    await saveCollectionAlertDeliveryState(stateStore, alert, false, true, environment);
+    await saveCollectionAlertDeliveryState(stateStore, alert, false, true, environment, sender);
     return;
   }
 
   if (await sendCollectionAlert(sender, alert, environment)) {
-    await saveCollectionAlertDeliveryState(stateStore, alert, true, false, environment);
+    await saveCollectionAlertDeliveryState(stateStore, alert, true, false, environment, sender);
   }
 }
 
@@ -116,14 +136,25 @@ export async function notifyCollectionRecovery(
   try {
     alert = await recordCollectionRecovery(stateStore, service, recoveredAt);
   } catch (error) {
+    const diagnostics = getErrorDiagnostics(error);
     reportLog("collection_alert_state_failed", {
       kind: "recovery",
       serviceId: service.id,
       serviceName: service.name,
       errorCode: "kv_state_error",
-      errorType: getErrorType(error),
+      ...diagnostics,
       environment,
     });
+    await sendDiagnosticAlert(
+      sender,
+      service.id,
+      service.name,
+      "KV",
+      "kv_state_error",
+      error,
+      recoveredAt,
+      environment,
+    );
     return;
   }
 
@@ -139,6 +170,9 @@ export async function reportCriticalAlert(
     serviceName: alert.serviceName,
     errorCode: alert.errorCode,
     errorType: alert.errorType,
+    ...(alert.errorMessage ? { errorMessage: alert.errorMessage } : {}),
+    ...(alert.errorCause ? { errorCause: alert.errorCause } : {}),
+    ...(alert.errorCategory ? { errorCategory: alert.errorCategory } : {}),
     environment: alert.environment,
   });
   if (!sender?.enabled) return;
@@ -150,7 +184,7 @@ export async function reportCriticalAlert(
       kind: alert.kind,
       serviceId: alert.serviceId,
       errorCode: "discord_delivery_error",
-      errorType: getErrorType(error),
+      ...getErrorDiagnostics(error),
       environment: alert.environment,
     });
   }
@@ -168,6 +202,7 @@ export async function recordCollectionFailure(
   errorCode: string,
   errorType: string,
   errorMessage?: string,
+  errorCause?: string,
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
@@ -185,6 +220,7 @@ export async function recordCollectionFailure(
     errorCode,
     errorType,
     ...(errorMessage ? { errorMessage } : {}),
+    ...(errorCause ? { errorCause } : {}),
     notified: false,
     notificationSuppressed: false,
   };
@@ -198,6 +234,7 @@ export async function recordCollectionFailure(
     errorCode: state.errorCode,
     errorType: state.errorType,
     ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
+    ...(state.errorCause ? { errorCause: state.errorCause } : {}),
     firstFailedAt: state.firstFailedAt,
     lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
@@ -210,6 +247,7 @@ async function saveCollectionAlertDeliveryState(
   notified: boolean,
   notificationSuppressed: boolean,
   environment: string,
+  sender?: CollectionAlertSender,
 ): Promise<void> {
   try {
     await stateStore.put(alert.serviceId, {
@@ -219,6 +257,7 @@ async function saveCollectionAlertDeliveryState(
       errorCode: alert.errorCode,
       errorType: alert.errorType,
       ...(alert.errorMessage ? { errorMessage: alert.errorMessage } : {}),
+      ...(alert.errorCause ? { errorCause: alert.errorCause } : {}),
       notified,
       notificationSuppressed,
     });
@@ -228,9 +267,19 @@ async function saveCollectionAlertDeliveryState(
       serviceId: alert.serviceId,
       serviceName: alert.serviceName,
       errorCode: "kv_state_error",
-      errorType: getErrorType(error),
+      ...getErrorDiagnostics(error),
       environment,
     });
+    await sendDiagnosticAlert(
+      sender,
+      alert.serviceId,
+      alert.serviceName,
+      "KV",
+      "kv_state_error",
+      error,
+      new Date().toISOString(),
+      environment,
+    );
   }
 }
 
@@ -270,10 +319,43 @@ async function sendCollectionAlert(
       kind: alert.kind,
       serviceId: alert.serviceId,
       errorCode: "discord_delivery_error",
-      errorType: getErrorType(error),
+      ...getErrorDiagnostics(error),
       environment,
     });
     return false;
+  }
+}
+
+async function sendDiagnosticAlert(
+  sender: CollectionAlertSender | undefined,
+  serviceId: string,
+  serviceName: string,
+  category: string,
+  errorCode: string,
+  error: unknown,
+  occurredAt: string,
+  environment: string,
+): Promise<void> {
+  if (!sender?.enabled) return;
+  try {
+    await sender.send({
+      kind: "cron_failure",
+      serviceId,
+      serviceName,
+      errorCategory: category,
+      errorCode,
+      occurredAt,
+      environment,
+      ...getErrorDiagnostics(error),
+    });
+  } catch (deliveryError) {
+    reportLog("discord_notification_failed", {
+      serviceId,
+      serviceName,
+      errorCode: "discord_delivery_error",
+      ...getErrorDiagnostics(deliveryError),
+      environment,
+    });
   }
 }
 
@@ -285,9 +367,11 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
       `サービス: ${alert.serviceName} (${alert.serviceId})`,
       `エラー種別: ${alert.errorType}`,
       `エラーコード: ${alert.errorCode}`,
+      ...(alert.errorCategory ? [`分類: ${alert.errorCategory}`] : []),
       ...(alert.kind === "failure" && alert.errorMessage
         ? [`エラー詳細: ${alert.errorMessage}`]
         : []),
+      ...(alert.kind === "failure" && alert.errorCause ? [`原因: ${alert.errorCause}`] : []),
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
       "環境: miharu",
@@ -300,6 +384,9 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
     `サービス: ${alert.serviceName} (${alert.serviceId})`,
     `エラーコード: ${alert.errorCode}`,
     `エラー種別: ${alert.errorType}`,
+    ...(alert.errorCategory ? [`分類: ${alert.errorCategory}`] : []),
+    ...(alert.errorMessage ? [`エラー詳細: ${alert.errorMessage}`] : []),
+    ...(alert.errorCause ? [`原因: ${alert.errorCause}`] : []),
     `発生時刻: ${alert.occurredAt}`,
     "失敗回数: 1",
     "環境: miharu",
@@ -345,6 +432,9 @@ function reportLog(
     errorCode: string;
     errorType: string;
     environment: string;
+    errorMessage?: string;
+    errorCause?: string;
+    errorCategory?: string;
   },
 ): void {
   console.error(JSON.stringify({ event, ...details }));

@@ -10,6 +10,7 @@ import {
   reportCriticalAlert,
   type CollectionAlertSender,
 } from "./collection-alerts";
+import { getErrorDiagnostics } from "./error-diagnostics";
 
 interface ScheduledCollectionStore extends CollectionStore {
   pruneHistory(now: Date): Promise<void>;
@@ -40,7 +41,7 @@ export async function collectAtScheduledTime(
       environment: options.environment,
       onCollectionFailure:
         alertSender && alertState
-          ? (service, failedAt, errorCode, errorType, errorMessage) =>
+          ? (service, failedAt, errorCode, errorType, errorMessage, errorCause) =>
               notifyCollectionFailure(
                 alertState,
                 alertSender,
@@ -50,6 +51,7 @@ export async function collectAtScheduledTime(
                 errorType,
                 options.environment,
                 errorMessage,
+                errorCause,
               )
           : undefined,
       onCollectionSuccess: async (service, succeededAt, snapshot) => {
@@ -75,11 +77,21 @@ export async function collectAtScheduledTime(
       },
       onPersistenceFailure: async (service, error) =>
         reportCriticalAlert(options.sender, {
-          kind: "persistence_failure",
+          kind:
+            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
+              ? "persistence_failure"
+              : "cron_failure",
           serviceId: service.id,
           serviceName: service.name,
-          errorCode: "d1_persistence_error",
-          errorType: getErrorType(error),
+          errorCode:
+            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
+              ? "d1_persistence_error"
+              : "collection_callback_error",
+          ...getErrorDiagnostics(error),
+          errorCategory:
+            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
+              ? "D1"
+              : "collection_callback",
           occurredAt: observedAt,
           environment: options.environment,
         }),
@@ -94,7 +106,8 @@ export async function collectAtScheduledTime(
           serviceId: "miharu-d1",
           serviceName: "miharu D1",
           errorCode: "d1_persistence_error",
-          errorType: getErrorType(error),
+          ...getErrorDiagnostics(error),
+          errorCategory: "D1",
           occurredAt: observedAt,
           environment: options.environment,
         });
@@ -106,7 +119,8 @@ export async function collectAtScheduledTime(
       serviceId: "miharu-cron",
       serviceName: "miharu Cron",
       errorCode: "cron_execution_error",
-      errorType: getErrorType(error),
+      ...getErrorDiagnostics(error),
+      errorCategory: "cron",
       occurredAt: observedAt,
       environment: options.environment,
     });

@@ -5,6 +5,7 @@ import type { ProviderContext } from "../adapter/provider-context";
 import { ProviderError } from "../adapter/shared";
 import type { CollectionStore } from "../shared/store";
 import { getErrorType } from "./collection-alerts";
+import { getErrorDiagnostics } from "./error-diagnostics";
 
 export type SnapshotFetcher = (
   service: ServiceConfig,
@@ -20,6 +21,7 @@ export interface CollectorOptions {
     errorCode: string,
     errorType: string,
     errorMessage?: string,
+    errorCause?: string,
   ) => Promise<void>;
   onCollectionSuccess?: (
     service: ServiceConfig,
@@ -32,6 +34,13 @@ class CollectionPersistenceError extends Error {
   constructor(cause: unknown) {
     super("Collection persistence failed", { cause });
     this.name = "CollectionPersistenceError";
+  }
+}
+
+class CollectionStoreError extends Error {
+  constructor(cause: unknown) {
+    super("D1 collection store operation failed", { cause });
+    this.name = "CollectionStoreError";
   }
 }
 
@@ -62,7 +71,8 @@ export async function collectService(
   } catch (error) {
     if (error instanceof CollectionPersistenceError) throw error;
     const errorCode = getCollectionErrorCode(error, controller.signal.aborted);
-    const errorMessage = error instanceof Error ? error.message : undefined;
+    const diagnostics = getErrorDiagnostics(error);
+    const errorMessage = diagnostics.errorMessage;
     console.warn(
       JSON.stringify({
         event: "status_collection_failed",
@@ -71,23 +81,33 @@ export async function collectService(
         errorCode,
         errorType: getErrorType(error),
         ...(errorMessage ? { errorMessage } : {}),
+        ...(diagnostics.errorCause ? { errorCause: diagnostics.errorCause } : {}),
         environment: options.environment ?? "unknown",
       }),
     );
-    await store.saveFailure(service, observedAt, errorCode);
+    try {
+      await store.saveFailure(service, observedAt, errorCode);
+    } catch (storeError) {
+      throw new CollectionStoreError(storeError);
+    }
     await options.onCollectionFailure?.(
       service,
       observedAt,
       errorCode,
       getErrorType(error),
       errorMessage,
+      diagnostics.errorCause,
     );
     return "failed";
   } finally {
     clearTimeout(timeout);
   }
 
-  await store.saveSuccess(service, snapshot, observedAt);
+  try {
+    await store.saveSuccess(service, snapshot, observedAt);
+  } catch (storeError) {
+    throw new CollectionStoreError(storeError);
+  }
   await options.onCollectionSuccess?.(service, observedAt, snapshot);
   return "ok";
 }
@@ -104,13 +124,17 @@ export async function collectAll(
       try {
         await collectService(service, observedAt, store, fetcher, options);
       } catch (error) {
+        const isD1Error =
+          error instanceof CollectionStoreError || error instanceof CollectionPersistenceError;
+        const diagnostics = getErrorDiagnostics(error);
         console.error(
           JSON.stringify({
-            event: "status_collection_persistence_failed",
+            event: "status_collection_error",
             serviceId: service.id,
             serviceName: service.name,
-            errorCode: "d1_persistence_error",
-            errorType: getErrorType(error),
+            errorCode: isD1Error ? "d1_persistence_error" : "collection_callback_error",
+            ...diagnostics,
+            errorCategory: isD1Error ? "D1" : "collection_callback",
             environment: options.environment ?? "unknown",
           }),
         );
@@ -124,7 +148,7 @@ export async function collectAll(
                 kind: "persistence_failure",
                 serviceId: service.id,
                 errorCode: "discord_delivery_error",
-                errorType: getErrorType(notificationError),
+                ...getErrorDiagnostics(notificationError),
                 environment: options.environment ?? "unknown",
               }),
             );
