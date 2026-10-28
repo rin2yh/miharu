@@ -41,7 +41,7 @@ export async function collectAtScheduledTime(
       environment: options.environment,
       onCollectionFailure:
         alertSender && alertState
-          ? (service, failedAt, errorCode, errorType, errorMessage, errorCause) =>
+          ? (service, failedAt, errorCode, errorType, errorMessage, errorCause, errorCategory) =>
               notifyCollectionFailure(
                 alertState,
                 alertSender,
@@ -52,6 +52,7 @@ export async function collectAtScheduledTime(
                 options.environment,
                 errorMessage,
                 errorCause,
+                errorCategory,
               )
           : undefined,
       onCollectionSuccess: async (service, succeededAt, snapshot) => {
@@ -86,12 +87,9 @@ export async function collectAtScheduledTime(
           errorCode:
             error instanceof Error && /StoreError|PersistenceError/.test(error.name)
               ? "d1_persistence_error"
-              : "collection_callback_error",
+              : `collection_${getErrorDiagnostics(error).errorCategory.toLowerCase()}_error`,
           ...getErrorDiagnostics(error),
-          errorCategory:
-            error instanceof Error && /StoreError|PersistenceError/.test(error.name)
-              ? "D1"
-              : "collection_callback",
+          errorCategory: getErrorDiagnostics(error).errorCategory,
           occurredAt: observedAt,
           environment: options.environment,
         }),

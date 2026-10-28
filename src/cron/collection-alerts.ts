@@ -78,6 +78,7 @@ export async function notifyCollectionFailure(
   environment: string,
   errorMessage?: string,
   errorCause?: string,
+  errorCategory?: string,
 ): Promise<void> {
   let alert: CollectionAlert | undefined;
   try {
@@ -89,6 +90,7 @@ export async function notifyCollectionFailure(
       errorType,
       errorMessage,
       errorCause,
+      errorCategory,
     );
   } catch (error) {
     const diagnostics = getErrorDiagnostics(error);
@@ -203,6 +205,7 @@ export async function recordCollectionFailure(
   errorType: string,
   errorMessage?: string,
   errorCause?: string,
+  errorCategory?: string,
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
@@ -221,6 +224,7 @@ export async function recordCollectionFailure(
     errorType,
     ...(errorMessage ? { errorMessage } : {}),
     ...(errorCause ? { errorCause } : {}),
+    ...(errorCategory ? { errorCategory } : {}),
     notified: false,
     notificationSuppressed: false,
   };
@@ -235,6 +239,7 @@ export async function recordCollectionFailure(
     errorType: state.errorType,
     ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
     ...(state.errorCause ? { errorCause: state.errorCause } : {}),
+    ...(state.errorCategory ? { errorCategory: state.errorCategory } : {}),
     firstFailedAt: state.firstFailedAt,
     lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
@@ -258,6 +263,7 @@ async function saveCollectionAlertDeliveryState(
       errorType: alert.errorType,
       ...(alert.errorMessage ? { errorMessage: alert.errorMessage } : {}),
       ...(alert.errorCause ? { errorCause: alert.errorCause } : {}),
+      ...(alert.errorCategory ? { errorCategory: alert.errorCategory } : {}),
       notified,
       notificationSuppressed,
     });
@@ -342,11 +348,11 @@ async function sendDiagnosticAlert(
       kind: "cron_failure",
       serviceId,
       serviceName,
-      errorCategory: category,
       errorCode,
       occurredAt,
       environment,
       ...getErrorDiagnostics(error),
+      errorCategory: category,
     });
   } catch (deliveryError) {
     reportLog("discord_notification_failed", {

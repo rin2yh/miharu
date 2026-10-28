@@ -110,6 +110,7 @@ describe("status collection", () => {
         "ProviderError",
         "Missing incident status",
         "Error: status field was null",
+        "external_api",
       );
     } finally {
       log.mockRestore();

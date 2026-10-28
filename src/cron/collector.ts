@@ -22,6 +22,7 @@ export interface CollectorOptions {
     errorType: string,
     errorMessage?: string,
     errorCause?: string,
+    errorCategory?: string,
   ) => Promise<void>;
   onCollectionSuccess?: (
     service: ServiceConfig,
@@ -97,6 +98,7 @@ export async function collectService(
       getErrorType(error),
       errorMessage,
       diagnostics.errorCause,
+      diagnostics.errorCategory,
     );
     return "failed";
   } finally {
@@ -127,14 +129,17 @@ export async function collectAll(
         const isD1Error =
           error instanceof CollectionStoreError || error instanceof CollectionPersistenceError;
         const diagnostics = getErrorDiagnostics(error);
+        const errorCategory = isD1Error ? "D1" : diagnostics.errorCategory;
         console.error(
           JSON.stringify({
             event: "status_collection_error",
             serviceId: service.id,
             serviceName: service.name,
-            errorCode: isD1Error ? "d1_persistence_error" : "collection_callback_error",
+            errorCode: isD1Error
+              ? "d1_persistence_error"
+              : `collection_${errorCategory.toLowerCase()}_error`,
             ...diagnostics,
-            errorCategory: isD1Error ? "D1" : "collection_callback",
+            errorCategory,
             environment: options.environment ?? "unknown",
           }),
         );
