@@ -7,7 +7,7 @@ describe("getErrorDiagnostics", () => {
     const error = new Error("Failed to save snapshot", { cause: root });
     expect(getErrorDiagnostics(error)).toEqual({
       errorType: "Error",
-      errorCategory: "notification",
+      errorCategory: "unknown",
       errorMessage: "Failed to save snapshot",
       errorCause: "Error: D1 socket closed",
     });

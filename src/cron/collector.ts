@@ -154,6 +154,7 @@ export async function collectAll(
                 serviceId: service.id,
                 errorCode: "discord_delivery_error",
                 ...getErrorDiagnostics(notificationError),
+                errorCategory: "Discord",
                 environment: options.environment ?? "unknown",
               }),
             );

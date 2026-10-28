@@ -187,6 +187,7 @@ export async function reportCriticalAlert(
       serviceId: alert.serviceId,
       errorCode: "discord_delivery_error",
       ...getErrorDiagnostics(error),
+      errorCategory: "Discord",
       environment: alert.environment,
     });
   }
@@ -326,6 +327,7 @@ async function sendCollectionAlert(
       serviceId: alert.serviceId,
       errorCode: "discord_delivery_error",
       ...getErrorDiagnostics(error),
+      errorCategory: "Discord",
       environment,
     });
     return false;
@@ -360,6 +362,7 @@ async function sendDiagnosticAlert(
       serviceName,
       errorCode: "discord_delivery_error",
       ...getErrorDiagnostics(deliveryError),
+      errorCategory: "Discord",
       environment,
     });
   }

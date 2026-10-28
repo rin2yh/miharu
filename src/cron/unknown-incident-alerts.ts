@@ -77,6 +77,7 @@ export async function notifyUnknownIncidents(
           incidentId: incident.id,
           environment,
           ...getErrorDiagnostics(error),
+          errorCategory: "notification",
         }),
       );
     }

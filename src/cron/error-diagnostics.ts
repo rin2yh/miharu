@@ -6,12 +6,12 @@ export interface ErrorDiagnostics {
 }
 
 export type ErrorCategory =
+  | "unknown"
   | "D1"
   | "KV"
   | "Discord"
   | "external_api"
   | "timeout"
-  | "notification"
   | "cron";
 export const MAX_ERROR_DETAIL_LENGTH = 8_000;
 
@@ -40,7 +40,7 @@ function classifyError(error: Error): ErrorCategory {
   if (/Collection(Store|Persistence)Error/.test(error.name)) return "D1";
   if (/KV/.test(error.name)) return "KV";
   if (/Discord|Webhook/.test(error.name)) return "Discord";
-  return "notification";
+  return "unknown";
 }
 
 function boundDetails(
