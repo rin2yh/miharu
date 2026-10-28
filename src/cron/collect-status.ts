@@ -4,7 +4,6 @@ import { createD1Store, type CollectionStore } from "../shared/store";
 import type { CollectionAlertStateStore } from "../shared/collection-alert-state";
 import { collectAll, type SnapshotFetcher } from "./collector";
 import {
-  getErrorType,
   notifyCollectionFailure,
   notifyCollectionRecovery,
   reportCriticalAlert,
