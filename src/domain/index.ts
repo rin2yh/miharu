@@ -61,6 +61,8 @@ export interface ProviderSnapshot {
   incidents: NormalizedIncident[];
   /** Known incidents whose individual recheck failed; their last official state is retained. */
   unverifiedIncidentIds?: string[];
+  /** Known incidents that the provider's individual lookup explicitly returned as not found. */
+  notFoundIncidentIds?: string[];
   /** False when omitted incidents must not be treated as resolved. */
   incidentListComplete?: boolean;
 }

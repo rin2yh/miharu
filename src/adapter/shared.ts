@@ -6,6 +6,7 @@ export class ProviderError extends Error {
   constructor(
     readonly code:
       | "upstream_http_error"
+      | "not_found"
       | "invalid_response"
       | "invalid_payload"
       | "timeout"
@@ -23,6 +24,7 @@ export async function fetchJson(
   url: string,
   signal: AbortSignal,
   fetcher: FetchLike = fetch,
+  options: { distinguishNotFound?: boolean } = {},
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -38,6 +40,9 @@ export async function fetchJson(
     throw new ProviderError("network_error", "Status source request failed");
   }
 
+  if (response.status === 404 && options.distinguishNotFound) {
+    throw new ProviderError("not_found", "Status source did not find the requested resource");
+  }
   if (!response.ok) {
     throw new ProviderError(
       "upstream_http_error",
