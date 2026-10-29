@@ -9,6 +9,7 @@ export interface CollectionAlertState {
   errorCategory?: string;
   notified: boolean;
   notificationSuppressed?: boolean;
+  invalidPayloadNotificationVersion?: number;
 }
 
 export interface CollectionAlertStateStore {

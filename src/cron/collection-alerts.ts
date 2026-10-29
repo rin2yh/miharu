@@ -6,6 +6,8 @@ import type {
 } from "../shared/collection-alert-state";
 import { getErrorDiagnostics } from "./error-diagnostics";
 
+const INVALID_PAYLOAD_NOTIFICATION_VERSION = 1;
+
 export type CollectionAlert = {
   kind: "failure" | "recovery";
   serviceId: string;
@@ -13,6 +15,8 @@ export type CollectionAlert = {
   errorCode: string;
   errorType: string;
   errorMessage?: string;
+  occurredAt: string;
+  environment: string;
   errorCause?: string;
   errorCategory?: string;
   firstFailedAt: string;
@@ -91,6 +95,7 @@ export async function notifyCollectionFailure(
       errorMessage,
       errorCause,
       errorCategory,
+      environment,
     );
   } catch (error) {
     const diagnostics = getErrorDiagnostics(error);
@@ -136,7 +141,7 @@ export async function notifyCollectionRecovery(
 ): Promise<void> {
   let alert: CollectionAlert | undefined;
   try {
-    alert = await recordCollectionRecovery(stateStore, service, recoveredAt);
+    alert = await recordCollectionRecovery(stateStore, service, recoveredAt, environment);
   } catch (error) {
     const diagnostics = getErrorDiagnostics(error);
     reportLog("collection_alert_state_failed", {
@@ -207,11 +212,15 @@ export async function recordCollectionFailure(
   errorMessage?: string,
   errorCause?: string,
   errorCategory?: string,
+  environment = "unknown",
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
-    previous?.notified ||
-    previous?.notificationSuppressed ||
+    (previous?.notified &&
+      previous.errorCode === errorCode &&
+      (errorCode !== "invalid_payload" ||
+        previous.invalidPayloadNotificationVersion === INVALID_PAYLOAD_NOTIFICATION_VERSION)) ||
+    (previous?.notificationSuppressed && errorCode !== "invalid_payload") ||
     (previous && previous.lastFailedAt >= occurredAt)
   ) {
     return undefined;
@@ -231,7 +240,7 @@ export async function recordCollectionFailure(
   };
   await stateStore.put(service.id, state);
 
-  if (state.consecutiveFailures < 3) return undefined;
+  if (errorCode !== "invalid_payload" && state.consecutiveFailures < 3) return undefined;
   return {
     kind: "failure",
     serviceId: service.id,
@@ -244,6 +253,8 @@ export async function recordCollectionFailure(
     firstFailedAt: state.firstFailedAt,
     lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
+    occurredAt,
+    environment,
   };
 }
 
@@ -267,6 +278,9 @@ async function saveCollectionAlertDeliveryState(
       ...(alert.errorCategory ? { errorCategory: alert.errorCategory } : {}),
       notified,
       notificationSuppressed,
+      ...(notified && alert.errorCode === "invalid_payload"
+        ? { invalidPayloadNotificationVersion: INVALID_PAYLOAD_NOTIFICATION_VERSION }
+        : {}),
     });
   } catch (error) {
     reportLog("collection_alert_state_failed", {
@@ -294,6 +308,7 @@ export async function recordCollectionRecovery(
   stateStore: CollectionAlertStateStore,
   service: ServiceConfig,
   recoveredAt: string,
+  environment = "unknown",
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (!previous || previous.lastFailedAt >= recoveredAt) return undefined;
@@ -309,6 +324,8 @@ export async function recordCollectionRecovery(
     errorType: previous.errorType,
     firstFailedAt: previous.firstFailedAt,
     failureCount: previous.consecutiveFailures,
+    occurredAt: recoveredAt,
+    environment,
   };
 }
 
@@ -383,7 +400,9 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
       ...(alert.kind === "failure" && alert.errorCause ? [`原因: ${alert.errorCause}`] : []),
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
-      "環境: miharu",
+      ...(alert.kind === "recovery" ? [`復旧時刻: ${alert.occurredAt}`] : []),
+      `発生時刻: ${alert.occurredAt}`,
+      `環境: ${alert.environment}`,
     ].join("\n");
   }
 
