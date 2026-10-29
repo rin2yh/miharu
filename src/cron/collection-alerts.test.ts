@@ -380,6 +380,37 @@ describe("Discord collection alerts with KV state", () => {
     expect(payload.content).toContain("収集が復旧");
   });
 
+  it("sends the complete long error detail in multiple Discord messages", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    const detail = "x".repeat(5_000);
+
+    for (const minute of [0, 1, 2]) {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "invalid_payload",
+        "ProviderError",
+        "production",
+        detail,
+      );
+    }
+
+    const messages = fetcher.mock.calls.map(
+      ([, init]) => JSON.parse(String(init?.body)).content as string,
+    );
+    expect(messages.length).toBeGreaterThan(1);
+    expect(messages.every((message) => message.length <= 2_000)).toBe(true);
+    expect(messages.join("")).toContain(detail);
+    expect(store.states.get(service.id)?.errorMessage).toBe(detail);
+  });
+
   it("clears failures that recover before the notification threshold", async () => {
     const store = stateStore();
     await recordCollectionFailure(store, service, "2026-10-24T05:00:00.000Z", "timeout", "Error");

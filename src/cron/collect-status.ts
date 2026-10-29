@@ -4,12 +4,12 @@ import { createD1Store, type CollectionStore } from "../shared/store";
 import type { CollectionAlertStateStore } from "../shared/collection-alert-state";
 import { collectAll, type SnapshotFetcher } from "./collector";
 import {
-  getErrorType,
   notifyCollectionFailure,
   notifyCollectionRecovery,
   reportCriticalAlert,
   type CollectionAlertSender,
 } from "./collection-alerts";
+import { getErrorDiagnostics } from "./error-diagnostics";
 
 interface ScheduledCollectionStore extends CollectionStore {
   pruneHistory(now: Date): Promise<void>;
@@ -40,7 +40,7 @@ export async function collectAtScheduledTime(
       environment: options.environment,
       onCollectionFailure:
         alertSender && alertState
-          ? (service, failedAt, errorCode, errorType, errorMessage) =>
+          ? (service, failedAt, errorCode, errorType, errorMessage, errorCause, errorCategory) =>
               notifyCollectionFailure(
                 alertState,
                 alertSender,
@@ -50,6 +50,8 @@ export async function collectAtScheduledTime(
                 errorType,
                 options.environment,
                 errorMessage,
+                errorCause,
+                errorCategory,
               )
           : undefined,
       onCollectionSuccess: async (service, succeededAt, snapshot) => {
@@ -73,16 +75,21 @@ export async function collectAtScheduledTime(
           );
         }
       },
-      onPersistenceFailure: async (service, error) =>
-        reportCriticalAlert(options.sender, {
-          kind: "persistence_failure",
+      onPersistenceFailure: async (service, error) => {
+        const diagnostics = getErrorDiagnostics(error);
+        const isD1Error = diagnostics.errorCategory === "D1";
+        await reportCriticalAlert(options.sender, {
+          kind: isD1Error ? "persistence_failure" : "cron_failure",
           serviceId: service.id,
           serviceName: service.name,
-          errorCode: "d1_persistence_error",
-          errorType: getErrorType(error),
+          errorCode: isD1Error
+            ? "d1_persistence_error"
+            : `collection_${diagnostics.errorCategory.toLowerCase()}_error`,
+          ...diagnostics,
           occurredAt: observedAt,
           environment: options.environment,
-        }),
+        });
+      },
     });
 
     if (new Date(scheduledTime).getUTCMinutes() % 15 === 0) {
@@ -94,7 +101,8 @@ export async function collectAtScheduledTime(
           serviceId: "miharu-d1",
           serviceName: "miharu D1",
           errorCode: "d1_persistence_error",
-          errorType: getErrorType(error),
+          ...getErrorDiagnostics(error),
+          errorCategory: "D1",
           occurredAt: observedAt,
           environment: options.environment,
         });
@@ -106,7 +114,8 @@ export async function collectAtScheduledTime(
       serviceId: "miharu-cron",
       serviceName: "miharu Cron",
       errorCode: "cron_execution_error",
-      errorType: getErrorType(error),
+      ...getErrorDiagnostics(error),
+      errorCategory: "cron",
       occurredAt: observedAt,
       environment: options.environment,
     });

@@ -91,12 +91,17 @@ describe("status collection", () => {
         "2026-10-23T05:00:00.000Z",
         persistence,
         async () => {
-          throw new ProviderError("invalid_payload", "Missing incident status");
+          const error = new ProviderError("invalid_payload", "Missing incident status");
+          error.cause = new Error("status field was null");
+          throw error;
         },
         { environment: "production", onCollectionFailure },
       );
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining('"errorMessage":"Missing incident status"'),
+      );
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining('"errorCause":"Error: status field was null"'),
       );
       expect(onCollectionFailure).toHaveBeenCalledWith(
         service,
@@ -104,6 +109,8 @@ describe("status collection", () => {
         "invalid_payload",
         "ProviderError",
         "Missing incident status",
+        "Error: status field was null",
+        "external_api",
       );
     } finally {
       log.mockRestore();
