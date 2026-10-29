@@ -485,13 +485,72 @@ describe("Statuspage provider", () => {
 });
 
 describe("Cloudflare", () => {
-  it("classifies the official scheduled maintenance separately from service status", async () => {
+  it("uses the monitored service group when the official overall indicator includes unrelated issues", async () => {
+    const components = cloudflareSummaryFixture.components.map((component) => {
+      if (typeof component !== "object" || component === null || !("group_id" in component)) {
+        return component;
+      }
+      return { ...component, status: "operational" };
+    });
+    const snapshot = await fetchStatuspageSnapshot(
+      cloudflare,
+      providerContext(
+        jsonFetcher({
+          ...cloudflareSummaryFixture,
+          status: { indicator: "major", description: "Partial System Outage" },
+          components,
+        }),
+      ),
+    );
+
+    expect(snapshot.status).toBe("operational");
+    expect(snapshot.sourceStatus).toBe("major");
+    expect(snapshot.components?.every(({ status }) => status === "operational")).toBe(true);
+  });
+
+  it.each([
+    ["degraded_performance", "degraded_performance"],
+    ["partial_outage", "partial_outage"],
+  ])("reflects a monitored component with status %s", async (componentStatus, expectedStatus) => {
+    const components = cloudflareSummaryFixture.components.map((component) => {
+      if (
+        typeof component !== "object" ||
+        component === null ||
+        !("id" in component) ||
+        component.id !== cloudflareWorkersId
+      ) {
+        return component;
+      }
+      return { ...component, status: componentStatus };
+    });
     const snapshot = await fetchStatuspageSnapshot(
       cloudflare,
       providerContext(
         jsonFetcher({
           ...cloudflareSummaryFixture,
           status: { indicator: "none", description: "All Systems Operational" },
+          components,
+        }),
+      ),
+    );
+
+    expect(snapshot.status).toBe(expectedStatus);
+  });
+
+  it("classifies the official scheduled maintenance separately from service status", async () => {
+    const components = cloudflareSummaryFixture.components.map((component) => {
+      if (typeof component !== "object" || component === null || !("group_id" in component)) {
+        return component;
+      }
+      return { ...component, status: "operational" };
+    });
+    const snapshot = await fetchStatuspageSnapshot(
+      cloudflare,
+      providerContext(
+        jsonFetcher({
+          ...cloudflareSummaryFixture,
+          status: { indicator: "none", description: "All Systems Operational" },
+          components,
           incidents: [],
           scheduled_maintenances: [cloudflareStorageMaintenanceFixture],
         }),
@@ -539,7 +598,7 @@ describe("Cloudflare", () => {
       scenario: "the captured official summary",
       getPayload: () => cloudflareSummaryFixture,
       expectedCount: 133,
-      expectedStatus: "partial_outage",
+      expectedStatus: "major_outage",
       expectedSourceStatus: "major",
     },
     {
@@ -549,7 +608,7 @@ describe("Cloudflare", () => {
         status: { indicator: "none", description: "All Systems Operational" },
       }),
       expectedCount: 133,
-      expectedStatus: "operational",
+      expectedStatus: "major_outage",
       expectedSourceStatus: "none",
     },
   ])(
