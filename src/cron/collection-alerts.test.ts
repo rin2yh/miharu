@@ -170,13 +170,19 @@ describe("Discord collection alerts with KV state", () => {
 
     for (const minute of [0, 1, 2]) {
       await notifyCollectionFailure(
-        store, sender, service, `2026-10-24T05:0${minute}:00.000Z`,
-        "invalid_payload", "ProviderError", "production", detail,
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "invalid_payload",
+        "ProviderError",
+        "production",
+        detail,
       );
     }
 
-    const messages = fetcher.mock.calls.map(([, init]) =>
-      JSON.parse(String(init?.body)).content as string,
+    const messages = fetcher.mock.calls.map(
+      ([, init]) => JSON.parse(String(init?.body)).content as string,
     );
     expect(messages.length).toBeGreaterThan(1);
     expect(messages.every((message) => message.length <= 2_000)).toBe(true);
