@@ -99,6 +99,7 @@ export function createD1Store(database: D1Database): DashboardStore {
         observedAt,
         snapshot.incidentListComplete,
         snapshot.unverifiedIncidentIds,
+        snapshot.notFoundIncidentIds,
       );
 
       await db.batch([successStatusUpsert(db, service.id, snapshot, observedAt)]);

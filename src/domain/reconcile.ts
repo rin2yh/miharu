@@ -56,10 +56,12 @@ export function reconcileIncidents(
   // Some public APIs expose only a bounded recent list.
   incidentListComplete = true,
   unverifiedIncidentIds: string[] = [],
+  notFoundIncidentIds: string[] = [],
 ): ReconcileResult {
   const previousById = new Map(previous.map((incident) => [incident.id, incident]));
   const incomingIds = new Set<string>();
   const unverifiedIds = new Set(unverifiedIncidentIds);
+  const notFoundIds = new Set(notFoundIncidentIds);
   const changedIncidents: IncidentRecord[] = [];
   const events: IncidentEventRecord[] = [];
 
@@ -171,7 +173,7 @@ export function reconcileIncidents(
       }
       continue;
     }
-    if (!incidentListComplete) continue;
+    if (!incidentListComplete && !notFoundIds.has(old.id)) continue;
     const snapshot: NormalizedIncident = { ...old };
     const revision = old.revision + 1;
     const fingerprint = incidentFingerprint(snapshot);

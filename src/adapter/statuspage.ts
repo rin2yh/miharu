@@ -144,21 +144,21 @@ export async function fetchStatuspageSnapshot(
     parseStatuspageIncident(item, service, componentNames, false, componentIdFilter),
   );
   let unverifiedIncidentIds: string[] = [];
+  let notFoundIncidentIds: string[] = [];
   if (missingNotionIncidentList) {
     const known = await context.getUnresolvedIncidents();
     const selected = selectNotionIncidentsForRecheck(known);
     const rechecked = await Promise.all(
       selected.map((incident) => recheckNotionIncident(incident, service, context)),
     );
-    normalizedIncidents = rechecked.flatMap((incident, index) =>
-      incident === "not-found"
-        ? [resolvedNotionIncident(selected[index]!)]
-        : incident
-          ? [incident]
-          : [],
+    normalizedIncidents = rechecked.flatMap((incident) =>
+      incident && incident !== "not-found" ? [incident] : [],
     );
     unverifiedIncidentIds = selected.flatMap((incident, index) =>
       rechecked[index] === null ? [incident.id] : [],
+    );
+    notFoundIncidentIds = selected.flatMap((incident, index) =>
+      rechecked[index] === "not-found" ? [incident.id] : [],
     );
   }
   const normalizedMaintenances = scheduledMaintenances.map((item) =>
@@ -173,6 +173,7 @@ export async function fetchStatuspageSnapshot(
     components: normalizedComponents,
     incidentListComplete,
     unverifiedIncidentIds,
+    notFoundIncidentIds,
     incidents: componentIdFilter
       ? allIncidents.filter((incident) =>
           incident.componentIds.some((id) => componentIdFilter.has(id)),
@@ -216,21 +217,6 @@ async function recheckNotionIncident(
     // Missing, failed, or malformed individual responses are not evidence of resolution.
     return null;
   }
-}
-
-function resolvedNotionIncident(incident: KnownIncident): NormalizedIncident {
-  const {
-    lifecycle: _lifecycle,
-    closureReason: _closureReason,
-    lastObservedAt: _lastObservedAt,
-    ...snapshot
-  } = incident;
-  return {
-    ...snapshot,
-    state: "resolved",
-    sourceStatus: "resolved",
-    officialUpdatedAt: null,
-  };
 }
 
 function parseStatuspageIncident(
