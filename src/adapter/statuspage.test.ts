@@ -1,4 +1,5 @@
 import { classifyIncident } from "./incident-category";
+import type { KnownIncident } from "../domain";
 import { reconcileIncidents } from "../domain/reconcile";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -30,8 +31,33 @@ function jsonFetcher(payload: unknown, contentType = "application/json"): FetchL
     })) as FetchLike;
 }
 
-function providerContext(fetcher: FetchLike): ProviderContext {
-  return { signal: abortSignal, fetcher, getUnresolvedIncidents: async () => [] };
+function providerContext(
+  fetcher: FetchLike,
+  knownIncidents: KnownIncident[] = [],
+): ProviderContext {
+  return { signal: abortSignal, fetcher, getUnresolvedIncidents: async () => knownIncidents };
+}
+
+function knownNotionIncident(id: string): KnownIncident {
+  return {
+    id,
+    title: "An old incident",
+    body: null,
+    kind: "incident",
+    state: "investigating",
+    sourceStatus: "investigating",
+    sourceType: null,
+    sourceImpact: null,
+    severityStatus: null,
+    componentIds: [],
+    components: [],
+    officialCreatedAt: "2026-10-01T00:00:00.000Z",
+    officialUpdatedAt: null,
+    url: null,
+    lifecycle: "active",
+    closureReason: null,
+    lastObservedAt: "2026-10-01T00:00:00.000Z",
+  };
 }
 
 const github = getService("github", "statuspage");
@@ -232,6 +258,119 @@ describe("Statuspage provider", () => {
     );
     expect(reconciled.changedIncidents).toEqual([]);
     expect(reconciled.events).toEqual([]);
+  });
+
+  it("rechecks omitted Notion incidents through the official individual endpoint", async () => {
+    const old = knownNotionIncident("php2shell");
+    const urls: string[] = [];
+    const fetcher = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      return new Response(
+        JSON.stringify(
+          url === notion.summaryUrl
+            ? {
+                status: { indicator: "none" },
+                components: [],
+              }
+            : {
+                incident: {
+                  id: old.id,
+                  name: old.title,
+                  status: "resolved",
+                  updated_at: "2026-10-29T04:00:00Z",
+                },
+              },
+        ),
+        { headers: { "content-type": "application/json" } },
+      );
+    }) as FetchLike;
+
+    const snapshot = await fetchStatuspageSnapshot(notion, providerContext(fetcher, [old]));
+    const previous = reconcileIncidents("notion", [], [old], old.lastObservedAt).changedIncidents;
+    const result = reconcileIncidents(
+      "notion",
+      previous,
+      snapshot.incidents,
+      "2026-10-29T04:01:00.000Z",
+      snapshot.incidentListComplete,
+      snapshot.unverifiedIncidentIds,
+    );
+
+    expect(urls).toEqual([
+      notion.summaryUrl,
+      "https://www.notion-status.com/api/v2/incidents/php2shell.json",
+    ]);
+    expect(snapshot.incidentListComplete).toBe(false);
+    expect(snapshot.incidents[0]?.state).toBe("resolved");
+    expect(result.changedIncidents[0]).toMatchObject({
+      id: old.id,
+      lifecycle: "closed",
+      closureReason: "official_resolved",
+    });
+    expect(result.events).toMatchObject([
+      { eventKind: "resolved", closureReason: "official_resolved" },
+    ]);
+  });
+
+  it.each([
+    {
+      label: "still active",
+      status: 200,
+      payload: { incident: { id: "php2shell", name: "An old incident", status: "investigating" } },
+      expectedState: "investigating",
+    },
+    { label: "404", status: 404, payload: {}, expectedState: undefined },
+    {
+      label: "malformed response",
+      status: 200,
+      payload: { incident: { id: "other", status: "resolved" } },
+      expectedState: undefined,
+    },
+  ])(
+    "does not resolve an omitted Notion incident when its recheck is $label",
+    async ({ status, payload, expectedState }) => {
+      const old = knownNotionIncident("php2shell");
+      const fetcher = (async (input) =>
+        String(input) === notion.summaryUrl
+          ? new Response(JSON.stringify({ status: { indicator: "none" }, components: [] }), {
+              headers: { "content-type": "application/json" },
+            })
+          : new Response(JSON.stringify(payload), {
+              status,
+              headers: { "content-type": "application/json" },
+            })) as FetchLike;
+      const snapshot = await fetchStatuspageSnapshot(notion, providerContext(fetcher, [old]));
+      const previous = reconcileIncidents("notion", [], [old], old.lastObservedAt).changedIncidents;
+      const reconciled = reconcileIncidents(
+        "notion",
+        previous,
+        snapshot.incidents,
+        "2026-10-29T04:01:00.000Z",
+        snapshot.incidentListComplete,
+        snapshot.unverifiedIncidentIds,
+      );
+
+      expect(snapshot.incidentListComplete).toBe(false);
+      expect(snapshot.incidents[0]?.state).toBe(expectedState);
+      expect(snapshot.unverifiedIncidentIds).toEqual(expectedState ? [] : [old.id]);
+      expect(reconciled.changedIncidents[0]).toMatchObject({
+        id: old.id,
+        lifecycle: expectedState ? "active" : "unverified",
+        closureReason: null,
+      });
+      expect(reconciled.events).toEqual([]);
+    },
+  );
+
+  it("handles a missing Notion incident list when no old incidents exist", async () => {
+    const snapshot = await fetchStatuspageSnapshot(
+      notion,
+      providerContext(jsonFetcher({ status: { indicator: "none" }, components: [] })),
+    );
+    expect(snapshot.incidents).toEqual([]);
+    expect(snapshot.unverifiedIncidentIds).toEqual([]);
+    expect(snapshot.incidentListComplete).toBe(false);
   });
 
   it("does not interpret a missing GitHub maintenance list as an empty list", async () => {

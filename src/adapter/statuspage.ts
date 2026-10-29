@@ -1,4 +1,5 @@
 import {
+  type KnownIncident,
   normalizeStatus,
   type NormalizedComponent,
   type NormalizedIncident,
@@ -139,9 +140,21 @@ export async function fetchStatuspageSnapshot(
   );
 
   const sourceStatus = requiredText(status.indicator ?? status.status, "status indicator", 100);
-  const normalizedIncidents = incidentRows.map((item) =>
+  let normalizedIncidents = incidentRows.map((item) =>
     parseStatuspageIncident(item, service, componentNames, false, componentIdFilter),
   );
+  let unverifiedIncidentIds: string[] = [];
+  if (missingNotionIncidentList) {
+    const known = await context.getUnresolvedIncidents();
+    const selected = selectNotionIncidentsForRecheck(known);
+    const rechecked = await Promise.all(
+      selected.map((incident) => recheckNotionIncident(incident, service, context)),
+    );
+    normalizedIncidents = rechecked.flatMap((incident) => (incident ? [incident] : []));
+    unverifiedIncidentIds = selected.flatMap((incident, index) =>
+      rechecked[index] === null ? [incident.id] : [],
+    );
+  }
   const normalizedMaintenances = scheduledMaintenances.map((item) =>
     parseStatuspageIncident(item, service, componentNames, true, componentIdFilter),
   );
@@ -153,12 +166,47 @@ export async function fetchStatuspageSnapshot(
     summary: statusText(status.description),
     components: normalizedComponents,
     incidentListComplete,
+    unverifiedIncidentIds,
     incidents: componentIdFilter
       ? allIncidents.filter((incident) =>
           incident.componentIds.some((id) => componentIdFilter.has(id)),
         )
       : allIncidents,
   };
+}
+
+const NOTION_INCIDENT_RECHECKS_PER_POLL = 5;
+
+function selectNotionIncidentsForRecheck(incidents: KnownIncident[]): KnownIncident[] {
+  const active = incidents.filter((incident) => incident.lifecycle !== "closed");
+  if (active.length <= NOTION_INCIDENT_RECHECKS_PER_POLL) return active;
+  const firstIndex = Math.floor(Date.now() / 60_000) % active.length;
+  return Array.from(
+    { length: NOTION_INCIDENT_RECHECKS_PER_POLL },
+    (_, offset) => active[(firstIndex + offset) % active.length]!,
+  );
+}
+
+async function recheckNotionIncident(
+  known: KnownIncident,
+  service: StatusPageService,
+  context: ProviderContext,
+): Promise<NormalizedIncident | null> {
+  if (known.id.startsWith("generated_")) return null;
+  try {
+    const url = new URL(
+      `incidents/${encodeURIComponent(known.id)}.json`,
+      service.summaryUrl,
+    ).toString();
+    const payload = asRecord(await fetchJson(url, context.signal, context.fetcher));
+    const row = asRecord(payload?.incident);
+    if (!row || row.id !== known.id || typeof row.status !== "string") return null;
+    const incident = parseStatuspageIncident(row, service, new Map(), false);
+    return incident.state === "unknown" ? null : incident;
+  } catch {
+    // Missing, failed, or malformed individual responses are not evidence of resolution.
+    return null;
+  }
 }
 
 function parseStatuspageIncident(
