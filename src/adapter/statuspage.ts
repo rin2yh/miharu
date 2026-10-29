@@ -99,18 +99,31 @@ export async function fetchStatuspageSnapshot(
   const components = data?.components;
   const incidents = data?.incidents;
   const maintenances = data?.scheduled_maintenances;
+  const incidentListComplete = Array.isArray(incidents);
+  const missingNotionIncidentList = service.id === "notion" && incidents === undefined;
 
   if (
     !data ||
     !status ||
     !Array.isArray(components) ||
-    !Array.isArray(incidents) ||
+    (!incidentListComplete && !missingNotionIncidentList) ||
     (service.scheduledMaintenances && !Array.isArray(maintenances))
   ) {
-    throw new ProviderError("invalid_payload", "Statuspage summary shape changed");
+    const invalidFields = [
+      !data && "summary",
+      data && !status && "status",
+      data && !Array.isArray(components) && "components",
+      data && !incidentListComplete && !missingNotionIncidentList && "incidents",
+      service.scheduledMaintenances && !Array.isArray(maintenances) && "scheduled_maintenances",
+    ].filter((field): field is string => typeof field === "string");
+    throw new ProviderError(
+      "invalid_payload",
+      `Statuspage summary shape changed: invalid ${invalidFields.join(", ")}`,
+    );
   }
+  const incidentRows = incidentListComplete ? incidents : [];
   const scheduledMaintenances = Array.isArray(maintenances) ? maintenances : [];
-  if (incidents.length + scheduledMaintenances.length > INCIDENTS_PER_SERVICE_LIMIT) {
+  if (incidentRows.length + scheduledMaintenances.length > INCIDENTS_PER_SERVICE_LIMIT) {
     throw new ProviderError(
       "invalid_payload",
       "Statuspage incident list exceeded the supported limit",
@@ -126,7 +139,7 @@ export async function fetchStatuspageSnapshot(
   );
 
   const sourceStatus = requiredText(status.indicator ?? status.status, "status indicator", 100);
-  const normalizedIncidents = incidents.map((item) =>
+  const normalizedIncidents = incidentRows.map((item) =>
     parseStatuspageIncident(item, service, componentNames, false, componentIdFilter),
   );
   const normalizedMaintenances = scheduledMaintenances.map((item) =>
@@ -139,6 +152,7 @@ export async function fetchStatuspageSnapshot(
     sourceStatus,
     summary: statusText(status.description),
     components: normalizedComponents,
+    incidentListComplete,
     incidents: componentIdFilter
       ? allIncidents.filter((incident) =>
           incident.componentIds.some((id) => componentIdFilter.has(id)),
