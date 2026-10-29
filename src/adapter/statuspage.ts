@@ -90,6 +90,21 @@ function parseStatuspageComponent(value: unknown): NormalizedComponent {
   };
 }
 
+function statusFromComponents(components: NormalizedComponent[]): NormalizedComponent["status"] {
+  const priority: NormalizedComponent["status"][] = [
+    "major_outage",
+    "partial_outage",
+    "degraded_performance",
+    "under_maintenance",
+    "unknown",
+    "operational",
+  ];
+  return (
+    priority.find((status) => components.some((component) => component.status === status)) ??
+    "unknown"
+  );
+}
+
 export async function fetchStatuspageSnapshot(
   service: StatusPageService,
   context: ProviderContext,
@@ -140,6 +155,7 @@ export async function fetchStatuspageSnapshot(
   );
 
   const sourceStatus = requiredText(status.indicator ?? status.status, "status indicator", 100);
+  const normalizedStatus = normalizeStatus(sourceStatus);
   let normalizedIncidents = incidentRows.map((item) =>
     parseStatuspageIncident(item, service, componentNames, false, componentIdFilter),
   );
@@ -167,7 +183,10 @@ export async function fetchStatuspageSnapshot(
   const allIncidents = [...normalizedIncidents, ...normalizedMaintenances];
 
   return {
-    status: normalizeStatus(sourceStatus),
+    status:
+      service.id === "cloudflare" && service.componentGroupId
+        ? statusFromComponents(normalizedComponents)
+        : normalizedStatus,
     sourceStatus,
     summary: statusText(status.description),
     components: normalizedComponents,
