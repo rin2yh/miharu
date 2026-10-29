@@ -175,8 +175,7 @@ export async function recordCollectionFailure(
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
-    previous?.notified ||
-    previous?.notificationSuppressed ||
+    (previous?.notified && previous.errorCode === errorCode) ||
     (previous && previous.lastFailedAt >= occurredAt)
   ) {
     return undefined;
