@@ -1,4 +1,5 @@
 import { classifyIncident } from "./incident-category";
+import { reconcileIncidents } from "../domain/reconcile";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERVICES, type ServiceConfig } from "../shared/config/services";
@@ -55,6 +56,10 @@ const cloudflareStorageMaintenanceFixture = JSON.parse(
 // Captured from Cloudflare's official summary API on 2026-10-24.
 const cloudflareInProgressMaintenanceFixture = JSON.parse(
   readFileSync("src/adapter/fixtures/cloudflare-in-progress-maintenance.json", "utf8"),
+) as unknown;
+// Captured from Notion's official summary API on 2026-10-29; the response omits incidents.
+const notionSummaryWithoutIncidentsFixture = JSON.parse(
+  readFileSync("src/adapter/fixtures/notion-summary-without-incidents.json", "utf8"),
 ) as unknown;
 
 const cloudflareServiceGroupId = "1km35smx8p41";
@@ -161,6 +166,7 @@ describe("Statuspage provider", () => {
     );
 
     expect(snapshot.status).toBe("partial_outage");
+    expect(snapshot.incidentListComplete).toBe(true);
     expect(snapshot.sourceStatus).toBe("major");
     expect(snapshot.components).toEqual([
       {
@@ -183,37 +189,49 @@ describe("Statuspage provider", () => {
     });
   });
 
-  it("accepts Notion's current Statuspage-compatible summary without a maintenance list", async () => {
+  it("accepts Notion's current summary without treating its missing incident list as complete", async () => {
     const snapshot = await fetchStatuspageSnapshot(
       notion,
-      providerContext(
-        jsonFetcher({
-          page: { name: "Notion" },
-          status: { indicator: "none", description: "All Systems Operational" },
-          components: [],
-          incidents: [
-            {
-              id: "notion-incident",
-              name: "Users unable to access Notion",
-              status: "monitoring",
-              impact: "critical",
-              created_at: "2026-10-23T03:38:19Z",
-              incident_updates: [
-                { body: "Service is recovering.", created_at: "2026-10-23T04:01:17Z" },
-              ],
-            },
-          ],
-        }),
-      ),
+      providerContext(jsonFetcher(notionSummaryWithoutIncidentsFixture)),
     );
 
     expect(snapshot.status).toBe("operational");
-    expect(snapshot.components).toEqual([]);
-    expect(snapshot.incidents[0]).toMatchObject({
-      officialUpdatedAt: "2026-10-23T04:01:17.000Z",
-      severityStatus: "major_outage",
-      componentIds: [],
-    });
+    expect(snapshot.components).toHaveLength(19);
+    expect(snapshot.incidents).toEqual([]);
+    expect(snapshot.incidentListComplete).toBe(false);
+
+    const previous = reconcileIncidents(
+      "notion",
+      [],
+      [
+        {
+          id: "still-active",
+          title: "An ongoing incident",
+          body: null,
+          kind: "incident",
+          state: "investigating",
+          sourceStatus: "investigating",
+          sourceType: null,
+          sourceImpact: null,
+          severityStatus: "unknown",
+          componentIds: [],
+          components: [],
+          officialCreatedAt: null,
+          officialUpdatedAt: null,
+          url: null,
+        },
+      ],
+      "2026-10-29T03:00:00.000Z",
+    ).changedIncidents;
+    const reconciled = reconcileIncidents(
+      "notion",
+      previous,
+      snapshot.incidents,
+      "2026-10-29T03:01:00.000Z",
+      snapshot.incidentListComplete,
+    );
+    expect(reconciled.changedIncidents).toEqual([]);
+    expect(reconciled.events).toEqual([]);
   });
 
   it("does not interpret a missing GitHub maintenance list as an empty list", async () => {
@@ -228,7 +246,10 @@ describe("Statuspage provider", () => {
           }),
         ),
       ),
-    ).rejects.toMatchObject({ code: "invalid_payload" });
+    ).rejects.toMatchObject({
+      code: "invalid_payload",
+      message: "Statuspage summary shape changed: invalid scheduled_maintenances",
+    });
   });
 
   it("uses a stable fallback ID when an incident has no official ID", async () => {
@@ -263,7 +284,10 @@ describe("Statuspage provider", () => {
           }),
         ),
       ),
-    ).rejects.toMatchObject({ code: "invalid_payload" });
+    ).rejects.toMatchObject({
+      code: "invalid_payload",
+      message: "Statuspage summary shape changed: invalid incidents",
+    });
   });
 });
 
