@@ -150,7 +150,13 @@ export async function fetchStatuspageSnapshot(
     const rechecked = await Promise.all(
       selected.map((incident) => recheckNotionIncident(incident, service, context)),
     );
-    normalizedIncidents = rechecked.flatMap((incident) => (incident ? [incident] : []));
+    normalizedIncidents = rechecked.flatMap((incident, index) =>
+      incident === "not-found"
+        ? [resolvedNotionIncident(selected[index]!)]
+        : incident
+          ? [incident]
+          : [],
+    );
     unverifiedIncidentIds = selected.flatMap((incident, index) =>
       rechecked[index] === null ? [incident.id] : [],
     );
@@ -191,22 +197,40 @@ async function recheckNotionIncident(
   known: KnownIncident,
   service: StatusPageService,
   context: ProviderContext,
-): Promise<NormalizedIncident | null> {
+): Promise<NormalizedIncident | "not-found" | null> {
   if (known.id.startsWith("generated_")) return null;
   try {
     const url = new URL(
       `incidents/${encodeURIComponent(known.id)}.json`,
       service.summaryUrl,
     ).toString();
-    const payload = asRecord(await fetchJson(url, context.signal, context.fetcher));
+    const payload = asRecord(
+      await fetchJson(url, context.signal, context.fetcher, { distinguishNotFound: true }),
+    );
     const row = asRecord(payload?.incident);
     if (!row || row.id !== known.id || typeof row.status !== "string") return null;
     const incident = parseStatuspageIncident(row, service, new Map(), false);
     return incident.state === "unknown" ? null : incident;
-  } catch {
+  } catch (error) {
+    if (error instanceof ProviderError && error.code === "not_found") return "not-found";
     // Missing, failed, or malformed individual responses are not evidence of resolution.
     return null;
   }
+}
+
+function resolvedNotionIncident(incident: KnownIncident): NormalizedIncident {
+  const {
+    lifecycle: _lifecycle,
+    closureReason: _closureReason,
+    lastObservedAt: _lastObservedAt,
+    ...snapshot
+  } = incident;
+  return {
+    ...snapshot,
+    state: "resolved",
+    sourceStatus: "resolved",
+    officialUpdatedAt: null,
+  };
 }
 
 function parseStatuspageIncident(
