@@ -12,6 +12,8 @@ export type CollectionAlert = {
   errorCode: string;
   errorType: string;
   errorMessage?: string;
+  occurredAt: string;
+  environment: string;
   firstFailedAt: string;
   lastFailedAt?: string;
   failureCount: number;
@@ -80,6 +82,7 @@ export async function notifyCollectionFailure(
       errorCode,
       errorType,
       errorMessage,
+      environment,
     );
   } catch (error) {
     reportLog("collection_alert_state_failed", {
@@ -114,7 +117,7 @@ export async function notifyCollectionRecovery(
 ): Promise<void> {
   let alert: CollectionAlert | undefined;
   try {
-    alert = await recordCollectionRecovery(stateStore, service, recoveredAt);
+    alert = await recordCollectionRecovery(stateStore, service, recoveredAt, environment);
   } catch (error) {
     reportLog("collection_alert_state_failed", {
       kind: "recovery",
@@ -168,6 +171,7 @@ export async function recordCollectionFailure(
   errorCode: string,
   errorType: string,
   errorMessage?: string,
+  environment = "unknown",
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
@@ -190,7 +194,7 @@ export async function recordCollectionFailure(
   };
   await stateStore.put(service.id, state);
 
-  if (state.consecutiveFailures < 3) return undefined;
+  if (errorCode !== "invalid_payload" && state.consecutiveFailures < 3) return undefined;
   return {
     kind: "failure",
     serviceId: service.id,
@@ -201,6 +205,8 @@ export async function recordCollectionFailure(
     firstFailedAt: state.firstFailedAt,
     lastFailedAt: state.lastFailedAt,
     failureCount: state.consecutiveFailures,
+    occurredAt,
+    environment,
   };
 }
 
@@ -238,6 +244,7 @@ export async function recordCollectionRecovery(
   stateStore: CollectionAlertStateStore,
   service: ServiceConfig,
   recoveredAt: string,
+  environment = "unknown",
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (!previous || previous.lastFailedAt >= recoveredAt) return undefined;
@@ -253,6 +260,8 @@ export async function recordCollectionRecovery(
     errorType: previous.errorType,
     firstFailedAt: previous.firstFailedAt,
     failureCount: previous.consecutiveFailures,
+    occurredAt: recoveredAt,
+    environment,
   };
 }
 
@@ -290,7 +299,9 @@ function formatAlert(alert: CollectionAlert | CriticalCollectionAlert): string {
         : []),
       `初回失敗: ${alert.firstFailedAt}`,
       `失敗回数: ${alert.failureCount}`,
-      "環境: miharu",
+      ...(alert.kind === "recovery" ? [`復旧時刻: ${alert.occurredAt}`] : []),
+      `発生時刻: ${alert.occurredAt}`,
+      `環境: ${alert.environment}`,
     ].join("\n");
   }
 

@@ -35,6 +35,55 @@ function stateStore() {
 }
 
 describe("Discord collection alerts with KV state", () => {
+  it("alerts immediately on invalid_payload, suppresses repeats, and announces recovery", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    const failedAt = "2026-10-24T05:00:00.000Z";
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      failedAt,
+      "invalid_payload",
+      "ProviderError",
+      "production",
+      "Statuspage summary shape changed",
+    );
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:01:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    const failure = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as { content: string };
+    expect(failure.content).toContain("エラーコード: invalid_payload");
+    expect(failure.content).toContain("エラー詳細: Statuspage summary shape changed");
+    expect(failure.content).toContain(`発生時刻: ${failedAt}`);
+    expect(failure.content).toContain("環境: production");
+
+    await notifyCollectionRecovery(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:02:00.000Z",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const recovery = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as { content: string };
+    expect(recovery.content).toContain("収集が復旧");
+    expect(recovery.content).toContain("復旧時刻: 2026-10-24T05:02:00.000Z");
+  });
+
   it("stores service state as JSON under a service-specific KV key", async () => {
     const namespace = {
       get: vi.fn<
@@ -117,7 +166,7 @@ describe("Discord collection alerts with KV state", () => {
     expect(payload.content).toContain("Slack (slack)");
     expect(payload.content).toContain("失敗回数: 3");
     expect(payload.content).toContain("エラー詳細: Missing incident status");
-    expect(payload.content).toContain("環境: miharu");
+    expect(payload.content).toContain("環境: production");
     expect(payload.allowed_mentions).toEqual({ parse: [] });
   });
 
