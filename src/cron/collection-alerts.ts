@@ -5,6 +5,8 @@ import type {
   CollectionAlertStateStore,
 } from "../shared/collection-alert-state";
 
+const INVALID_PAYLOAD_NOTIFICATION_VERSION = 1;
+
 export type CollectionAlert = {
   kind: "failure" | "recovery";
   serviceId: string;
@@ -175,7 +177,11 @@ export async function recordCollectionFailure(
 ): Promise<CollectionAlert | undefined> {
   const previous = await stateStore.get(service.id);
   if (
-    (previous?.notified && previous.errorCode === errorCode) ||
+    (previous?.notified &&
+      previous.errorCode === errorCode &&
+      (errorCode !== "invalid_payload" ||
+        previous.invalidPayloadNotificationVersion === INVALID_PAYLOAD_NOTIFICATION_VERSION)) ||
+    (previous?.notificationSuppressed && errorCode !== "invalid_payload") ||
     (previous && previous.lastFailedAt >= occurredAt)
   ) {
     return undefined;
@@ -226,6 +232,9 @@ async function saveCollectionAlertDeliveryState(
       ...(alert.errorMessage ? { errorMessage: alert.errorMessage } : {}),
       notified,
       notificationSuppressed,
+      ...(notified && alert.errorCode === "invalid_payload"
+        ? { invalidPayloadNotificationVersion: INVALID_PAYLOAD_NOTIFICATION_VERSION }
+        : {}),
     });
   } catch (error) {
     reportLog("collection_alert_state_failed", {

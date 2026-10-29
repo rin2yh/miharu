@@ -125,6 +125,81 @@ describe("Discord collection alerts with KV state", () => {
     },
   );
 
+  it("re-notifies a legacy notified invalid_payload once and records the rule version", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    store.states.set(service.id, {
+      consecutiveFailures: 12,
+      firstFailedAt: "2026-10-24T04:48:00.000Z",
+      lastFailedAt: "2026-10-24T04:59:00.000Z",
+      errorCode: "invalid_payload",
+      errorType: "ProviderError",
+      notified: true,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:00:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(store.states.get(service.id)).toMatchObject({
+      errorCode: "invalid_payload",
+      notified: true,
+      invalidPayloadNotificationVersion: 1,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:01:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("preserves suppression behavior for non-invalid_payload errors", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    store.states.set(service.id, {
+      consecutiveFailures: 3,
+      firstFailedAt: "2026-10-24T04:57:00.000Z",
+      lastFailedAt: "2026-10-24T04:59:00.000Z",
+      errorCode: "timeout",
+      errorType: "TimeoutError",
+      notified: false,
+      notificationSuppressed: true,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:00:00.000Z",
+      "timeout",
+      "TimeoutError",
+      "production",
+    );
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(store.states.get(service.id)?.notificationSuppressed).toBe(true);
+  });
+
   it("retries invalid_payload after Discord failure and records notified only after success", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

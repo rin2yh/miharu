@@ -7,6 +7,7 @@ export interface CollectionAlertState {
   errorMessage?: string;
   notified: boolean;
   notificationSuppressed?: boolean;
+  invalidPayloadNotificationVersion?: number;
 }
 
 export interface CollectionAlertStateStore {
