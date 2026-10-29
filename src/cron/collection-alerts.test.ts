@@ -35,6 +35,227 @@ function stateStore() {
 }
 
 describe("Discord collection alerts with KV state", () => {
+  it("alerts immediately on invalid_payload, suppresses repeats, and announces recovery", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    const failedAt = "2026-10-24T05:00:00.000Z";
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      failedAt,
+      "invalid_payload",
+      "ProviderError",
+      "production",
+      "Statuspage summary shape changed",
+    );
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:01:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    const failure = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as { content: string };
+    expect(failure.content).toContain("エラーコード: invalid_payload");
+    expect(failure.content).toContain("エラー詳細: Statuspage summary shape changed");
+    expect(failure.content).toContain(`発生時刻: ${failedAt}`);
+    expect(failure.content).toContain("環境: production");
+
+    await notifyCollectionRecovery(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:02:00.000Z",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const recovery = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as { content: string };
+    expect(recovery.content).toContain("収集が復旧");
+    expect(recovery.content).toContain("復旧時刻: 2026-10-24T05:02:00.000Z");
+  });
+
+  it.each([
+    { notified: true, notificationSuppressed: false, label: "a prior notified error" },
+    { notified: false, notificationSuppressed: true, label: "a prior suppressed error" },
+  ])(
+    "notifies invalid_payload when KV contains $label",
+    async ({ notified, notificationSuppressed }) => {
+      const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+      const sender = createDiscordAlertSender({
+        webhookUrl: "https://discord.com/api/webhooks/123/token",
+        fetcher,
+      });
+      const store = stateStore();
+      store.states.set(service.id, {
+        consecutiveFailures: 5,
+        firstFailedAt: "2026-10-24T04:55:00.000Z",
+        lastFailedAt: "2026-10-24T04:59:00.000Z",
+        errorCode: "timeout",
+        errorType: "TimeoutError",
+        notified,
+        notificationSuppressed,
+      });
+
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        "2026-10-24T05:00:00.000Z",
+        "invalid_payload",
+        "ProviderError",
+        "production",
+      );
+
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(store.states.get(service.id)).toMatchObject({
+        errorCode: "invalid_payload",
+        notified: true,
+        notificationSuppressed: false,
+      });
+    },
+  );
+
+  it("re-notifies a legacy notified invalid_payload once and records the rule version", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    store.states.set(service.id, {
+      consecutiveFailures: 12,
+      firstFailedAt: "2026-10-24T04:48:00.000Z",
+      lastFailedAt: "2026-10-24T04:59:00.000Z",
+      errorCode: "invalid_payload",
+      errorType: "ProviderError",
+      notified: true,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:00:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(store.states.get(service.id)).toMatchObject({
+      errorCode: "invalid_payload",
+      notified: true,
+      invalidPayloadNotificationVersion: 1,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:01:00.000Z",
+      "invalid_payload",
+      "ProviderError",
+      "production",
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("preserves suppression behavior for non-invalid_payload errors", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    store.states.set(service.id, {
+      consecutiveFailures: 3,
+      firstFailedAt: "2026-10-24T04:57:00.000Z",
+      lastFailedAt: "2026-10-24T04:59:00.000Z",
+      errorCode: "timeout",
+      errorType: "TimeoutError",
+      notified: false,
+      notificationSuppressed: true,
+    });
+
+    await notifyCollectionFailure(
+      store,
+      sender,
+      service,
+      "2026-10-24T05:00:00.000Z",
+      "timeout",
+      "TimeoutError",
+      "production",
+    );
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(store.states.get(service.id)?.notificationSuppressed).toBe(true);
+  });
+
+  it("retries invalid_payload after Discord failure and records notified only after success", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        "2026-10-24T05:00:00.000Z",
+        "invalid_payload",
+        "ProviderError",
+        "production",
+      );
+      expect(store.states.get(service.id)).toMatchObject({
+        errorCode: "invalid_payload",
+        notified: false,
+        notificationSuppressed: false,
+      });
+
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        "2026-10-24T05:01:00.000Z",
+        "invalid_payload",
+        "ProviderError",
+        "production",
+      );
+      expect(store.states.get(service.id)).toMatchObject({ notified: true });
+
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        "2026-10-24T05:02:00.000Z",
+        "invalid_payload",
+        "ProviderError",
+        "production",
+      );
+    } finally {
+      log.mockRestore();
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(store.states.get(service.id)?.consecutiveFailures).toBe(2);
+  });
+
   it("stores service state as JSON under a service-specific KV key", async () => {
     const namespace = {
       get: vi.fn<
@@ -117,7 +338,7 @@ describe("Discord collection alerts with KV state", () => {
     expect(payload.content).toContain("Slack (slack)");
     expect(payload.content).toContain("失敗回数: 3");
     expect(payload.content).toContain("エラー詳細: Missing incident status");
-    expect(payload.content).toContain("環境: miharu");
+    expect(payload.content).toContain("環境: production");
     expect(payload.allowed_mentions).toEqual({ parse: [] });
   });
 
@@ -157,6 +378,37 @@ describe("Discord collection alerts with KV state", () => {
     expect(fetcher).toHaveBeenCalledOnce();
     const payload = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as { content: string };
     expect(payload.content).toContain("収集が復旧");
+  });
+
+  it("sends the complete long error detail in multiple Discord messages", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const sender = createDiscordAlertSender({
+      webhookUrl: "https://discord.com/api/webhooks/123/token",
+      fetcher,
+    });
+    const store = stateStore();
+    const detail = "x".repeat(5_000);
+
+    for (const minute of [0, 1, 2]) {
+      await notifyCollectionFailure(
+        store,
+        sender,
+        service,
+        `2026-10-24T05:0${minute}:00.000Z`,
+        "invalid_payload",
+        "ProviderError",
+        "production",
+        detail,
+      );
+    }
+
+    const messages = fetcher.mock.calls.map(
+      ([, init]) => JSON.parse(String(init?.body)).content as string,
+    );
+    expect(messages.length).toBeGreaterThan(1);
+    expect(messages.every((message) => message.length <= 2_000)).toBe(true);
+    expect(messages.join("")).toContain(detail);
+    expect(store.states.get(service.id)?.errorMessage).toBe(detail);
   });
 
   it("clears failures that recover before the notification threshold", async () => {

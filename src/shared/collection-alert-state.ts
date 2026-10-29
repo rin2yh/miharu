@@ -5,8 +5,11 @@ export interface CollectionAlertState {
   errorCode: string;
   errorType: string;
   errorMessage?: string;
+  errorCause?: string;
+  errorCategory?: string;
   notified: boolean;
   notificationSuppressed?: boolean;
+  invalidPayloadNotificationVersion?: number;
 }
 
 export interface CollectionAlertStateStore {
